@@ -5,9 +5,9 @@ import { theme } from './theme';
 export type Locale='pt-BR'|'en-US'|'es-ES';
 
 const nav={
- 'pt-BR':{dashboard:'Dashboard',clients:'Clientes',services:'Serviços',quotes:'Orçamentos',projects:'Projetos',calendar:'Agenda',notifications:'Notificações',calculator:'Calculadora',settings:'Configurações',home:'Início',collapse:'Recolher menu',expand:'Expandir menu',plan:'Plano',registeredClients:'clientes cadastrados',viewPlans:'ver planos',logout:'Sair da conta',language:'Idioma',detail:'Detalhe',proposal:'Proposta',sharing:'Compartilhamento'},
- 'en-US':{dashboard:'Dashboard',clients:'Clients',services:'Services',quotes:'Quotes',projects:'Projects',calendar:'Calendar',notifications:'Notifications',calculator:'Calculator',settings:'Settings',home:'Home',collapse:'Collapse menu',expand:'Expand menu',plan:'Plan',registeredClients:'registered clients',viewPlans:'view plans',logout:'Sign out',language:'Language',detail:'Details',proposal:'Proposal',sharing:'Sharing'},
- 'es-ES':{dashboard:'Panel',clients:'Clientes',services:'Servicios',quotes:'Presupuestos',projects:'Proyectos',calendar:'Agenda',notifications:'Notificaciones',calculator:'Calculadora',settings:'Configuración',home:'Inicio',collapse:'Contraer menú',expand:'Expandir menú',plan:'Plan',registeredClients:'clientes registrados',viewPlans:'ver planes',logout:'Cerrar sesión',language:'Idioma',detail:'Detalle',proposal:'Propuesta',sharing:'Compartir'}
+ 'pt-BR':{dashboard:'Dashboard',clients:'Clientes',services:'Serviços',quotes:'Orçamentos',projects:'Projetos',projectStatuses:'Status dos projetos',calendar:'Agenda',notifications:'Notificações',calculator:'Calculadora',settings:'Configurações',home:'Início',collapse:'Recolher menu',expand:'Expandir menu',plan:'Plano',registeredClients:'clientes cadastrados',viewPlans:'ver planos',logout:'Sair da conta',language:'Idioma',detail:'Detalhe',proposal:'Proposta',sharing:'Compartilhamento'},
+ 'en-US':{dashboard:'Dashboard',clients:'Clients',services:'Services',quotes:'Quotes',projects:'Projects',projectStatuses:'Project statuses',calendar:'Calendar',notifications:'Notifications',calculator:'Calculator',settings:'Settings',home:'Home',collapse:'Collapse menu',expand:'Expand menu',plan:'Plan',registeredClients:'registered clients',viewPlans:'view plans',logout:'Sign out',language:'Language',detail:'Details',proposal:'Proposal',sharing:'Sharing'},
+ 'es-ES':{dashboard:'Panel',clients:'Clientes',services:'Servicios',quotes:'Presupuestos',projects:'Proyectos',projectStatuses:'Estados de proyectos',calendar:'Agenda',notifications:'Notificaciones',calculator:'Calculadora',settings:'Configuración',home:'Inicio',collapse:'Contraer menú',expand:'Expandir menú',plan:'Plan',registeredClients:'clientes registrados',viewPlans:'ver planes',logout:'Cerrar sesión',language:'Idioma',detail:'Detalle',proposal:'Propuesta',sharing:'Compartir'}
 } as const;
 
 type NavKey=keyof typeof nav['pt-BR'];
@@ -71,16 +71,6 @@ const exact:Record<string,[string,string]>={
  'Em andamento':['In progress','En curso'],
  'Concluídos':['Completed','Concluidos'],
  'Tarefas atrasadas':['Overdue tasks','Tareas atrasadas'],
- 'Com atraso':['Overdue','Con retraso'],
- 'Alta prioridade':['High priority','Alta prioridad'],
- 'Mais críticos':['Most critical','Más críticos'],
- 'Maior progresso':['Highest progress','Mayor progreso'],
- 'Menor progresso':['Lowest progress','Menor progreso'],
- 'Nenhum projeto encontrado':['No projects found','No se encontraron proyectos'],
- 'Revise a busca ou os filtros aplicados.':['Review the search or applied filters.','Revisa la búsqueda o los filtros aplicados.'],
- 'Nenhum projeto':['No projects','Sin proyectos'],
- 'Progresso':['Progress','Progreso'],
- 'Valor do projeto':['Project value','Valor del proyecto'],
  'Data a definir':['Date to be defined','Fecha por definir'],
  'Gerenciar status':['Manage statuses','Gestionar estados'],
  'Status dos projetos':['Project statuses','Estados de proyectos'],
