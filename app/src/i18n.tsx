@@ -15,6 +15,45 @@ type NavKey=keyof typeof nav['pt-BR'];
 // Textos visíveis da aplicação. A chave é sempre o texto-base em pt-BR para permitir
 // migrar telas antigas sem manter strings duplicadas dentro dos componentes.
 const exact:Record<string,[string,string]>={
+ 'Agenda':['Calendar','Agenda'],
+ 'Notificações':['Notifications','Notificaciones'],
+ 'clientes cadastrados · ver planos':['registered clients · view plans','clientes registrados · ver planes'],
+ 'Compromissos, visitas e prazos da operação':['Appointments, visits, and operational deadlines','Compromisos, visitas y plazos de la operación'],
+ 'Compromissos':['Appointments','Compromisos'],
+ 'Próximos':['Upcoming','Próximos'],
+ 'Agenda livre':['Schedule clear','Agenda libre'],
+ 'Crie um compromisso para começar a organizar sua rotina.':['Create an appointment to start organizing your routine.','Crea un compromiso para empezar a organizar tu rutina.'],
+ 'Novo compromisso':['New appointment','Nuevo compromiso'],
+ 'Adicione um item à agenda da equipe.':['Add an item to the team calendar.','Añade un elemento a la agenda del equipo.'],
+ 'Salvar compromisso':['Save appointment','Guardar compromiso'],
+ 'Atendimento':['Appointment','Atención'],
+ 'Visita':['Visit','Visita'],
+ 'Reunião':['Meeting','Reunión'],
+ 'Pessoal':['Personal','Personal'],
+ 'TÍTULO *':['TITLE *','TÍTULO *'],
+ 'HORÁRIO':['TIME','HORARIO'],
+ 'TIPO':['TYPE','TIPO'],
+ 'LOCAL':['LOCATION','UBICACIÓN'],
+ 'OBSERVAÇÕES':['NOTES','OBSERVACIONES'],
+ 'Endereço ou link':['Address or link','Dirección o enlace'],
+ 'Ex.: Visita técnica com cliente':['E.g.: Technical visit with client','Ej.: Visita técnica con cliente'],
+ 'Esqueceu a senha?':['Forgot your password?','¿Olvidaste tu contraseña?'],
+ 'Recuperar senha':['Recover password','Recuperar contraseña'],
+ 'Verifique seu e-mail':['Check your email','Revisa tu correo'],
+ 'Enviar instruções':['Send instructions','Enviar instrucciones'],
+ 'Enviar novamente':['Send again','Enviar de nuevo'],
+ 'Criar nova senha':['Create new password','Crear nueva contraseña'],
+ 'Redefinir senha':['Reset password','Restablecer contraseña'],
+ 'Senha alterada':['Password changed','Contraseña modificada'],
+ 'Ir para o login':['Go to sign in','Ir al inicio de sesión'],
+ 'Informe o e-mail usado no LuviePro para receber as instruções.':['Enter the email used in LuviePro to receive the instructions.','Ingresa el correo usado en LuviePro para recibir las instrucciones.'],
+ 'Se o endereço estiver cadastrado, você receberá um link válido por 60 minutos.':['If the address is registered, you will receive a link valid for 60 minutes.','Si la dirección está registrada, recibirás un enlace válido por 60 minutos.'],
+ 'Ambiente local':['Local environment','Entorno local'],
+ 'Abrir link de redefinição':['Open reset link','Abrir enlace de restablecimiento'],
+ 'A senha deve ter pelo menos 8 caracteres.':['The password must be at least 8 characters long.','La contraseña debe tener al menos 8 caracteres.'],
+ 'As senhas não coincidem.':['Passwords do not match.','Las contraseñas no coinciden.'],
+ 'Sua senha foi redefinida. Entre novamente com a nova credencial.':['Your password has been reset. Sign in again with the new credential.','Tu contraseña fue restablecida. Inicia sesión nuevamente con la nueva credencial.'],
+ 'Use pelo menos 8 caracteres e evite senhas utilizadas em outros serviços.':['Use at least 8 characters and avoid passwords used with other services.','Usa al menos 8 caracteres y evita contraseñas utilizadas en otros servicios.'],
  'Dashboard':['Dashboard','Panel'],
  'Principal':['Main','Principal'],
  'Comercial':['Sales','Comercial'],
@@ -63,6 +102,14 @@ const exact:Record<string,[string,string]>={
  'Convite indisponível':['Invitation unavailable','Invitación no disponible'],
  'Voltar para o login':['Back to sign in','Volver al inicio de sesión'],
  'Clientes':['Clients','Clientes'],
+ 'Gerencie pessoas, empresas e contatos da sua carteira':['Manage people, companies, and contacts in your portfolio','Gestiona personas, empresas y contactos de tu cartera'],
+ 'Total de clientes':['Total clients','Total de clientes'],
+ 'Pessoas físicas':['Individuals','Personas físicas'],
+ 'Empresas':['Companies','Empresas'],
+ 'Localização não informada':['Location not provided','Ubicación no informada'],
+ 'E-mail não informado':['Email not provided','Correo no informado'],
+ 'Telefone não informado':['Phone not provided','Teléfono no informado'],
+ 'AÇÃO':['ACTION','ACCIÓN'],
  'Serviços':['Services','Servicios'],
  'Orçamentos':['Quotes','Presupuestos'],
  'Projetos':['Projects','Proyectos'],
@@ -115,6 +162,8 @@ const exact:Record<string,[string,string]>={
  'Categoria':['Category','Categoría'],
  'E-mail':['Email','Correo electrónico'],
  'E-MAIL':['EMAIL','CORREO'],
+ 'seu@email.com':['your@email.com','tu@correo.com'],
+ 'Sua senha':['Your password','Tu contraseña'],
  'E-MAIL *':['EMAIL *','CORREO *'],
  'Telefone':['Phone','Teléfono'],
  'WhatsApp':['WhatsApp','WhatsApp'],
@@ -576,7 +625,7 @@ export const Text=React.forwardRef<any,any>(function LocalizedText(props,ref){
   const {children,...rest}=props;
   return <RNText ref={ref} {...rest}>{localizeNode(children)}</RNText>;
 });
-export const TextInput=React.forwardRef<any,any>(function LocalizedTextInput(props,ref){
+export const TextInput=React.forwardRef<any,React.ComponentProps<typeof RNTextInput>>(function LocalizedTextInput(props,ref){
   const {placeholder,accessibilityLabel,...rest}=props;
   return <RNTextInput ref={ref} placeholder={typeof placeholder==='string'?tr(placeholder):placeholder} accessibilityLabel={typeof accessibilityLabel==='string'?tr(accessibilityLabel):accessibilityLabel} {...rest}/>;
 });

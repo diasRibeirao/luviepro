@@ -1,12 +1,14 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, SetMetadata, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { ApiService } from './api.service'; import { HealthService } from './health.service'; import { Roles } from './roles.guard'; import { Permissions } from './permissions.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CalculateDto, CalendarEventDto, ClientDto, CreateProjectTaskDto, CreateProjectNoteDto, CreateProjectStatusDto, CreateQuoteDto, CreateUserDto, LoginDto, NotificationPreferencesDto, QuoteStatusDto, RefreshDto, RegisterDto, UpdateAccountDto, UpdatePlanDto, UpdateProjectDto, UpdateProjectStatusDto, UpdateProjectTaskDto, UpdateQuoteDto, UpdateUserDto, UpdateCalendarEventDto, ServiceDto, PublicProposalDecisionDto, ChangePasswordDto, AcceptInvitationDto, CreateAccessProfileDto, UpdateAccessProfileDto } from './dtos';
+import { CalculateDto, CalendarEventDto, ClientDto, CreateProjectTaskDto, CreateProjectNoteDto, CreateProjectStatusDto, CreateQuoteDto, CreateUserDto, ForgotPasswordDto, LoginDto, NotificationPreferencesDto, QuoteStatusDto, RefreshDto, RegisterDto, ResetPasswordDto, UpdateAccountDto, UpdatePlanDto, UpdateProjectDto, UpdateProjectStatusDto, UpdateProjectTaskDto, UpdateQuoteDto, UpdateUserDto, UpdateCalendarEventDto, ServiceDto, PublicProposalDecisionDto, ChangePasswordDto, AcceptInvitationDto, CreateAccessProfileDto, UpdateAccessProfileDto } from './dtos';
 const Public=()=>SetMetadata('public',true);
 @Controller() export class ApiController {
   constructor(private api:ApiService,private healthService:HealthService){}
   @Public() @Get('health/live') live(){return this.healthService.live();} @Public() @Get('health') health(){return this.healthService.ready();}
   @Public() @Post('auth/login') login(@Body() b:LoginDto){return this.api.login(b.email,b.password);}
+  @Public() @Post('auth/forgot-password') forgotPassword(@Body() b:ForgotPasswordDto){return this.api.forgotPassword(b.email);}
+  @Public() @Post('auth/reset-password') resetPassword(@Body() b:ResetPasswordDto){return this.api.resetPassword(b.token,b.password);}
   @Public() @Post('auth/register') register(@Body() b:RegisterDto){return this.api.register(b);}
   @Public() @Get('auth/invitations/:token') invitationInfo(@Param('token') token:string){return this.api.invitationInfo(token);}
   @Public() @Post('auth/invitations/:token/accept') acceptInvitation(@Param('token') token:string,@Body() b:AcceptInvitationDto){return this.api.acceptInvitation(token,b.password);}

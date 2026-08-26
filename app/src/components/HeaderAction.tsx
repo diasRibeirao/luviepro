@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable,StyleSheet } from 'react-native';
-import { Text } from '../i18n';
+import { Text,useI18n } from '../i18n';
 import { theme } from '../theme';
 
 export function HeaderAction({label,icon='add-outline',onPress,disabled=false}:{label:string;icon?:string;onPress:()=>void;disabled?:boolean}){
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{disabled}} disabled={disabled} onPress={onPress} style={({pressed,focused}:any)=>[s.button,focused&&s.focused,pressed&&!disabled&&s.pressed,disabled&&s.disabled]}>
+  const {tr}=useI18n();
+  return <Pressable accessibilityRole="button" accessibilityLabel={tr(label)} accessibilityState={{disabled}} disabled={disabled} onPress={onPress} style={({pressed,focused}:any)=>[s.button,focused&&s.focused,pressed&&!disabled&&s.pressed,disabled&&s.disabled]}>
     <Ionicons name={icon as any} size={17} color={theme.white}/>
     <Text style={s.label}>{label}</Text>
   </Pressable>

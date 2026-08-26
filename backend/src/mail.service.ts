@@ -29,5 +29,11 @@ export class MailService {
     });
     return {sent:true} as const;
   }
+  async sendPasswordReset(input:{to:string;name:string;resetUrl:string;expiresAt:Date}){
+    const transporter=this.getTransporter();if(!transporter)return {sent:false,reason:'not_configured'} as const;
+    const from=process.env.SMTP_FROM||process.env.SMTP_USER||'LuviePro <no-reply@luviepro.local>';
+    await transporter.sendMail({from,to:input.to,subject:'Redefinição de senha do LuviePro',text:`Olá, ${input.name}. Redefina sua senha pelo link: ${input.resetUrl}. O link expira em 60 minutos.`,html:`<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#183326"><h2>Redefinição de senha</h2><p>Olá, <strong>${escapeHtml(input.name)}</strong>.</p><p>Recebemos uma solicitação para redefinir sua senha.</p><p style="margin:28px 0"><a href="${input.resetUrl}" style="background:#244d3b;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">Criar nova senha</a></p><p style="font-size:13px;color:#65736c">O link expira em 60 minutos. Se você não solicitou a alteração, ignore esta mensagem.</p></div>`});
+    return {sent:true} as const;
+  }
 }
 function escapeHtml(value:string){return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c] as string));}
