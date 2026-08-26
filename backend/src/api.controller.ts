@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req, SetMetadata, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { ApiService } from './api.service'; import { HealthService } from './health.service'; import { Roles } from './roles.guard'; import { Permissions } from './permissions.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CalculateDto, CalendarEventDto, ClientDto, CreateProjectTaskDto, CreateProjectNoteDto, CreateQuoteDto, CreateUserDto, LoginDto, NotificationPreferencesDto, QuoteStatusDto, RefreshDto, RegisterDto, UpdateAccountDto, UpdatePlanDto, UpdateProjectDto, UpdateProjectTaskDto, UpdateQuoteDto, UpdateUserDto, ServiceDto, PublicProposalDecisionDto, ChangePasswordDto, AcceptInvitationDto, CreateAccessProfileDto, UpdateAccessProfileDto } from './dtos';
+import { CalculateDto, CalendarEventDto, ClientDto, CreateProjectTaskDto, CreateProjectNoteDto, CreateQuoteDto, CreateUserDto, LoginDto, NotificationPreferencesDto, QuoteStatusDto, RefreshDto, RegisterDto, UpdateAccountDto, UpdatePlanDto, UpdateProjectDto, UpdateProjectTaskDto, UpdateQuoteDto, UpdateUserDto, UpdateCalendarEventDto, ServiceDto, PublicProposalDecisionDto, ChangePasswordDto, AcceptInvitationDto, CreateAccessProfileDto, UpdateAccessProfileDto } from './dtos';
 const Public=()=>SetMetadata('public',true);
 @Controller() export class ApiController {
   constructor(private api:ApiService,private healthService:HealthService){}
@@ -33,6 +33,7 @@ const Public=()=>SetMetadata('public',true);
   @Roles('owner','admin') @Permissions('audit.read') @Get('audit-logs') auditLogs(@Req() r:any,@Query() q:any){return this.api.auditLogs(r.user.tenantId,q);}
   @Permissions('calendar.read') @Get('calendar') calendar(@Req() r:any){return this.api.calendar(r.user.tenantId);}
   @Roles('owner','admin','commercial','operational') @Permissions('calendar.write') @Post('calendar') createCalendarEvent(@Req() r:any,@Body() b:CalendarEventDto){return this.api.createCalendarEvent(r.user.tenantId,r.user.sub,b);}
+  @Roles('owner','admin','commercial','operational') @Permissions('calendar.write') @Patch('calendar/:id') updateCalendarEvent(@Req() r:any,@Param('id') id:string,@Body() b:UpdateCalendarEventDto){return this.api.updateCalendarEvent(r.user.tenantId,id,r.user.sub,b);}
   @Roles('owner','admin','commercial','operational') @Permissions('calendar.write') @Patch('calendar/:id/cancel') cancelCalendarEvent(@Req() r:any,@Param('id') id:string){return this.api.cancelCalendarEvent(r.user.tenantId,id,r.user.sub);}
   @Get('notifications') notifications(@Req() r:any){return this.api.notifications(r.user.tenantId,r.user.sub);}
   @Get('notifications/unread-count') unreadNotifications(@Req() r:any){return this.api.unreadNotifications(r.user.tenantId,r.user.sub);}

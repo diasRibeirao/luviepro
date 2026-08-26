@@ -21,7 +21,7 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
   private async audit(tenantId:string,actorUserId:string|undefined,action:string,entity:string,entityId?:string,metadata?:any){
     await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity,entityId,metadata}}).catch(()=>undefined);
   }
-  calculate(x:Calc){for(const v of Object.values(x))if(!Number.isInteger(v)||v<0)throw new BadRequestException('Use inteiros não negativos; dinheiro em centavos.');const laborCents=x.dailyRateCents*x.days;const variableCents=x.variableCostCents*x.people*x.days;const subtotal=laborCents+variableCents+x.fixedCostCents;const marginCents=Math.round(x.dailyRateCents*x.safetyMarginBps/10000);return {laborCents,variableCents,fixedCents:x.fixedCostCents,marginCents,totalCents:subtotal+marginCents};}
+  calculate(x:Calc){for(const v of Object.values(x))if(!Number.isInteger(v)||v<0)throw new BadRequestException('Use inteiros não negativos; dinheiro em centavos.');const laborCents=x.dailyRateCents*x.days;/* Custos variáveis da planilha são lançados por dia; pessoas já estão refletidas na diária da equipe. */const variableCents=x.variableCostCents*x.days;const subtotal=laborCents+variableCents+x.fixedCostCents;const marginCents=Math.round(x.dailyRateCents*x.safetyMarginBps/10000);return {laborCents,variableCents,fixedCents:x.fixedCostCents,marginCents,totalCents:subtotal+marginCents};}
   async login(email:string,password:string){
     const normalized=email.trim().toLowerCase();
     const u=await this.db.user.findUnique({where:{email:normalized},include:{tenant:true,customProfile:true}});
@@ -335,6 +335,16 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
     await this.audit(tenantId,userId,'create','calendar_event',event.id,{title:event.title,startAt:event.startAt});return event;
   }
   async cancelCalendarEvent(tenantId:string,id:string,userId:string){const event=await this.db.calendarEvent.findFirst({where:{id,tenantId}});if(!event)throw new NotFoundException('Compromisso não encontrado');const updated=await this.db.calendarEvent.update({where:{id},data:{status:'cancelled'}});await this.audit(tenantId,userId,'cancel','calendar_event',id,{title:event.title});return updated;}
+  async updateCalendarEvent(tenantId:string,id:string,userId:string,data:any){
+    const event=await this.db.calendarEvent.findFirst({where:{id,tenantId}});if(!event)throw new NotFoundException('Compromisso não encontrado');
+    const startAt=data.startAt===undefined?event.startAt:new Date(data.startAt);const endAt=data.endAt===undefined?event.endAt:(data.endAt?new Date(data.endAt):null);
+    if(Number.isNaN(startAt.getTime())||endAt&&Number.isNaN(endAt.getTime()))throw new BadRequestException('Data do compromisso inválida');
+    if(endAt&&endAt<startAt)throw new BadRequestException('O término deve ser posterior ao início');
+    if(data.clientId&&!await this.db.client.findFirst({where:{id:data.clientId,tenantId}}))throw new NotFoundException('Cliente não encontrado');
+    if(data.projectId&&!await this.db.project.findFirst({where:{id:data.projectId,tenantId}}))throw new NotFoundException('Projeto não encontrado');
+    const updated=await this.db.calendarEvent.update({where:{id},data:{...(data.title!==undefined?{title:data.title.trim()}:{}),...(data.description!==undefined?{description:data.description?.trim()||null}:{}),...(data.type!==undefined?{type:data.type}:{}),...(data.startAt!==undefined?{startAt}:{}),...(data.endAt!==undefined?{endAt}:{}),...(data.allDay!==undefined?{allDay:data.allDay}:{}),...(data.location!==undefined?{location:data.location?.trim()||null}:{}),...(data.recurrence!==undefined?{recurrence:data.recurrence}:{}),...(data.reminderMinutes!==undefined?{reminderMinutes:data.reminderMinutes}:{}),...(data.clientId!==undefined?{clientId:data.clientId||null}:{}),...(data.projectId!==undefined?{projectId:data.projectId||null}:{}),...(data.status!==undefined?{status:data.status}:{}),}});
+    await this.audit(tenantId,userId,'update','calendar_event',id,{title:updated.title,startAt:updated.startAt});return updated;
+  }
   private async syncNotifications(tenantId:string,userId:string){
     const prefs=await this.notificationPreferences(tenantId,userId);const now=new Date();const horizon=new Date(now.getTime()+7*86400000);
     const [events,tasks,quotes]=await Promise.all([

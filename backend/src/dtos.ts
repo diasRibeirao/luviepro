@@ -159,7 +159,18 @@ export class CalendarEventDto {
   @IsOptional() @IsString() clientId?: string;
   @IsOptional() @IsString() projectId?: string;
 }
-export class UpdateCalendarEventDto extends CalendarEventDto {
+export class UpdateCalendarEventDto {
+  @IsOptional() @IsString() @MinLength(2) title?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsIn(['appointment','visit','meeting','deadline','personal']) type?: string;
+  @IsOptional() @IsString() startAt?: string;
+  @IsOptional() @IsString() endAt?: string;
+  @IsOptional() @IsBoolean() allDay?: boolean;
+  @IsOptional() @IsString() location?: string;
+  @IsOptional() @IsIn(['none','weekly','monthly']) recurrence?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(10080) reminderMinutes?: number;
+  @IsOptional() @IsString() clientId?: string;
+  @IsOptional() @IsString() projectId?: string;
   @IsOptional() @IsIn(['active','cancelled']) status?: string;
 }
 export class NotificationPreferencesDto {
