@@ -1,6 +1,6 @@
 # LuviePro
 
-MVP local do SaaS para personal organizers, com API NestJS multi-tenant e aplicativo React Native. A organização e os comandos seguem o padrão do projeto Atleta360.
+SaaS multi-tenant para gestão de clientes, serviços, orçamentos, propostas e projetos de profissionais de organização e decoração. A solução usa API NestJS/Prisma e aplicativo Expo/React Native com Web, seguindo padrões de operação e UX consolidados no projeto Atleta360.
 
 ## Estrutura
 
@@ -82,3 +82,12 @@ npm test
 ```
 
 Em produção, configure segredos diferentes para `JWT_SECRET` e `JWT_REFRESH_SECRET`.
+
+
+## Interface e internacionalização
+
+- Sidebar Web expansível/retrátil, com preferência persistida no navegador.
+- Controle de recolher/expandir na topbar, entre a navegação lateral e o título da página.
+- Interface em Português (Brasil), Inglês e Espanhol, com preferência persistida.
+- Datas e textos de interface respeitam o idioma selecionado.
+- Feedbacks, confirmações, carregamentos e formulários usam componentes compartilhados.
