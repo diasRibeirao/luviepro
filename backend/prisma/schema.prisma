@@ -329,3 +329,59 @@ model QuoteVersion {
   @@unique([quoteId, version])
   @@index([tenantId, quoteId, createdAt])
 }
+
+model CalendarEvent {
+  id String @id @default(cuid())
+  tenantId String
+  createdById String?
+  clientId String?
+  projectId String?
+  title String
+  description String?
+  type String @default("appointment")
+  startAt DateTime
+  endAt DateTime?
+  allDay Boolean @default(false)
+  location String?
+  recurrence String @default("none")
+  status String @default("active")
+  reminderMinutes Int @default(60)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([tenantId, startAt, status])
+  @@index([tenantId, projectId])
+  @@index([tenantId, clientId])
+}
+
+model UserNotification {
+  id String @id @default(cuid())
+  tenantId String
+  userId String
+  key String
+  type String
+  title String
+  message String?
+  route String?
+  entityId String?
+  readAt DateTime?
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([userId, key])
+  @@index([tenantId, userId, archivedAt, createdAt])
+  @@index([tenantId, userId, readAt])
+}
+
+model NotificationPreference {
+  id String @id @default(cuid())
+  tenantId String
+  userId String @unique
+  agendaReminders Boolean @default(true)
+  projectDeadlines Boolean @default(true)
+  quoteExpirations Boolean @default(true)
+  taskDeadlines Boolean @default(true)
+  emailEnabled Boolean @default(false)
+  pushEnabled Boolean @default(false)
+  reminderMinutes Int @default(60)
+  updatedAt DateTime @updatedAt
+  @@index([tenantId, userId])
+}

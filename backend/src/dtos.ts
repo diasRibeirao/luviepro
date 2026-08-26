@@ -130,3 +130,29 @@ export class PublicProposalDecisionDto {
 }
 
 export class ChangePasswordDto { @IsString() @MinLength(8) currentPassword!: string; @IsString() @MinLength(8) newPassword!: string; }
+
+export class CalendarEventDto {
+  @IsString() @MinLength(2) title!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsIn(['appointment','visit','meeting','deadline','personal']) type!: string;
+  @IsString() startAt!: string;
+  @IsOptional() @IsString() endAt?: string;
+  @IsOptional() @IsBoolean() allDay?: boolean;
+  @IsOptional() @IsString() location?: string;
+  @IsOptional() @IsIn(['none','weekly','monthly']) recurrence?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(10080) reminderMinutes?: number;
+  @IsOptional() @IsString() clientId?: string;
+  @IsOptional() @IsString() projectId?: string;
+}
+export class UpdateCalendarEventDto extends CalendarEventDto {
+  @IsOptional() @IsIn(['active','cancelled']) status?: string;
+}
+export class NotificationPreferencesDto {
+  @IsOptional() @IsBoolean() agendaReminders?: boolean;
+  @IsOptional() @IsBoolean() projectDeadlines?: boolean;
+  @IsOptional() @IsBoolean() quoteExpirations?: boolean;
+  @IsOptional() @IsBoolean() taskDeadlines?: boolean;
+  @IsOptional() @IsBoolean() emailEnabled?: boolean;
+  @IsOptional() @IsBoolean() pushEnabled?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(10080) reminderMinutes?: number;
+}

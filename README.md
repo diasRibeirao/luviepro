@@ -23,6 +23,12 @@ Depois, inicie PostgreSQL, Redis, API e aplicativo com:
 .\dev.cmd
 ```
 
+Para validar tipos, build, testes e migrations antes de uma entrega, execute:
+
+```powershell
+.\verify.cmd
+```
+
 Para executar no celular com Expo Go (SDK 54), use:
 
 ```powershell
