@@ -5,6 +5,7 @@ import { Text } from '../src/i18n';
 import { router } from 'expo-router';
 import { api,getSession,money } from '../src/api';
 import { AppShell,shellStyles } from '../src/components/AppShell';
+import { HeaderAction } from '../src/components/HeaderAction';
 import { AsyncState } from '../src/components/AsyncState';
 import { theme } from '../src/theme';
 import { formatDateBR } from '../src/components/DateField';
@@ -22,7 +23,7 @@ export default function Home(){
   const health=useMemo(()=>riskCount===0?{label:'Operação em dia',tone:'good',icon:'checkmark-circle-outline'}:riskCount<=2?{label:'Atenção necessária',tone:'warn',icon:'alert-circle-outline'}:{label:'Prioridades abertas',tone:'risk',icon:'warning-outline'},[riskCount]);
   if(error)return <AppShell title="Dashboard"><AsyncState error={error} onRetry={load}/></AppShell>;
   if(!data)return <AppShell title="Dashboard"><AsyncState loading/></AppShell>;
-  return <AppShell title="Dashboard" action={<Pressable style={shellStyles.button} onPress={()=>router.push('/quote-new')}><Text style={shellStyles.buttonText}>+ Novo orçamento</Text></Pressable>}>
+  return <AppShell title="Dashboard" action={<HeaderAction label="Novo orçamento" icon="add-circle-outline" onPress={()=>router.push('/quote-new')}/>}>
     <View style={s.hero}>
       <View style={s.heroCopy}><Text style={s.eyebrow}>PAINEL EXECUTIVO</Text><Text style={s.greeting}>Olá, {name}</Text><Text style={s.subtitle}>Visão comercial e operacional da sua empresa em um só lugar.</Text></View>
       <View style={[s.health,health.tone==='warn'&&s.healthWarn,health.tone==='risk'&&s.healthRisk]}><Ionicons name={health.icon as any} size={18} color={health.tone==='good'?theme.success:health.tone==='warn'?theme.gold:theme.danger}/><View><Text style={s.healthLabel}>{health.label}</Text><Text style={s.healthSub}>{riskCount?`${riskCount} item(ns) pedem atenção`:'Nenhuma pendência crítica agora'}</Text></View></View>
