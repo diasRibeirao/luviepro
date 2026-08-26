@@ -1,35 +1,71 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcryptjs';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from './prisma.service';
+import { MailService } from './mail.service';
 type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number};
 @Injectable() export class ApiService {
-  constructor(private db:PrismaService,private jwt:JwtService){}
+  constructor(private db:PrismaService,private jwt:JwtService,private mail:MailService){}
   private refreshSecret(){const secret=process.env.JWT_REFRESH_SECRET??(process.env.NODE_ENV==='production'?undefined:'local-dev-refresh-secret');if(!secret)throw new Error('JWT_REFRESH_SECRET não configurado');return secret;}
   private async issueSession(u:any){
-    const payload={sub:u.id,tenantId:u.tenantId,role:u.role,plan:u.tenant.plan};
+    const profile=u.customProfileId?(u.customProfile??await this.db.accessProfile.findFirst({where:{id:u.customProfileId,tenantId:u.tenantId,active:true}})):null;
+    if(u.customProfileId&&!profile)throw new ForbiddenException('Seu perfil de acesso está inativo ou indisponível');
+    const permissions=profile&&Array.isArray(profile.permissions)?profile.permissions as string[]:[];
+    const payload={sub:u.id,tenantId:u.tenantId,role:u.role,plan:u.tenant.plan,customProfileId:profile?.id??null,permissions};
     const token=await this.jwt.signAsync({...payload,typ:'access'},{expiresIn:'15m'});
     const refreshToken=await this.jwt.signAsync({...payload,typ:'refresh'},{secret:this.refreshSecret(),expiresIn:'30d'});
     await this.db.user.update({where:{id:u.id},data:{refreshTokenHash:await hash(refreshToken,10)}});
-    return {token,refreshToken,user:{id:u.id,name:u.name,email:u.email,role:u.role},tenant:u.tenant};
+    return {token,refreshToken,user:{id:u.id,name:u.name,email:u.email,role:u.role,customProfileId:profile?.id??null,customProfileName:profile?.name??null,permissions},tenant:u.tenant};
   }
   private async audit(tenantId:string,actorUserId:string|undefined,action:string,entity:string,entityId?:string,metadata?:any){
     await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity,entityId,metadata}}).catch(()=>undefined);
   }
   calculate(x:Calc){for(const v of Object.values(x))if(!Number.isInteger(v)||v<0)throw new BadRequestException('Use inteiros não negativos; dinheiro em centavos.');const laborCents=x.dailyRateCents*x.days;const variableCents=x.variableCostCents*x.people*x.days;const subtotal=laborCents+variableCents+x.fixedCostCents;const marginCents=Math.round(x.dailyRateCents*x.safetyMarginBps/10000);return {laborCents,variableCents,fixedCents:x.fixedCostCents,marginCents,totalCents:subtotal+marginCents};}
-  async login(email:string,password:string){const u=await this.db.user.findUnique({where:{email:email.trim().toLowerCase()},include:{tenant:true}});if(!u||!u.active||!await compare(password,u.passwordHash))throw new UnauthorizedException('E-mail ou senha inválidos');return this.issueSession(u);}
+  async login(email:string,password:string){
+    const normalized=email.trim().toLowerCase();
+    const u=await this.db.user.findUnique({where:{email:normalized},include:{tenant:true,customProfile:true}});
+    if(!u){throw new UnauthorizedException('E-mail ou senha inválidos');}
+    const now=new Date();
+    if(u.lockedUntil&&u.lockedUntil.getTime()>now.getTime()){
+      await this.audit(u.tenantId,u.id,'login_blocked','user',u.id,{reason:'temporary_lock'});
+      throw new UnauthorizedException('Acesso temporariamente bloqueado. Tente novamente em alguns minutos.');
+    }
+    if(!u.active){await this.audit(u.tenantId,u.id,'login_failed','user',u.id,{reason:'inactive'});throw new UnauthorizedException('E-mail ou senha inválidos');}
+    if(!await compare(password,u.passwordHash)){
+      const attempts=(u.failedLoginAttempts??0)+1;
+      const lockedUntil=attempts>=5?new Date(now.getTime()+15*60*1000):null;
+      await this.db.user.update({where:{id:u.id},data:{failedLoginAttempts:lockedUntil?0:attempts,lockedUntil}});
+      await this.audit(u.tenantId,u.id,lockedUntil?'account_locked':'login_failed','user',u.id,{reason:'invalid_credentials',attempts,lockMinutes:lockedUntil?15:0});
+      throw new UnauthorizedException(lockedUntil?'Acesso temporariamente bloqueado após várias tentativas. Tente novamente em 15 minutos.':'E-mail ou senha inválidos');
+    }
+    await this.db.user.update({where:{id:u.id},data:{failedLoginAttempts:0,lockedUntil:null,lastLoginAt:now}});
+    const session=await this.issueSession({...u,lastLoginAt:now,failedLoginAttempts:0,lockedUntil:null});
+    await this.audit(u.tenantId,u.id,'login_success','user',u.id);return session;
+  }
   async refresh(refreshToken:string){
     let payload:any;try{payload=await this.jwt.verifyAsync(refreshToken,{secret:this.refreshSecret()});}catch{throw new UnauthorizedException('Sessão expirada');}
     if(payload.typ!=='refresh')throw new UnauthorizedException('Token de renovação inválido');
-    const u=await this.db.user.findUnique({where:{id:payload.sub},include:{tenant:true}});if(!u?.active||!u.refreshTokenHash||!await compare(refreshToken,u.refreshTokenHash))throw new UnauthorizedException('Sessão revogada');
+    const u=await this.db.user.findUnique({where:{id:payload.sub},include:{tenant:true,customProfile:true}});if(!u?.active||!u.refreshTokenHash||!await compare(refreshToken,u.refreshTokenHash))throw new UnauthorizedException('Sessão revogada');
     if(u.tenant.status!=='active'||(u.tenant.subscriptionExpiresAt&&u.tenant.subscriptionExpiresAt.getTime()<Date.now()))throw new ForbiddenException('Conta indisponível ou assinatura expirada');
     return this.issueSession(u);
   }
   async logout(userId:string,tenantId:string){await this.db.user.updateMany({where:{id:userId,tenantId},data:{refreshTokenHash:null}});await this.audit(tenantId,userId,'logout','user',userId);return {ok:true};}
   async register(data:any){const email=String(data.email??'').trim().toLowerCase(),password=String(data.password??''),name=String(data.name??'').trim(),company=String(data.company??'').trim();if(!email||!name||!company||password.length<8)throw new BadRequestException('Informe empresa, responsável, e-mail e senha com pelo menos 8 caracteres');if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já está cadastrado');const plan=['starter','pro','business'].includes(data.plan)?data.plan:'starter';const period=['monthly','quarterly','semiannual','annual'].includes(data.period)?data.period:'monthly';const limit=await this.db.planLimit.findUnique({where:{plan}});if(!limit)throw new BadRequestException('Plano indisponível');const amountCents=period==='annual'?limit.annualPriceCents:period==='semiannual'?limit.semiannualPriceCents:period==='quarterly'?limit.quarterlyPriceCents:limit.monthlyPriceCents;const now=new Date(),trialEnd=new Date(now);trialEnd.setDate(trialEnd.getDate()+14);const slug=`${company.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'empresa'}-${Date.now().toString(36)}`;const result=await this.db.$transaction(async tx=>{const tenant=await tx.tenant.create({data:{name:company,slug,responsibleName:name,phone:data.phone,contactEmail:email,plan,planPeriod:period,subscriptionExpiresAt:trialEnd}});const user=await tx.user.create({data:{tenantId:tenant.id,name,email,passwordHash:await hash(password,12),role:'owner'}});await tx.subscription.create({data:{tenantId:tenant.id,plan,period,amountCents,status:'trial',startsAt:now,expiresAt:trialEnd}});return {tenant,user}});await this.audit(result.tenant.id,result.user.id,'register','tenant',result.tenant.id,{plan,period});return this.issueSession({...result.user,tenant:result.tenant});}
   plans(){return this.db.planLimit.findMany({orderBy:{monthlyPriceCents:'asc'}});}
-  async account(tenantId:string,userId?:string){const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});if(!tenant)throw new NotFoundException('Conta não encontrada');const limit=await this.db.planLimit.findUnique({where:{plan:tenant.plan}});const month=new Date();month.setDate(1);month.setHours(0,0,0,0);const[clients,quotes,users,currentUser]=await Promise.all([this.db.client.count({where:{tenantId,active:true}}),this.db.quote.count({where:{tenantId,createdAt:{gte:month}}}),this.db.user.count({where:{tenantId,active:true}}),userId?this.db.user.findFirst({where:{id:userId,tenantId},select:{id:true,name:true,email:true,role:true,active:true}}):Promise.resolve(null)]);return {tenant,limit,currentUser,usage:{clients,quotes,users},features:{customPdf:!!limit?.customPdf,logoPdf:limit?.logoPdf!==false,premiumTemplates:!!limit?.premiumTemplates,projectManagement:limit?.projectManagement??'basic',advancedReports:!!limit?.advancedReports,exportData:!!limit?.exportData}};}
+  async account(tenantId:string,userId?:string){
+    const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});if(!tenant)throw new NotFoundException('Conta não encontrada');
+    const limit=await this.db.planLimit.findUnique({where:{plan:tenant.plan}});
+    const month=new Date();month.setDate(1);month.setHours(0,0,0,0);const now=new Date();
+    const[clients,quotes,users,pendingInvitations,currentUser]=await Promise.all([
+      this.db.client.count({where:{tenantId,active:true}}),
+      this.db.quote.count({where:{tenantId,createdAt:{gte:month}}}),
+      this.db.user.count({where:{tenantId,active:true}}),
+      this.db.userInvitation.count({where:{tenantId,status:'pending',expiresAt:{gt:now}}}),
+      userId?this.db.user.findFirst({where:{id:userId,tenantId},select:{id:true,name:true,email:true,role:true,customProfileId:true,customProfile:{select:{id:true,name:true}},active:true,lastLoginAt:true,lockedUntil:true,passwordChangedAt:true}}):Promise.resolve(null)
+    ]);
+    return {tenant,limit,currentUser,usage:{clients,quotes,users,pendingInvitations,userSeatsUsed:users+pendingInvitations},features:{customPdf:!!limit?.customPdf,logoPdf:limit?.logoPdf!==false,premiumTemplates:!!limit?.premiumTemplates,projectManagement:limit?.projectManagement??'basic',advancedReports:!!limit?.advancedReports,exportData:!!limit?.exportData,standardRoles:!!limit?.standardRoles,customRoles:!!limit?.customRoles,granularPermissions:!!limit?.granularPermissions,auditAccess:!!limit?.auditAccess}};
+  }
   async updateAccount(tenantId:string,data:any,actorUserId?:string){
     const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});if(!tenant)throw new NotFoundException('Conta não encontrada');
     const limit=await this.db.planLimit.findUnique({where:{plan:tenant.plan}});
@@ -56,13 +92,162 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
     const updated=await this.db.tenant.update({where:{id:tenantId},data:{logoUrl:null}}).catch(()=>null);if(!updated)throw new NotFoundException('Conta não encontrada');
     await this.audit(tenantId,actorUserId,'remove_logo','tenant',tenantId);return updated;
   }
-  async changePassword(tenantId:string,userId:string,currentPassword:string,newPassword:string){const user=await this.db.user.findFirst({where:{id:userId,tenantId}});if(!user||!await compare(currentPassword,user.passwordHash))throw new BadRequestException('Senha atual inválida');if(currentPassword===newPassword)throw new BadRequestException('A nova senha deve ser diferente da atual');await this.db.user.update({where:{id:userId},data:{passwordHash:await hash(newPassword,12),refreshTokenHash:null}});await this.audit(tenantId,userId,'change_password','user',userId);return {ok:true};}
+  async changePassword(tenantId:string,userId:string,currentPassword:string,newPassword:string){const user=await this.db.user.findFirst({where:{id:userId,tenantId}});if(!user||!await compare(currentPassword,user.passwordHash))throw new BadRequestException('Senha atual inválida');if(currentPassword===newPassword)throw new BadRequestException('A nova senha deve ser diferente da atual');await this.db.user.update({where:{id:userId},data:{passwordHash:await hash(newPassword,12),refreshTokenHash:null,passwordChangedAt:new Date(),failedLoginAttempts:0,lockedUntil:null}});await this.audit(tenantId,userId,'change_password','user',userId);return {ok:true};}
 
-  async updatePlan(tenantId:string,plan:string,period='monthly',actorUserId?:string){if(!['starter','pro','business'].includes(plan))throw new BadRequestException('Plano inválido');if(!['monthly','quarterly','semiannual','annual'].includes(period))throw new BadRequestException('Período inválido');if(process.env.NODE_ENV==='production'&&process.env.ALLOW_DIRECT_PLAN_CHANGE!=='true')throw new ForbiddenException('Alteração direta de plano desabilitada em produção');const updated=await this.db.tenant.update({where:{id:tenantId},data:{plan,planPeriod:period}});await this.audit(tenantId,actorUserId,'change_plan','tenant',tenantId,{plan,period});return updated;}
-  users(tenantId:string){return this.db.user.findMany({where:{tenantId},select:{id:true,name:true,email:true,role:true,active:true,createdAt:true,updatedAt:true},orderBy:[{role:'asc'},{name:'asc'}]});}
-  async createUser(tenantId:string,data:any,actorUserId:string){const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});if(!tenant)throw new NotFoundException('Conta não encontrada');const limit=await this.db.planLimit.findUnique({where:{plan:tenant.plan}});const current=await this.db.user.count({where:{tenantId,active:true}});if(limit&&limit.maxUsers>=0&&current>=limit.maxUsers)throw new BadRequestException('Limite de usuários do plano atingido');const email=String(data.email).trim().toLowerCase();if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já está cadastrado');const user=await this.db.user.create({data:{tenantId,name:data.name.trim(),email,passwordHash:await hash(data.password,12),role:data.role,active:true},select:{id:true,name:true,email:true,role:true,active:true,createdAt:true,updatedAt:true}});await this.audit(tenantId,actorUserId,'create','user',user.id,{role:user.role,email:user.email});return user;}
-  async updateUser(tenantId:string,id:string,data:any,actorUserId:string){const user=await this.db.user.findFirst({where:{id,tenantId}});if(!user)throw new NotFoundException('Usuário não encontrado');if(user.role==='owner'&&id!==actorUserId)throw new ForbiddenException('O usuário proprietário não pode ser alterado');if(id===actorUserId&&(data.active===false||data.role&&data.role!=='owner'))throw new BadRequestException('Você não pode remover seu próprio acesso de proprietário');const updated=await this.db.user.update({where:{id},data:{name:data.name??user.name,role:user.role==='owner'?'owner':(data.role??user.role),active:data.active??user.active,...(data.active===false?{refreshTokenHash:null}:{})},select:{id:true,name:true,email:true,role:true,active:true,createdAt:true,updatedAt:true}});await this.audit(tenantId,actorUserId,'update','user',id,{role:updated.role,active:updated.active});return updated;}
-  async auditLogs(tenantId:string){const[logs,users]=await Promise.all([this.db.auditLog.findMany({where:{tenantId},orderBy:{createdAt:'desc'},take:100}),this.db.user.findMany({where:{tenantId},select:{id:true,name:true,email:true}})]);const actors=new Map(users.map(u=>[u.id,u]));return logs.map(log=>({...log,actor:log.actorUserId?actors.get(log.actorUserId)??null:null}));}
+  async updatePlan(tenantId:string,plan:string,period='monthly',actorUserId?:string){
+    if(!['starter','pro','business'].includes(plan))throw new BadRequestException('Plano inválido');
+    if(!['monthly','quarterly','semiannual','annual'].includes(period))throw new BadRequestException('Período inválido');
+    const targetLimit=await this.db.planLimit.findUnique({where:{plan}});
+    const now=new Date();
+    const [activeUsers,pendingInvitations]=await Promise.all([
+      this.db.user.count({where:{tenantId,active:true}}),
+      this.db.userInvitation.count({where:{tenantId,status:'pending',expiresAt:{gt:now}}})
+    ]);
+    const used=activeUsers+pendingInvitations;
+    if(targetLimit&&targetLimit.maxUsers>=0&&used>targetLimit.maxUsers)throw new BadRequestException(`Cancele convites pendentes ou desative ${used-targetLimit.maxUsers} acesso(s) antes de mudar para este plano`);
+    if(process.env.NODE_ENV==='production'&&process.env.ALLOW_DIRECT_PLAN_CHANGE!=='true')throw new ForbiddenException('Alteração direta de plano desabilitada em produção');
+    const updated=await this.db.tenant.update({where:{id:tenantId},data:{plan,planPeriod:period}});
+    await this.audit(tenantId,actorUserId,'change_plan','tenant',tenantId,{plan,period});
+    return updated;
+  }
+  users(tenantId:string){return this.db.user.findMany({where:{tenantId},select:{id:true,name:true,email:true,role:true,customProfileId:true,customProfile:{select:{id:true,name:true,active:true}},active:true,createdAt:true,updatedAt:true},orderBy:[{role:'asc'},{name:'asc'}]});}
+  private invitationHash(token:string){return createHash('sha256').update(token).digest('hex');}
+  private invitationUrl(token:string){const base=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');return `${base}/invite/${encodeURIComponent(token)}`;}
+  private readonly permissionCatalog=['dashboard.read','clients.read','clients.write','services.read','services.write','quotes.read','quotes.write','projects.read','projects.write','calendar.read','calendar.write','finance.read','settings.manage','users.manage','audit.read'];
+  private normalizePermissions(values:any){const set=new Set(Array.isArray(values)?values.map(String):[]);return this.permissionCatalog.filter(code=>set.has(code));}
+  async accessProfiles(tenantId:string){
+    const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});const limit=tenant?await this.db.planLimit.findUnique({where:{plan:tenant.plan}}):null;
+    if(!limit?.customRoles)throw new ForbiddenException('Perfis personalizados estão disponíveis no plano Business');
+    return this.db.accessProfile.findMany({where:{tenantId},orderBy:[{active:'desc'},{name:'asc'}]});
+  }
+  async createAccessProfile(tenantId:string,data:any,actorUserId:string){
+    const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});const limit=tenant?await this.db.planLimit.findUnique({where:{plan:tenant.plan}}):null;
+    if(!limit?.customRoles||!limit?.granularPermissions)throw new ForbiddenException('Perfis personalizados e permissões granulares estão disponíveis no plano Business');
+    const name=String(data.name??'').trim();if(name.length<2)throw new BadRequestException('Informe o nome do perfil');
+    const permissions=this.normalizePermissions(data.permissions);if(!permissions.length)throw new BadRequestException('Selecione pelo menos uma permissão');
+    const exists=await this.db.accessProfile.findFirst({where:{tenantId,name:{equals:name,mode:'insensitive'}}});if(exists)throw new ConflictException('Já existe um perfil com este nome');
+    const created=await this.db.accessProfile.create({data:{tenantId,name,description:data.description?.trim()||null,permissions}});
+    await this.audit(tenantId,actorUserId,'create','access_profile',created.id,{name,permissions});return created;
+  }
+  async updateAccessProfile(tenantId:string,id:string,data:any,actorUserId:string){
+    const profile=await this.db.accessProfile.findFirst({where:{id,tenantId}});if(!profile)throw new NotFoundException('Perfil não encontrado');
+    const patch:any={};if(data.name!==undefined)patch.name=String(data.name).trim();if(data.description!==undefined)patch.description=data.description?.trim()||null;if(data.permissions!==undefined){const permissions=this.normalizePermissions(data.permissions);if(!permissions.length)throw new BadRequestException('Selecione pelo menos uma permissão');patch.permissions=permissions;}if(data.active!==undefined)patch.active=!!data.active;
+    if(data.active===false){const assigned=await this.db.user.count({where:{tenantId,customProfileId:id,active:true}});if(assigned>0)throw new BadRequestException('Desative ou altere os usuários vinculados antes de inativar este perfil');}
+    const updated=await this.db.accessProfile.update({where:{id},data:patch});await this.audit(tenantId,actorUserId,'update','access_profile',id,patch);return updated;
+  }
+  private async resolveCustomProfile(tenantId:string,customProfileId?:string){if(!customProfileId)return null;const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});const limit=tenant?await this.db.planLimit.findUnique({where:{plan:tenant.plan}}):null;if(!limit?.customRoles)throw new ForbiddenException('Perfis personalizados estão disponíveis no plano Business');const profile=await this.db.accessProfile.findFirst({where:{id:customProfileId,tenantId,active:true}});if(!profile)throw new BadRequestException('Perfil personalizado inválido ou inativo');return profile;}
+  private roleLabel(role:string){return ({admin:'Administrador',commercial:'Comercial',operational:'Operacional',finance:'Financeiro'} as Record<string,string>)[role]??role;}
+  private async accessCapacity(tenantId:string){
+    const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});
+    if(!tenant)throw new NotFoundException('Conta não encontrada');
+    const limit=await this.db.planLimit.findUnique({where:{plan:tenant.plan}});
+    const now=new Date();
+    const [active,pending]=await Promise.all([
+      this.db.user.count({where:{tenantId,active:true}}),
+      this.db.userInvitation.count({where:{tenantId,status:'pending',expiresAt:{gt:now}}})
+    ]);
+    return {tenant,limit,active,pending,used:active+pending};
+  }
+  async userInvitations(tenantId:string){
+    const now=new Date();
+    await this.db.userInvitation.updateMany({where:{tenantId,status:'pending',expiresAt:{lte:now}},data:{status:'expired'}});
+    return this.db.userInvitation.findMany({where:{tenantId,status:{in:['pending','expired']}},select:{id:true,name:true,email:true,role:true,customProfileId:true,customProfile:{select:{id:true,name:true}},status:true,expiresAt:true,createdAt:true,updatedAt:true},orderBy:{createdAt:'desc'}});
+  }
+  async createUser(tenantId:string,data:any,actorUserId:string){
+    const {tenant,limit,used}=await this.accessCapacity(tenantId);
+    if(tenant.plan==='starter')throw new BadRequestException('O plano Starter permite somente o proprietário. Faça upgrade para adicionar usuários');
+    if(limit&&limit.maxUsers>=0&&used>=limit.maxUsers)throw new BadRequestException('Limite de usuários do plano atingido. Convites pendentes também reservam vagas');
+    const customProfile=await this.resolveCustomProfile(tenantId,data.customProfileId);
+    if(!customProfile&&!limit?.standardRoles&&data.role!=='admin')throw new ForbiddenException('Perfis de acesso estão disponíveis nos planos Pro e Business');
+    const email=String(data.email).trim().toLowerCase();
+    if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já possui acesso ao LuviePro');
+    const current=await this.db.userInvitation.findFirst({where:{tenantId,email,status:'pending',expiresAt:{gt:new Date()}}});
+    if(current)throw new ConflictException('Já existe um convite pendente para este e-mail');
+    const token=randomBytes(32).toString('hex'),expiresAt=new Date(Date.now()+Number(process.env.INVITATION_TTL_HOURS||48)*3600000);
+    const invitation=await this.db.userInvitation.create({data:{tenantId,name:String(data.name).trim(),email,role:customProfile?'admin':data.role,customProfileId:customProfile?.id??null,tokenHash:this.invitationHash(token),invitedByUserId:actorUserId,expiresAt},select:{id:true,name:true,email:true,role:true,customProfileId:true,customProfile:{select:{id:true,name:true}},status:true,expiresAt:true,createdAt:true}});
+    const inviteUrl=this.invitationUrl(token);
+    let delivery:any={sent:false,reason:'not_configured'};
+    try{delivery=await this.mail.sendUserInvitation({to:email,name:invitation.name,tenantName:tenant.name,roleLabel:invitation.customProfile?.name??this.roleLabel(invitation.role),inviteUrl,expiresAt});}
+    catch{delivery={sent:false,reason:'send_failed'};}
+    await this.audit(tenantId,actorUserId,'invite','user_invitation',invitation.id,{role:invitation.role,email,delivery:delivery.sent?'sent':delivery.reason});
+    return {...invitation,delivery,inviteUrl};
+  }
+  async resendUserInvitation(tenantId:string,id:string,actorUserId:string){
+    const invitation=await this.db.userInvitation.findFirst({where:{id,tenantId},include:{tenant:true,customProfile:true}});
+    if(!invitation)throw new NotFoundException('Convite não encontrado');
+    if(invitation.status==='accepted'||invitation.status==='cancelled')throw new BadRequestException('Este convite não pode ser reenviado');
+    if(invitation.status!=='pending'||invitation.expiresAt.getTime()<=Date.now()){
+      const {limit,used}=await this.accessCapacity(tenantId);
+      if(limit&&limit.maxUsers>=0&&used>=limit.maxUsers)throw new BadRequestException('Limite de usuários do plano atingido');
+    }
+    if(await this.db.user.findUnique({where:{email:invitation.email}}))throw new ConflictException('Este e-mail já possui acesso ao LuviePro');
+    const token=randomBytes(32).toString('hex'),expiresAt=new Date(Date.now()+Number(process.env.INVITATION_TTL_HOURS||48)*3600000);
+    const updated=await this.db.userInvitation.update({where:{id},data:{tokenHash:this.invitationHash(token),status:'pending',expiresAt,invitedByUserId:actorUserId}});
+    const inviteUrl=this.invitationUrl(token);
+    let delivery:any={sent:false,reason:'not_configured'};
+    try{delivery=await this.mail.sendUserInvitation({to:updated.email,name:updated.name,tenantName:invitation.tenant.name,roleLabel:invitation.customProfile?.name??this.roleLabel(updated.role),inviteUrl,expiresAt});}
+    catch{delivery={sent:false,reason:'send_failed'};}
+    await this.audit(tenantId,actorUserId,'resend_invite','user_invitation',id,{email:updated.email,delivery:delivery.sent?'sent':delivery.reason});
+    return {id:updated.id,status:updated.status,expiresAt:updated.expiresAt,delivery,inviteUrl};
+  }
+  async cancelUserInvitation(tenantId:string,id:string,actorUserId:string){
+    const invitation=await this.db.userInvitation.findFirst({where:{id,tenantId}});
+    if(!invitation)throw new NotFoundException('Convite não encontrado');
+    if(invitation.status!=='pending'&&invitation.status!=='expired')throw new BadRequestException('Este convite não pode ser cancelado');
+    const updated=await this.db.userInvitation.update({where:{id},data:{status:'cancelled'}});
+    await this.audit(tenantId,actorUserId,'cancel_invite','user_invitation',id,{email:updated.email});
+    return {ok:true};
+  }
+  async invitationInfo(token:string){
+    const invitation=await this.db.userInvitation.findUnique({where:{tokenHash:this.invitationHash(token)},include:{tenant:true,customProfile:true}});
+    if(!invitation||invitation.status!=='pending')throw new NotFoundException('Convite inválido ou indisponível');
+    if(invitation.customProfileId&&!invitation.customProfile?.active)throw new BadRequestException('O perfil associado a este convite está inativo. Solicite um novo convite');
+    if(invitation.tenant.status!=='active'||(invitation.tenant.subscriptionExpiresAt&&invitation.tenant.subscriptionExpiresAt.getTime()<Date.now()))throw new ForbiddenException('A conta da empresa está indisponível ou com assinatura expirada');
+    if(invitation.expiresAt.getTime()<=Date.now()){await this.db.userInvitation.update({where:{id:invitation.id},data:{status:'expired'}});throw new BadRequestException('Este convite expirou. Solicite um novo convite ao administrador');}
+    return {name:invitation.name,email:invitation.email,role:invitation.role,roleLabel:invitation.customProfile?.name??this.roleLabel(invitation.role),customProfileId:invitation.customProfileId,tenantName:invitation.tenant.name,expiresAt:invitation.expiresAt};
+  }
+  async acceptInvitation(token:string,password:string){
+    const tokenHash=this.invitationHash(token);
+    const invitation=await this.db.userInvitation.findUnique({where:{tokenHash},include:{tenant:true,customProfile:true}});
+    if(!invitation||invitation.status!=='pending')throw new NotFoundException('Convite inválido ou indisponível');
+    if(invitation.customProfileId&&!invitation.customProfile?.active)throw new BadRequestException('O perfil associado a este convite está inativo. Solicite um novo convite');
+    if(invitation.tenant.status!=='active'||(invitation.tenant.subscriptionExpiresAt&&invitation.tenant.subscriptionExpiresAt.getTime()<Date.now()))throw new ForbiddenException('A conta da empresa está indisponível ou com assinatura expirada');
+    if(invitation.expiresAt.getTime()<=Date.now()){await this.db.userInvitation.update({where:{id:invitation.id},data:{status:'expired'}});throw new BadRequestException('Este convite expirou. Solicite um novo convite');}
+    if(await this.db.user.findUnique({where:{email:invitation.email}}))throw new ConflictException('Este e-mail já possui acesso ao LuviePro');
+    const limit=await this.db.planLimit.findUnique({where:{plan:invitation.tenant.plan}});
+    const active=await this.db.user.count({where:{tenantId:invitation.tenantId,active:true}});
+    if(limit&&limit.maxUsers>=0&&active>=limit.maxUsers)throw new BadRequestException('A empresa atingiu o limite de usuários do plano. Fale com o administrador');
+    const user=await this.db.$transaction(async tx=>{
+      const created=await tx.user.create({data:{tenantId:invitation.tenantId,name:invitation.name,email:invitation.email,passwordHash:await hash(password,12),role:invitation.role,customProfileId:invitation.customProfileId,active:true}});
+      await tx.userInvitation.update({where:{id:invitation.id},data:{status:'accepted',acceptedAt:new Date()}});
+      return created;
+    });
+    await this.audit(invitation.tenantId,user.id,'accept_invite','user_invitation',invitation.id,{role:user.role,email:user.email});
+    return this.issueSession({...user,tenant:invitation.tenant});
+  }
+  async updateUser(tenantId:string,id:string,data:any,actorUserId:string){
+    const user=await this.db.user.findFirst({where:{id,tenantId}});if(!user)throw new NotFoundException('Usuário não encontrado');
+    if(user.role==='owner'&&id!==actorUserId)throw new ForbiddenException('O usuário proprietário não pode ser alterado');
+    if(id===actorUserId&&(data.active===false||data.role&&data.role!=='owner'||data.customProfileId))throw new BadRequestException('Você não pode remover seu próprio acesso de proprietário');
+    if(data.active===true&&!user.active){const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});const limit=tenant?await this.db.planLimit.findUnique({where:{plan:tenant.plan}}):null;const activeUsers=await this.db.user.count({where:{tenantId,active:true}});if(limit&&limit.maxUsers>=0&&activeUsers>=limit.maxUsers)throw new BadRequestException('Limite de usuários do plano atingido');}
+    const customProfile=data.customProfileId===undefined?undefined:await this.resolveCustomProfile(tenantId,data.customProfileId||undefined);
+    const updated=await this.db.user.update({where:{id},data:{name:data.name??user.name,role:user.role==='owner'?'owner':(customProfile?'admin':(data.role??user.role)),...(customProfile!==undefined?{customProfileId:customProfile?.id??null}:{}),active:data.active??user.active,...(data.active===false?{refreshTokenHash:null}:{})},select:{id:true,name:true,email:true,role:true,customProfileId:true,customProfile:{select:{id:true,name:true}},active:true,createdAt:true,updatedAt:true}});
+    await this.audit(tenantId,actorUserId,'update','user',id,{role:updated.role,customProfileId:updated.customProfileId,active:updated.active});return updated;
+  }
+  async auditLogs(tenantId:string,filters:any={}){
+    const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});const limit=tenant?await this.db.planLimit.findUnique({where:{plan:tenant.plan}}):null;if(!limit?.auditAccess)throw new ForbiddenException('Histórico de atividades disponível no plano Business');
+    const where:any={tenantId};
+    if(filters.action)where.action=String(filters.action);
+    if(filters.entity)where.entity=String(filters.entity);
+    if(filters.actorUserId)where.actorUserId=String(filters.actorUserId);
+    const from=filters.from?new Date(String(filters.from)):null,to=filters.to?new Date(String(filters.to)):null;
+    if(from&&!Number.isNaN(from.getTime())||to&&!Number.isNaN(to.getTime())){where.createdAt={};if(from&&!Number.isNaN(from.getTime()))where.createdAt.gte=from;if(to&&!Number.isNaN(to.getTime())){to.setHours(23,59,59,999);where.createdAt.lte=to;}}
+    const take=Math.min(500,Math.max(1,Number(filters.take)||200));
+    const[logs,users]=await Promise.all([this.db.auditLog.findMany({where,orderBy:{createdAt:'desc'},take}),this.db.user.findMany({where:{tenantId},select:{id:true,name:true,email:true}})]);const actors=new Map(users.map(u=>[u.id,u]));
+    let result=logs.map(log=>({...log,actor:log.actorUserId?actors.get(log.actorUserId)??null:null}));
+    const search=String(filters.search??'').trim().toLowerCase();if(search)result=result.filter((log:any)=>[log.action,log.entity,log.entityId,log.actor?.name,log.actor?.email,JSON.stringify(log.metadata??{})].some(v=>String(v??'').toLowerCase().includes(search)));
+    return {items:result,total:result.length,actors:users};
+  }
   async dashboard(tenantId:string){
     const now=new Date();const soon=new Date(now.getTime()+7*86400000);
     const monthStart=new Date(now.getFullYear(),now.getMonth(),1);

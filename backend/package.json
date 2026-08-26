@@ -32,7 +32,8 @@
     "class-validator": "^0.14.2",
     "ioredis": "^5.11.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "nodemailer": "^7.0.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.10",

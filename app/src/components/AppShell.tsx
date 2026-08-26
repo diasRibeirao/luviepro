@@ -20,6 +20,7 @@ const items=[
   {href:'/settings',key:'settings',icon:'settings-outline',group:'administracao'},
 ] as const;
 const groupLabels={principal:'Principal',comercial:'Comercial',operacao:'Operação',administracao:'Administração'} as const;
+const itemPermissions:Record<string,string|undefined>={dashboard:'dashboard.read',calendar:'calendar.read',notifications:undefined,clients:'clients.read',services:'services.read',quotes:'quotes.read',projects:'projects.read',calculator:'quotes.write',settings:'settings.manage'};
 
 export function AppShell({title,subtitle,action,children}:{title:string;subtitle?:string;action?:ReactNode;children:ReactNode}){
   const path=usePathname();
@@ -45,10 +46,12 @@ export function AppShell({title,subtitle,action,children}:{title:string;subtitle
   const navigate=(href:string)=>router.replace(href as any);
   const notificationLabel=unread?`${tr('Notificações')}: ${unread}`:tr('Notificações');
   const signOut=async()=>{const accepted=await confirm({title:'Sair da conta?',message:'Você precisará entrar novamente para acessar o LuviePro.',confirmLabel:'Sair',danger:true});if(!accepted)return;await logout();router.replace('/')};
-  const activeItem=items.find(item=>active(item.href));
+  const allowed=(key:string)=>!session.customProfileId||!itemPermissions[key]||(session.permissions??[]).includes(itemPermissions[key]!);
+  const visibleItems=items.filter(item=>allowed(item.key));
+  const activeItem=visibleItems.find(item=>active(item.href));
   const nested=!!activeItem&&path!==activeItem.href;
   const detailLabel=path.includes('/proposal')?t('proposal'):path.includes('/public')?t('sharing'):nested?t('detail'):undefined;
-  const navItems=items.map((item,index)=><View key={item.href}>{!collapsed&&(index===0||items[index-1].group!==item.group)&&<Text style={s.groupLabel}>{groupLabels[item.group]}</Text>}<Pressable accessibilityRole="button" accessibilityLabel={t(item.key as any)} accessibilityState={{selected:active(item.href)}} onPress={()=>navigate(item.href)} style={({pressed})=>[s.navItem,active(item.href)&&s.navItemActive,pressed&&s.pressed]}><Ionicons name={item.icon as any} size={19} color={active(item.href)?theme.goldLight:'rgba(255,255,255,.65)'}/>{!collapsed&&<Text style={[s.navLabel,active(item.href)&&s.navLabelActive]}>{t(item.key as any)}</Text>}{item.href==='/notifications'&&unread>0?<View style={[s.navBadge,collapsed&&s.navBadgeCollapsed]}><Text style={s.navBadgeText}>{unread>99?'99+':unread}</Text></View>:active(item.href)?<View style={s.activeDot}/>:null}</Pressable></View>);
+  const navItems=visibleItems.map((item,index)=><View key={item.href}>{!collapsed&&(index===0||visibleItems[index-1].group!==item.group)&&<Text style={s.groupLabel}>{groupLabels[item.group]}</Text>}<Pressable accessibilityRole="button" accessibilityLabel={t(item.key as any)} accessibilityState={{selected:active(item.href)}} onPress={()=>navigate(item.href)} style={({pressed})=>[s.navItem,active(item.href)&&s.navItemActive,pressed&&s.pressed]}><Ionicons name={item.icon as any} size={19} color={active(item.href)?theme.goldLight:'rgba(255,255,255,.65)'}/>{!collapsed&&<Text style={[s.navLabel,active(item.href)&&s.navLabelActive]}>{t(item.key as any)}</Text>}{item.href==='/notifications'&&unread>0?<View style={[s.navBadge,collapsed&&s.navBadgeCollapsed]}><Text style={s.navBadgeText}>{unread>99?'99+':unread}</Text></View>:active(item.href)?<View style={s.activeDot}/>:null}</Pressable></View>);
   return <SafeAreaView style={s.page} edges={['top','left','right']}><View style={s.layout}>
     {desktop&&<View style={[s.sidebar,collapsed&&s.sidebarCollapsed]}>
       <View style={[s.logoRow,collapsed&&s.logoRowCollapsed]}><View style={s.logoMark}><Text style={s.logoLetter}>L</Text></View>{!collapsed&&<View><View style={s.brandRow}><Text style={s.brand}>LuviePro</Text><Text style={s.pro}>{String(plan).toUpperCase()}</Text></View><Text style={s.tagline}>Gestão para decoradores</Text></View>}</View>
