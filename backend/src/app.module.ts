@@ -8,7 +8,8 @@ import { PrismaService } from './prisma.service';
 import { RedisService } from './redis.service';
 import { HealthService } from './health.service';
 import { TenantActiveGuard } from './tenant-active.guard';
+import { RolesGuard } from './roles.guard';
 @Module({
-  imports:[JwtModule.register({global:true,secret:process.env.JWT_SECRET ?? 'local-dev-secret',signOptions:{expiresIn:'8h'}})],
-  controllers:[ApiController], providers:[PrismaService,RedisService,HealthService,ApiService,{provide:APP_GUARD,useClass:AuthGuard},{provide:APP_GUARD,useClass:TenantActiveGuard}]
+  imports:[JwtModule.register({global:true,secret:process.env.JWT_SECRET ?? (process.env.NODE_ENV==='production'?(()=>{throw new Error('JWT_SECRET não configurado')})():'local-dev-secret'),signOptions:{expiresIn:'15m'}})],
+  controllers:[ApiController], providers:[PrismaService,RedisService,HealthService,ApiService,{provide:APP_GUARD,useClass:AuthGuard},{provide:APP_GUARD,useClass:TenantActiveGuard},{provide:APP_GUARD,useClass:RolesGuard}]
 }) export class AppModule {}

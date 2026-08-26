@@ -3,9 +3,9 @@ import { hash } from 'bcryptjs';
 const db = new PrismaClient();
 async function main() {
   const plans=[
-    {plan:'starter',maxClients:30,maxQuotesPerMonth:10,maxUsers:1,customPdf:false,projectManagement:'basic',advancedReports:false,monthlyPriceCents:4990,quarterlyPriceCents:13473,semiannualPriceCents:25449,annualPriceCents:47904},
-    {plan:'pro',maxClients:150,maxQuotesPerMonth:50,maxUsers:3,customPdf:true,projectManagement:'complete',advancedReports:true,monthlyPriceCents:9990,quarterlyPriceCents:26973,semiannualPriceCents:50949,annualPriceCents:95904},
-    {plan:'business',maxClients:-1,maxQuotesPerMonth:-1,maxUsers:10,customPdf:true,projectManagement:'kanban',advancedReports:true,monthlyPriceCents:17990,quarterlyPriceCents:48573,semiannualPriceCents:91749,annualPriceCents:172704},
+    {plan:'starter',maxClients:30,maxQuotesPerMonth:10,maxUsers:1,customPdf:false,logoPdf:true,premiumTemplates:false,projectManagement:'basic',advancedReports:false,exportData:false,monthlyPriceCents:4990,quarterlyPriceCents:13473,semiannualPriceCents:25449,annualPriceCents:47904},
+    {plan:'pro',maxClients:150,maxQuotesPerMonth:50,maxUsers:3,customPdf:true,logoPdf:true,premiumTemplates:false,projectManagement:'complete',advancedReports:true,exportData:false,monthlyPriceCents:9990,quarterlyPriceCents:26973,semiannualPriceCents:50949,annualPriceCents:95904},
+    {plan:'business',maxClients:-1,maxQuotesPerMonth:-1,maxUsers:10,customPdf:true,logoPdf:true,premiumTemplates:true,projectManagement:'kanban',advancedReports:true,exportData:true,monthlyPriceCents:17990,quarterlyPriceCents:48573,semiannualPriceCents:91749,annualPriceCents:172704},
   ];
   for(const plan of plans) await db.planLimit.upsert({where:{plan:plan.plan},update:plan,create:plan});
   const brand={name:'Luvie Organiza',responsibleName:'Luana Oliveira',phone:'(18) 99163-1532',contactEmail:'luvieorganiza@gmail.com',siteUrl:'www.luvieorganiza.com.br',instagram:'@luvieorganiza',primaryColor:'#2F4538',secondaryColor:'#C9A84C',proposalText:'Organização que transforma. Gestão que cresce.',plan:'pro',planPeriod:'annual'};

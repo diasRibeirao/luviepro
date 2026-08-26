@@ -1,0 +1,13 @@
+import { Ionicons } from '@expo/vector-icons';
+import { Pressable,StyleSheet,View } from 'react-native';
+import { Text } from '../i18n';
+import { theme } from '../theme';
+import { ListSkeleton } from './Skeleton';
+
+export function AsyncState({loading,error,empty,emptyTitle='Nenhum registro encontrado',emptyMessage,onRetry,skeletonRows=3}:{loading?:boolean;error?:string;empty?:boolean;emptyTitle?:string;emptyMessage?:string;onRetry?:()=>void;skeletonRows?:number}){
+  if(loading)return <View style={s.loadingWrap}><View style={s.loadingHead}><View><Text accessibilityRole="header" style={s.loadingTitle}>Carregando informações</Text><Text style={s.loadingHint}>Atualizando os dados desta área.</Text></View></View><ListSkeleton rows={skeletonRows}/></View>;
+  if(error)return <View accessibilityRole="alert" style={s.box}><View style={[s.icon,s.errorIcon]}><Ionicons name="alert-circle-outline" size={24} color={theme.danger}/></View><Text style={s.title}>Não foi possível carregar</Text><Text style={s.muted}>{error}</Text>{onRetry&&<Pressable accessibilityRole="button" accessibilityLabel="Tentar carregar novamente" onPress={onRetry} style={({pressed})=>[s.retryButton,pressed&&s.pressed]}><Ionicons name="refresh" size={15} color={theme.green2}/><Text style={s.retry}>Tentar novamente</Text></Pressable>}</View>;
+  if(empty)return <View style={s.box}><View style={s.icon}><Ionicons name="file-tray-outline" size={24} color={theme.green2}/></View><Text style={s.title}>{emptyTitle}</Text>{emptyMessage&&<Text style={s.muted}>{emptyMessage}</Text>}</View>;
+  return null;
+}
+const s=StyleSheet.create({loadingWrap:{width:'100%',gap:12},loadingHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:2},loadingTitle:{fontSize:13,fontWeight:'800',color:theme.ink},loadingHint:{fontSize:11,color:theme.muted,marginTop:2},box:{minHeight:190,padding:32,alignItems:'center',justifyContent:'center',gap:8,backgroundColor:theme.white,borderWidth:1,borderColor:theme.border,borderRadius:16},icon:{width:48,height:48,borderRadius:24,backgroundColor:theme.green50,alignItems:'center',justifyContent:'center',marginBottom:3},errorIcon:{backgroundColor:theme.dangerSoft},title:{fontFamily:'serif',fontSize:17,fontWeight:'700',color:theme.ink},muted:{maxWidth:390,fontSize:12,lineHeight:16,color:theme.muted,textAlign:'center'},retryButton:{marginTop:5,minHeight:38,paddingHorizontal:14,borderRadius:9,borderWidth:1,borderColor:theme.borderStrong,flexDirection:'row',alignItems:'center',gap:6,backgroundColor:theme.white},pressed:{opacity:.75},retry:{fontSize:12,fontWeight:'800',color:theme.green2}});

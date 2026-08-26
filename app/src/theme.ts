@@ -1,1 +1,6 @@
-export const theme={g900:'#0D1F17',g800:'#1C2C22',green:'#2F4538',green2:'#3D6645',green3:'#5B8863',green50:'#F0F4F1',gold:'#C9A84C',goldLight:'#E8D08A',goldPale:'#FDF8EC',cream:'#F7F8F6',white:'#FFFFFF',ink:'#1A2E22',muted:'#8A918C',border:'#E8ECE9',danger:'#A44D4D'};
+export const theme={
+  g900:'#0B1D15',g800:'#173126',green:'#294C3B',green2:'#37664F',green3:'#5B8863',green50:'#F1F6F3',
+  gold:'#CDAF55',goldLight:'#E8D08A',goldPale:'#FCF7E8',cream:'#F5F7F5',white:'#FFFFFF',ink:'#15271E',muted:'#77827C',
+  border:'#E2E8E4',borderStrong:'#D5DED8',danger:'#A74747',dangerSoft:'#FBEDED',success:'#2F7A50',successSoft:'#EAF6EF',infoSoft:'#EDF4F0',
+  shadow:'#10261B'
+};

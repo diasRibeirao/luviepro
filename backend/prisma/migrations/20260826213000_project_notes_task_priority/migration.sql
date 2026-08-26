@@ -1,0 +1,20 @@
+-- AlterTable
+ALTER TABLE "ProjectTask" ADD COLUMN "priority" TEXT NOT NULL DEFAULT 'medium';
+
+-- CreateTable
+CREATE TABLE "ProjectNote" (
+    "id" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "authorUserId" TEXT,
+    "authorName" TEXT,
+    "content" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ProjectNote_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "ProjectNote_tenantId_projectId_createdAt_idx" ON "ProjectNote"("tenantId", "projectId", "createdAt");
+
+-- AddForeignKey
+ALTER TABLE "ProjectNote" ADD CONSTRAINT "ProjectNote_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
