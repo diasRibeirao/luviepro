@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id String @id @default(cuid())
+  name String
+  slug String @unique
+  primaryColor String @default("#2F4538")
+  secondaryColor String @default("#C9A84C")
+  responsibleName String?
+  phone String?
+  contactEmail String?
+  logoUrl String?
+  organizerPhotoUrl String?
+  siteUrl String?
+  instagram String?
+  proposalText String?
+  plan String @default("starter")
+  planPeriod String?
+  subscriptionExpiresAt DateTime?
+  status String @default("active")
+  createdAt DateTime @default(now())
+  users User[]
+  clients Client[]
+  services Service[]
+  quotes Quote[]
+  projects Project[]
+  subscriptions Subscription[]
+}
+model PlanLimit {
+  plan String @id
+  maxClients Int
+  maxQuotesPerMonth Int
+  maxUsers Int
+  customPdf Boolean @default(false)
+  projectManagement String @default("basic")
+  advancedReports Boolean @default(false)
+  monthlyPriceCents Int
+  quarterlyPriceCents Int
+  semiannualPriceCents Int
+  annualPriceCents Int
+}
+model Subscription {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan String
+  period String
+  amountCents Int
+  status String @default("active")
+  startsAt DateTime
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([tenantId, status])
+}
+model User {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name String
+  email String @unique
+  passwordHash String
+  role String @default("admin")
+}
+model Client {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name String
+  phone String?
+  email String?
+  city String?
+  address String?
+  notes String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  quotes Quote[]
+  projects Project[]
+  @@index([tenantId, name])
+}
+model Service {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name String
+  code String?
+  description String?
+  dailyRateCents Int
+  defaultDays Int @default(1)
+  people Int @default(1)
+  variableCostCents Int @default(0)
+  fixedCostCents Int @default(0)
+  safetyMarginBps Int @default(2000)
+  active Boolean @default(true)
+  team ServiceTeamMember[]
+  costs ServiceCost[]
+  stages ServiceStage[]
+  @@index([tenantId, name])
+  @@unique([tenantId, code])
+}
+model ServiceTeamMember {
+  id String @id @default(cuid())
+  tenantId String
+  serviceId String
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  role String
+  dailyRateCents Int
+  included Boolean @default(true)
+  @@index([tenantId, serviceId])
+}
+model ServiceCost {
+  id String @id @default(cuid())
+  tenantId String
+  serviceId String
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  type String
+  description String
+  amountCents Int
+  @@index([tenantId, serviceId])
+}
+model ServiceStage {
+  id String @id @default(cuid())
+  tenantId String
+  serviceId String
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  sequence Int
+  description String
+  duration String?
+  @@unique([serviceId, sequence])
+  @@index([tenantId, serviceId])
+}
+model Quote {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId String
+  client Client @relation(fields: [clientId], references: [id])
+  number String
+  status String @default("draft")
+  totalCents Int
+  discountBps Int @default(0)
+  finalTotalCents Int @default(0)
+  validityDays Int @default(30)
+  notes String?
+  sentAt DateTime?
+  approvedAt DateTime?
+  validUntil DateTime?
+  createdAt DateTime @default(now())
+  items QuoteItem[]
+  project Project?
+  @@unique([tenantId, number])
+  @@index([tenantId, createdAt])
+}
+model QuoteItem {
+  id String @id @default(cuid())
+  quoteId String
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  serviceName String
+  days Int
+  people Int
+  laborCents Int
+  variableCents Int
+  fixedCents Int
+  marginCents Int
+  totalCents Int
+  configurationJson Json?
+  stages QuoteStage[]
+}
+model QuoteStage {
+  id String @id @default(cuid())
+  quoteItemId String
+  quoteItem QuoteItem @relation(fields: [quoteItemId], references: [id], onDelete: Cascade)
+  sequence Int
+  description String
+  duration String?
+  completed Boolean @default(false)
+  @@unique([quoteItemId, sequence])
+}
+model Project {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId String
+  client Client @relation(fields: [clientId], references: [id])
+  quoteId String? @unique
+  quote Quote? @relation(fields: [quoteId], references: [id])
+  name String
+  status String @default("scheduled")
+  progress Int @default(0)
+  startDate DateTime?
+  endDate DateTime?
+  notes String?
+  monthlyFollowUps MonthlyFollowUp[]
+  @@index([tenantId, status])
+}
+model MonthlyFollowUp {
+  id String @id @default(cuid())
+  tenantId String
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  month Int
+  year Int
+  visitDate DateTime?
+  present Boolean @default(false)
+  notes String?
+  @@unique([projectId, month, year])
+  @@index([tenantId, projectId])
+}

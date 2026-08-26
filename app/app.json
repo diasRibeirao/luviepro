@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "LuviePro",
+    "slug": "luviepro",
+    "scheme": "luviepro",
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
