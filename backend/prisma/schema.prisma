@@ -186,6 +186,8 @@ model Service {
   variableCostCents Int @default(0)
   fixedCostCents Int @default(0)
   safetyMarginBps Int @default(2000)
+  variableCostMode String @default("per_day")
+  marginBase String @default("daily")
   active Boolean @default(true)
   team ServiceTeamMember[]
   costs ServiceCost[]

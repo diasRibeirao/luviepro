@@ -134,6 +134,8 @@ export class ServiceDto {
   @IsInt() @Min(0) variableCostCents!: number;
   @IsInt() @Min(0) fixedCostCents!: number;
   @IsInt() @Min(0) @Max(10000) safetyMarginBps!: number;
+  @IsOptional() @IsIn(['per_day','per_person','per_person_day','fixed']) variableCostMode?: string;
+  @IsOptional() @IsIn(['daily','subtotal']) marginBase?: string;
   @IsOptional() @IsBoolean() active?: boolean;
   @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>ServiceTeamMemberDto) team?: ServiceTeamMemberDto[];
   @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>ServiceCostDto) costs?: ServiceCostDto[];
