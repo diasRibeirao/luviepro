@@ -79,11 +79,22 @@ export class UpdateAccessProfileDto {
 }
 export class QuoteStatusDto { @IsIn(['draft','sent','rejected']) status!: string; }
 export class UpdateProjectDto {
-  @IsOptional() @IsIn(['scheduled','in_progress','completed','cancelled']) status?: string;
+  @IsOptional() @IsString() status?: string;
   @IsOptional() @IsInt() @Min(0) @Max(100) progress?: number;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() startDate?: string;
   @IsOptional() @IsString() endDate?: string;
+}
+export class CreateProjectStatusDto {
+  @IsString() @MinLength(2) name!: string;
+  @IsOptional() @IsString() color?: string;
+  @IsOptional() @IsInt() @Min(0) position?: number;
+}
+export class UpdateProjectStatusDto {
+  @IsOptional() @IsString() @MinLength(2) name?: string;
+  @IsOptional() @IsString() color?: string;
+  @IsOptional() @IsInt() @Min(0) position?: number;
+  @IsOptional() @IsBoolean() active?: boolean;
 }
 export class CreateProjectTaskDto {
   @IsString() @MinLength(2) title!: string;

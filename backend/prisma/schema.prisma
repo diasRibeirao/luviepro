@@ -46,6 +46,7 @@ model Tenant {
   services Service[]
   quotes Quote[]
   projects Project[]
+  projectStatuses ProjectStatus[]
   subscriptions Subscription[]
   auditLogs AuditLog[]
   userInvitations UserInvitation[]
@@ -303,6 +304,20 @@ model Project {
   activityNotes ProjectNote[]
   monthlyFollowUps MonthlyFollowUp[]
   @@index([tenantId, status])
+}
+model ProjectStatus {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key String
+  name String
+  color String @default("#2F6B4F")
+  position Int @default(0)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([tenantId, key])
+  @@index([tenantId, active, position])
 }
 model MonthlyFollowUp {
   id String @id @default(cuid())
