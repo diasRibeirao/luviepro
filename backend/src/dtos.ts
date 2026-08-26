@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 
 export class RefreshDto { @IsString() @MinLength(20) refreshToken!: string; }
 export class LoginDto { @IsEmail() email!: string; @IsString() @MinLength(8) password!: string; }
+export class PlatformAdminLoginDto { @IsEmail() email!: string; @IsString() @MinLength(8) password!: string; }
 export class ForgotPasswordDto { @IsEmail() email!: string; }
 export class ResetPasswordDto { @IsString() @MinLength(20) token!: string; @IsString() @MinLength(8) password!: string; }
 export class RegisterDto {

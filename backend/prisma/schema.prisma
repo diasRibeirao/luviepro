@@ -106,6 +106,19 @@ model User {
   updatedAt DateTime @updatedAt
   @@index([customProfileId])
 }
+/// Administradores da plataforma LuviePro. Não pertence a nenhum tenant.
+model PlatformAdmin {
+  id String @id @default(cuid())
+  name String
+  email String @unique
+  passwordHash String
+  role String @default("platform_admin")
+  active Boolean @default(true)
+  lastLoginAt DateTime?
+  refreshTokenHash String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 model PasswordResetToken {
   id String @id @default(cuid())
   userId String

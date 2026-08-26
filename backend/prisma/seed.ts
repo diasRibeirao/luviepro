@@ -8,6 +8,9 @@ async function main() {
     {plan:'business',maxClients:-1,maxQuotesPerMonth:-1,maxUsers:10,customPdf:true,logoPdf:true,premiumTemplates:true,projectManagement:'kanban',advancedReports:true,exportData:true,standardRoles:true,customRoles:true,granularPermissions:true,auditAccess:true,monthlyPriceCents:17990,quarterlyPriceCents:48573,semiannualPriceCents:91749,annualPriceCents:172704},
   ];
   for(const plan of plans) await db.planLimit.upsert({where:{plan:plan.plan},update:plan,create:plan});
+  const platformEmail=process.env.PLATFORM_ADMIN_EMAIL||'master@luviepro.local';
+  const platformPassword=process.env.PLATFORM_ADMIN_PASSWORD||'LuvieMaster123!';
+  await (db as any).platformAdmin.upsert({where:{email:platformEmail},update:{name:'LuviePro Master',active:true},create:{name:'LuviePro Master',email:platformEmail,passwordHash:await hash(platformPassword,12),role:'platform_admin'}});
   const brand={name:'Luvie Organiza',responsibleName:'Luana Oliveira',phone:'(18) 99163-1532',contactEmail:'luvieorganiza@gmail.com',siteUrl:'www.luvieorganiza.com.br',instagram:'@luvieorganiza',primaryColor:'#2F4538',secondaryColor:'#C9A84C',proposalText:'Organização que transforma. Gestão que cresce.',plan:'pro',planPeriod:'annual'};
   const tenant = await db.tenant.upsert({ where:{slug:'luvie-organiza'}, update:brand, create:{...brand,slug:'luvie-organiza'} });
   await db.user.upsert({ where:{email:'luana@luviepro.local'}, update:{}, create:{tenantId:tenant.id,name:'Luana Oliveira',email:'luana@luviepro.local',passwordHash:await hash('LuviePro123!',12)} });
@@ -28,5 +31,9 @@ async function main() {
     {tenantId:tenant.id,serviceId:moving.id,sequence:6,description:'Gestão da devolução da casa',duration:'até 3 dias'},
   ]});
   if (!await db.project.count({where:{tenantId:tenant.id}})) await db.project.create({data:{tenantId:tenant.id,clientId:client.id,name:'Organização residencial — Silzia',status:'in_progress',progress:65}});
+  if(process.env.DEMO_SEED==='1'){
+    const cities=['Presidente Prudente','São Paulo','Londrina','Maringá','Bauru','Ribeirão Preto'];
+    for(let i=1;i<=24;i++) await db.client.upsert({where:{id:`demo-client-${i}`},update:{},create:{id:`demo-client-${i}`,tenantId:tenant.id,name:`Cliente demonstração ${String(i).padStart(2,'0')}`,phone:`(18) 99000-${String(i).padStart(4,'0')}`,email:`cliente${i}@demo.luviepro.local`,city:cities[i%cities.length],state:'SP'}} as any);
+  }
 }
 main().finally(()=>db.$disconnect());

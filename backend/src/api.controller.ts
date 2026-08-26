@@ -1,12 +1,16 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, SetMetadata, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { ApiService } from './api.service'; import { HealthService } from './health.service'; import { Roles } from './roles.guard'; import { Permissions } from './permissions.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CalculateDto, CalendarEventDto, ClientDto, CreateProjectTaskDto, CreateProjectNoteDto, CreateProjectStatusDto, CreateQuoteDto, CreateUserDto, ForgotPasswordDto, LoginDto, NotificationPreferencesDto, QuoteStatusDto, RefreshDto, RegisterDto, ResetPasswordDto, UpdateAccountDto, UpdatePlanDto, UpdateProjectDto, UpdateProjectStatusDto, UpdateProjectTaskDto, UpdateQuoteDto, UpdateUserDto, UpdateCalendarEventDto, ServiceDto, PublicProposalDecisionDto, ChangePasswordDto, AcceptInvitationDto, CreateAccessProfileDto, UpdateAccessProfileDto } from './dtos';
+import { CalculateDto, CalendarEventDto, ClientDto, CreateProjectTaskDto, CreateProjectNoteDto, CreateProjectStatusDto, CreateQuoteDto, CreateUserDto, ForgotPasswordDto, LoginDto, NotificationPreferencesDto, PlatformAdminLoginDto, QuoteStatusDto, RefreshDto, RegisterDto, ResetPasswordDto, UpdateAccountDto, UpdatePlanDto, UpdateProjectDto, UpdateProjectStatusDto, UpdateProjectTaskDto, UpdateQuoteDto, UpdateUserDto, UpdateCalendarEventDto, ServiceDto, PublicProposalDecisionDto, ChangePasswordDto, AcceptInvitationDto, CreateAccessProfileDto, UpdateAccessProfileDto } from './dtos';
 const Public=()=>SetMetadata('public',true);
 @Controller() export class ApiController {
   constructor(private api:ApiService,private healthService:HealthService){}
   @Public() @Get('health/live') live(){return this.healthService.live();} @Public() @Get('health') health(){return this.healthService.ready();}
   @Public() @Post('auth/login') login(@Body() b:LoginDto){return this.api.login(b.email,b.password);}
+  @Public() @Post('auth/platform-login') platformLogin(@Body() b:PlatformAdminLoginDto){return this.api.platformLogin(b.email,b.password);}
+  @Roles('platform_admin') @Get('platform/overview') platformOverview(){return this.api.platformOverview();}
+  @Roles('platform_admin') @Get('platform/tenants') platformTenants(){return this.api.platformTenants();}
+  @Roles('platform_admin') @Get('platform/subscriptions') platformSubscriptions(){return this.api.platformSubscriptions();}
   @Public() @Post('auth/forgot-password') forgotPassword(@Body() b:ForgotPasswordDto){return this.api.forgotPassword(b.email);}
   @Public() @Post('auth/reset-password') resetPassword(@Body() b:ResetPasswordDto){return this.api.resetPassword(b.token,b.password);}
   @Public() @Post('auth/register') register(@Body() b:RegisterDto){return this.api.register(b);}

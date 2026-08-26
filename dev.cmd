@@ -20,7 +20,7 @@ if errorlevel 1 exit /b 1
 
 echo Abrindo API e aplicativo web em terminais separados...
 start "LuviePro API" /D "%~dp0backend" cmd /k npm run dev
-start "LuviePro APP" /D "%~dp0app" cmd /k npm run web
+start "LuviePro APP" /D "%~dp0app" cmd /k npx expo start --web --lan
 
 echo.
 echo LuviePro iniciado.

@@ -25,7 +25,7 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
   async login(email:string,password:string){
     const normalized=email.trim().toLowerCase();
     const u=await this.db.user.findUnique({where:{email:normalized},include:{tenant:true,customProfile:true}});
-    if(!u){throw new UnauthorizedException('E-mail ou senha inválidos');}
+    if(!u){const platform=await (this.db as any).platformAdmin?.findUnique({where:{email:normalized}});if(platform)return this.platformLogin(normalized,password);throw new UnauthorizedException('E-mail ou senha inválidos');}
     const now=new Date();
     if(u.lockedUntil&&u.lockedUntil.getTime()>now.getTime()){
       await this.audit(u.tenantId,u.id,'login_blocked','user',u.id,{reason:'temporary_lock'});
@@ -43,6 +43,10 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
     const session=await this.issueSession({...u,lastLoginAt:now,failedLoginAttempts:0,lockedUntil:null});
     await this.audit(u.tenantId,u.id,'login_success','user',u.id);return session;
   }
+  async platformLogin(email:string,password:string){const admin=await (this.db as any).platformAdmin.findUnique({where:{email:email.trim().toLowerCase()}});if(!admin||!admin.active||!await compare(password,admin.passwordHash))throw new UnauthorizedException('E-mail ou senha inválidos');const payload={sub:admin.id,role:'platform_admin',platformAdmin:true};const token=await this.jwt.signAsync({...payload,typ:'access'},{expiresIn:'15m'});const refreshToken=await this.jwt.signAsync({...payload,typ:'refresh'},{secret:this.refreshSecret(),expiresIn:'30d'});await (this.db as any).platformAdmin.update({where:{id:admin.id},data:{lastLoginAt:new Date(),refreshTokenHash:await hash(refreshToken,10)}});return {token,refreshToken,user:{id:admin.id,name:admin.name,email:admin.email,role:'platform_admin'},platform:true};}
+  async platformOverview(){const now=new Date();const [tenants,activeTenants,users,clients,subscriptions,monthlyRevenue]=await Promise.all([this.db.tenant.count(),this.db.tenant.count({where:{status:'active'}}),this.db.user.count({where:{active:true}}),this.db.client.count({where:{active:true}}),this.db.subscription.count({where:{status:{in:['active','trial']}}}),this.db.subscription.aggregate({where:{status:{in:['active','trial']},period:'monthly'},_sum:{amountCents:true}})]);return {tenants,activeTenants,users,clients,subscriptions,monthlyRevenueCents:monthlyRevenue._sum.amountCents??0};}
+  async platformTenants(){return this.db.tenant.findMany({select:{id:true,name:true,slug:true,plan:true,planPeriod:true,status:true,subscriptionExpiresAt:true,createdAt:true,_count:{select:{users:true,clients:true,subscriptions:true}}},orderBy:{createdAt:'desc'}});}
+  async platformSubscriptions(){return this.db.subscription.findMany({select:{id:true,plan:true,period:true,amountCents:true,status:true,startsAt:true,expiresAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},take:200});}
   async refresh(refreshToken:string){
     let payload:any;try{payload=await this.jwt.verifyAsync(refreshToken,{secret:this.refreshSecret()});}catch{throw new UnauthorizedException('Sessão expirada');}
     if(payload.typ!=='refresh')throw new UnauthorizedException('Token de renovação inválido');
