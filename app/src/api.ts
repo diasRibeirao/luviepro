@@ -42,28 +42,28 @@ export function clearSession(){token='';refreshToken='';session=undefined;void c
 async function parseError(res:Response){const body=await res.json().catch(()=>({message:'Erro de conexão'}));const message=Array.isArray(body?.message)?body.message.join('; '):(body?.message??`Erro HTTP ${res.status}`);return new ApiError(message,res.status,body?.requestId??res.headers.get('x-request-id')??undefined,body?.code);}
 async function renew(){if(!refreshToken)return false;if(refreshPromise)return refreshPromise;refreshPromise=(async()=>{try{const res=await request(`${base}/auth/refresh`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refreshToken})});if(!res.ok){clearSession();return false;}establishSession(await res.json());return true;}catch{clearSession();return false;}finally{refreshPromise=undefined;}})();return refreshPromise;}
 export async function logout(){try{if(token)await request(`${base}/auth/logout`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'}});}finally{clearSession();}}
-export async function api(path:string,init:RequestInit={},retry=true){
+export async function api<T=any>(path:string,init:RequestInit={},retry=true):Promise<T>{
   let res:Response;
   try{res=await request(`${base}${path}`,{...init,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{}) ,...init.headers}});}catch(error){if(error instanceof ApiError)throw error;throw new ApiError('Não foi possível conectar ao servidor',0);}
-  if(res.status===401&&retry&&!path.startsWith('/auth/')&&await renew())return api(path,init,false);
+  if(res.status===401&&retry&&!path.startsWith('/auth/')&&await renew())return api<T>(path,init,false);
   if(res.status===401)clearSession();
   if(!res.ok)throw await parseError(res);
-  return res.status===204?undefined:res.json();
+  return res.status===204?undefined as T:res.json() as Promise<T>;
 }
 export const money=(cents:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(cents/100);
 
-export async function apiForm(path:string,form:FormData,retry=true){
+export async function apiForm<T=any>(path:string,form:FormData,retry=true):Promise<T>{
   let res:Response;
   try{res=await request(`${base}${path}`,{method:'POST',headers:{...(token?{Authorization:`Bearer ${token}`}:{})},body:form});}catch(error){if(error instanceof ApiError)throw error;throw new ApiError('Não foi possível conectar ao servidor',0);}
-  if(res.status===401&&retry&&await renew())return apiForm(path,form,false);
+  if(res.status===401&&retry&&await renew())return apiForm<T>(path,form,false);
   if(res.status===401)clearSession();
   if(!res.ok)throw await parseError(res);
-  return res.status===204?undefined:res.json();
+  return res.status===204?undefined as T:res.json() as Promise<T>;
 }
 
-export async function publicApi(path:string,init:RequestInit={}){
+export async function publicApi<T=any>(path:string,init:RequestInit={}):Promise<T>{
   let res:Response;
   try{res=await request(`${base}${path}`,{...init,headers:{'Content-Type':'application/json',...init.headers}});}catch(error){if(error instanceof ApiError)throw error;throw new ApiError('Não foi possível conectar ao servidor',0);}
   if(!res.ok)throw await parseError(res);
-  return res.status===204?undefined:res.json();
+  return res.status===204?undefined as T:res.json() as Promise<T>;
 }

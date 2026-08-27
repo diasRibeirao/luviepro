@@ -50,6 +50,7 @@ model Tenant {
   projectStatuses ProjectStatus[]
   subscriptions Subscription[]
   payments Payment[]
+  webhookEvents WebhookEvent[]
   auditLogs AuditLog[]
   userInvitations UserInvitation[]
   accessProfiles AccessProfile[]
@@ -116,6 +117,7 @@ model Payment {
   refundedAt DateTime?
   chargebackAt DateTime?
   raw Json?
+  webhookEvents WebhookEvent[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([tenantId, createdAt])
@@ -124,6 +126,30 @@ model Payment {
   @@index([status])
   @@index([createdAt])
 }
+model WebhookEvent {
+  id String @id @default(cuid())
+  provider String @default("mercado_pago")
+  eventKey String
+  resourceId String
+  requestId String?
+  eventType String?
+  status String @default("processing")
+  attempts Int @default(1)
+  tenantId String?
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  paymentId String?
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  payload Json?
+  lastError String?
+  processedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([provider, eventKey])
+  @@index([status, updatedAt])
+  @@index([tenantId, createdAt])
+  @@index([paymentId, createdAt])
+}
+
 model User {
   id String @id @default(cuid())
   tenantId String

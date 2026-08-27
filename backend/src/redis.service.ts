@@ -1,9 +1,28 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import Redis from 'ioredis';
+import Redis, {RedisOptions} from 'ioredis';
+
+function redisOptions():{url?:string;options:RedisOptions}{
+  const url=process.env.REDIS_URL?.trim();
+  const options:RedisOptions={
+    host:process.env.REDIS_HOST??'localhost',
+    port:Number(process.env.REDIS_PORT??6380),
+    db:Number(process.env.REDIS_DB??0),
+    password:process.env.REDIS_PASSWORD||undefined,
+    keyPrefix:process.env.REDIS_KEY_PREFIX??(process.env.NODE_ENV==='production'?'luviepro:':'luviepro:dev:'),
+    lazyConnect:true,
+    maxRetriesPerRequest:1,
+    enableOfflineQueue:false,
+    connectTimeout:Number(process.env.REDIS_CONNECT_TIMEOUT_MS??5000),
+    tls:process.env.REDIS_TLS==='true'?{}:undefined,
+  };
+  return {url:url||undefined,options};
+}
+
 @Injectable() export class RedisService implements OnModuleDestroy {
-  private readonly client=new Redis({host:process.env.REDIS_HOST??'localhost',port:Number(process.env.REDIS_PORT??6380),db:Number(process.env.REDIS_DB??0),keyPrefix:process.env.REDIS_KEY_PREFIX??'luviepro:dev:',lazyConnect:true,maxRetriesPerRequest:1,enableOfflineQueue:false});
+  private readonly client:Redis;
   private readonly localLocks=new Set<string>();
   private readonly localRateLimits=new Map<string,{count:number;expiresAt:number}>();
+  constructor(){const config=redisOptions();this.client=config.url?new Redis(config.url,config.options):new Redis(config.options);}
   async ping(){if(this.client.status==='wait')await this.client.connect();return this.client.ping();}
   async withLock<T>(key:string,ttlMs:number,callback:()=>Promise<T>):Promise<{acquired:boolean;value?:T}> {
     const token=`${Date.now()}-${Math.random().toString(36).slice(2)}`;

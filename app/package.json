@@ -10,7 +10,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "export:web": "expo export --platform web --output-dir dist",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run export:web"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

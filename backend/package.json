@@ -19,7 +19,10 @@
     "prisma:status": "prisma migrate status",
     "prisma:seed": "tsx prisma/seed.ts",
     "db:seed": "npm run prisma:seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "typecheck": "tsc --noEmit",
+    "test:coverage": "jest --runInBand --coverage",
+    "verify": "npm run prisma:generate && npm run typecheck && npm run build && npm test"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

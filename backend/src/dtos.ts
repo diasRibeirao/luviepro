@@ -1,6 +1,16 @@
-import { IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsOptional, Max, IsString, Min, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsISO8601, IsOptional, Max, IsString, Min, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
+
+export class AuditQueryDto {
+  @IsOptional() @IsString() action?: string;
+  @IsOptional() @IsString() entity?: string;
+  @IsOptional() @IsString() actorUserId?: string;
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsISO8601() from?: string;
+  @IsOptional() @IsISO8601() to?: string;
+  @IsOptional() @Type(()=>Number) @IsInt() @Min(1) @Max(500) limit?: number;
+}
 export class RefreshDto { @IsString() @MinLength(20) refreshToken!: string; }
 export class LoginDto { @IsEmail() email!: string; @IsString() @MinLength(8) password!: string; }
 export class PlatformAdminLoginDto { @IsEmail() email!: string; @IsString() @MinLength(8) password!: string; }
