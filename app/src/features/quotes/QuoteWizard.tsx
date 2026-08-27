@@ -1,5 +1,5 @@
-﻿import { useEffect,useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import { useEffect,useState } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable,ScrollView,StyleSheet,useWindowDimensions,View } from 'react-native';
 import { Text, TextInput } from '@/i18n';
 import { router } from 'expo-router';

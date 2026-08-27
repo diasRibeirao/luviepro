@@ -1,7 +1,7 @@
 import { useEffect,useMemo,useState } from 'react';
 import { Modal,Pressable,StyleSheet,View } from 'react-native';
 import { Text, TextInput } from '../i18n';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { theme } from '../theme';
 
 type Props={

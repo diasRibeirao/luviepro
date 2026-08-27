@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Modal,Pressable,ScrollView,StyleSheet,useWindowDimensions,View } from 'react-native';
 import { Text } from '../i18n';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

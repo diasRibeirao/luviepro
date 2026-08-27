@@ -1,5 +1,5 @@
 import { useEffect,useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { ActivityIndicator,Image,Pressable,ScrollView,StyleSheet,View } from 'react-native';
 import { LanguageSwitch, Text, TextInput } from '../../src/i18n';
 import { useLocalSearchParams } from 'expo-router';

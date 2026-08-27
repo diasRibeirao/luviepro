@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState} from 'react';
-import {Ionicons} from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {ActivityIndicator,Modal,Pressable,ScrollView,StyleSheet,TextInput,useWindowDimensions,View} from 'react-native';
 import {router} from 'expo-router';
 import {api,logout,money} from '../src/api';

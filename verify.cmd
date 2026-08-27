@@ -8,22 +8,26 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [1/4] Verificando tipos do aplicativo...
+echo [1/5] Verificando tipos do aplicativo...
 pushd "%~dp0app"
 call npm run typecheck
 if errorlevel 1 goto :erro
+
+echo [2/5] Gerando bundle Web de producao...
+call npm run export:web
+if errorlevel 1 goto :erro
 popd
 
-echo [2/4] Compilando a API...
+echo [3/5] Compilando a API...
 pushd "%~dp0backend"
 call npm run build
 if errorlevel 1 goto :erro
 
-echo [3/4] Executando testes da API...
+echo [4/5] Executando testes da API...
 call npm test -- --runInBand
 if errorlevel 1 goto :erro
 
-echo [4/4] Verificando migrations do banco...
+echo [5/5] Verificando migrations do banco...
 call npm run prisma:status
 if errorlevel 1 goto :erro
 popd

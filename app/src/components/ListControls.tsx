@@ -1,5 +1,5 @@
 import { ReactNode,useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Modal,Pressable,StyleSheet,View } from 'react-native';
 import { Text } from '../i18n';
 import { theme } from '../theme';

@@ -52,8 +52,30 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
   async platformPayments(){return this.db.payment.findMany({select:{id:true,provider:true,providerPaymentId:true,plan:true,period:true,amountCents:true,status:true,paymentMethod:true,paidAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},take:300});}
   async platformUsers(){return this.db.user.findMany({select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}},orderBy:{createdAt:'desc'},take:500});}
   async platformPlans(){return this.db.planLimit.findMany({orderBy:{monthlyPriceCents:'asc'}});}
+  async platformCreateTenant(data:any,platformAdminId:string){
+    const email=String(data.ownerEmail??'').trim().toLowerCase(),company=String(data.company??'').trim(),ownerName=String(data.ownerName??'').trim();
+    if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já possui acesso ao LuviePro');
+    const pending=await this.db.userInvitation.findFirst({where:{email,status:'pending',expiresAt:{gt:new Date()}}});
+    if(pending)throw new ConflictException('Já existe um convite pendente para este e-mail');
+    const limit=await this.db.planLimit.findUnique({where:{plan:data.plan}});if(!limit)throw new BadRequestException('Plano indisponível');
+    const amountCents=data.period==='annual'?limit.annualPriceCents:data.period==='semiannual'?limit.semiannualPriceCents:data.period==='quarterly'?limit.quarterlyPriceCents:limit.monthlyPriceCents;
+    const now=new Date(),trialEnd=new Date(now);trialEnd.setDate(trialEnd.getDate()+14);
+    const slug=`${company.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'empresa'}-${Date.now().toString(36)}`;
+    const token=randomBytes(32).toString('hex'),expiresAt=new Date(Date.now()+Number(process.env.INVITATION_TTL_HOURS||48)*3600000);
+    const result=await this.db.$transaction(async tx=>{
+      const tenant=await tx.tenant.create({data:{name:company,slug,responsibleName:ownerName,phone:data.phone||null,contactEmail:email,plan:data.plan,planPeriod:data.period,subscriptionExpiresAt:trialEnd}});
+      await tx.subscription.create({data:{tenantId:tenant.id,plan:data.plan,period:data.period,amountCents,status:'trial',startsAt:now,expiresAt:trialEnd}});
+      const invitation=await tx.userInvitation.create({data:{tenantId:tenant.id,name:ownerName,email,role:'owner',tokenHash:this.invitationHash(token),expiresAt},select:{id:true,email:true,name:true,expiresAt:true}});
+      return {tenant,invitation};
+    });
+    const inviteUrl=this.invitationUrl(token);let delivery:any={sent:false,reason:'not_configured'};
+    try{delivery=await this.mail.sendUserInvitation({to:email,name:ownerName,tenantName:company,roleLabel:'Proprietário',inviteUrl,expiresAt});}catch{delivery={sent:false,reason:'send_failed'};}
+    await this.audit(result.tenant.id,undefined,'platform_create_tenant','tenant',result.tenant.id,{platformAdminId,plan:data.plan,period:data.period,email,delivery:delivery.sent?'sent':delivery.reason});
+    return {tenant:result.tenant,invitation:{...result.invitation,delivery,inviteUrl}};
+  }
   async platformUpdateTenant(id:string,data:any){const tenant=await this.db.tenant.findUnique({where:{id}});if(!tenant)throw new NotFoundException('Empresa não encontrada');const updated=await this.db.tenant.update({where:{id},data:{...(data.status!==undefined&&{status:data.status}),...(data.plan!==undefined&&{plan:data.plan}),...(data.planPeriod!==undefined&&{planPeriod:data.planPeriod})}});await this.audit(id,undefined,'platform_update_tenant','tenant',id,data);return updated;}
   async platformUpdateUser(id:string,data:any){const user=await this.db.user.findUnique({where:{id}});if(!user)throw new NotFoundException('Usuário não encontrado');const updated=await this.db.user.update({where:{id},data:{...(data.active!==undefined&&{active:data.active}),...(data.role!==undefined&&{role:data.role}),...(!data.active&&data.active!==undefined&&{refreshTokenHash:null})},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}}});await this.audit(user.tenantId,undefined,'platform_update_user','user',id,data);return updated;}
+  async platformPasswordReset(id:string){const user=await this.db.user.findUnique({where:{id}});if(!user)throw new NotFoundException('Usuário não encontrado');if(!user.active)throw new BadRequestException('Ative o usuário antes de enviar a recuperação de senha');return this.forgotPassword(user.email);}
   async platformUpdatePlan(plan:string,data:any){if(!['starter','pro','business'].includes(plan))throw new BadRequestException('Plano inválido');const current=await this.db.planLimit.findUnique({where:{plan}});if(!current)throw new NotFoundException('Plano não encontrado');return this.db.planLimit.update({where:{plan},data});}
   async refresh(refreshToken:string){
     let payload:any;try{payload=await this.jwt.verifyAsync(refreshToken,{secret:this.refreshSecret()});}catch{throw new UnauthorizedException('Sessão expirada');}

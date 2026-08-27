@@ -1,5 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { requestId } from './request-id';
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
@@ -9,8 +9,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const body=exception instanceof HttpException?exception.getResponse():undefined;
     const raw=typeof body==='string'?body:(body as any)?.message;
     const message=Array.isArray(raw)?raw.join('; '):raw??'Erro interno do servidor';
-    const requestId=req.headers['x-request-id']||randomUUID();
-    res.setHeader('x-request-id',requestId);
-    res.status(status).json({statusCode:status,code:(body as any)?.error??'HTTP_ERROR',message,path:req.url,requestId,timestamp:new Date().toISOString()});
+    const correlationId=req.requestId||requestId(req.headers['x-request-id']);
+    res.setHeader('x-request-id',correlationId);
+    res.status(status).json({statusCode:status,code:(body as any)?.error??'HTTP_ERROR',message,path:req.url,requestId:correlationId,timestamp:new Date().toISOString()});
   }
 }

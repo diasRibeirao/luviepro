@@ -33,6 +33,14 @@ export class UpdatePlanDto { @IsIn(['starter','pro','business']) plan!: string; 
 export class CreateCheckoutDto { @IsIn(['starter','pro','business']) plan!: string; @IsIn(['monthly','quarterly','semiannual','annual']) period!: string; }
 export class PlatformTenantDto { @IsOptional() @IsIn(['active','suspended','cancelled']) status?: string; @IsOptional() @IsIn(['starter','pro','business']) plan?: string; @IsOptional() @IsIn(['monthly','quarterly','semiannual','annual']) planPeriod?: string; }
 export class PlatformUserDto { @IsOptional() @IsBoolean() active?: boolean; @IsOptional() @IsIn(['owner','admin','commercial','operational','finance']) role?: string; }
+export class PlatformCreateTenantDto {
+  @IsString() @MinLength(2) company!: string;
+  @IsString() @MinLength(2) ownerName!: string;
+  @IsEmail() ownerEmail!: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsIn(['starter','pro','business']) plan!: string;
+  @IsIn(['monthly','quarterly','semiannual','annual']) period!: string;
+}
 export class PlatformPlanDto {
   @IsOptional() @IsInt() @Min(-1) maxClients?: number; @IsOptional() @IsInt() @Min(-1) maxQuotesPerMonth?: number; @IsOptional() @IsInt() @Min(1) maxUsers?: number;
   @IsOptional() @IsInt() @Min(0) monthlyPriceCents?: number; @IsOptional() @IsInt() @Min(0) quarterlyPriceCents?: number; @IsOptional() @IsInt() @Min(0) semiannualPriceCents?: number; @IsOptional() @IsInt() @Min(0) annualPriceCents?: number;

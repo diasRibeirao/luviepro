@@ -1,5 +1,5 @@
 import { useCallback,useEffect,useMemo,useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Modal,Pressable,StyleSheet,useWindowDimensions,View } from 'react-native';
 import { Text } from '../src/i18n';
 import { router,useFocusEffect,useLocalSearchParams } from 'expo-router'; import { api,money } from '../src/api'; import { theme } from '../src/theme'; import { AppShell,shellStyles } from '../src/components/AppShell';
