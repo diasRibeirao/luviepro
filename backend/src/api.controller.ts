@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, SetMetadata, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Req, SetMetadata, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { ApiService } from './api.service'; import { HealthService } from './health.service'; import { Roles } from './roles.guard'; import { Permissions } from './permissions.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CalculateDto, CalendarEventDto, ClientDto, CreateProjectTaskDto, CreateProjectNoteDto, CreateProjectStatusDto, CreateQuoteDto, CreateUserDto, ForgotPasswordDto, LoginDto, NotificationPreferencesDto, PlatformAdminLoginDto, QuoteStatusDto, RefreshDto, RegisterDto, ResetPasswordDto, UpdateAccountDto, UpdatePlanDto, UpdateProjectDto, UpdateProjectStatusDto, UpdateProjectTaskDto, UpdateQuoteDto, UpdateUserDto, UpdateCalendarEventDto, ServiceDto, PublicProposalDecisionDto, ChangePasswordDto, AcceptInvitationDto, CreateAccessProfileDto, UpdateAccessProfileDto } from './dtos';
+import { CalculateDto, CalendarEventDto, ClientDto, CreateCheckoutDto, CreateProjectTaskDto, CreateProjectNoteDto, CreateProjectStatusDto, CreateQuoteDto, CreateUserDto, ForgotPasswordDto, LoginDto, NotificationPreferencesDto, PlatformAdminLoginDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto, QuoteStatusDto, RefreshDto, RegisterDto, ResetPasswordDto, UpdateAccountDto, UpdatePlanDto, UpdateProjectDto, UpdateProjectStatusDto, UpdateProjectTaskDto, UpdateQuoteDto, UpdateUserDto, UpdateCalendarEventDto, ServiceDto, PublicProposalDecisionDto, ChangePasswordDto, AcceptInvitationDto, CreateAccessProfileDto, UpdateAccessProfileDto } from './dtos';
 const Public=()=>SetMetadata('public',true);
 @Controller() export class ApiController {
   constructor(private api:ApiService,private healthService:HealthService){}
@@ -11,6 +11,12 @@ const Public=()=>SetMetadata('public',true);
   @Roles('platform_admin') @Get('platform/overview') platformOverview(){return this.api.platformOverview();}
   @Roles('platform_admin') @Get('platform/tenants') platformTenants(){return this.api.platformTenants();}
   @Roles('platform_admin') @Get('platform/subscriptions') platformSubscriptions(){return this.api.platformSubscriptions();}
+  @Roles('platform_admin') @Get('platform/payments') platformPayments(){return this.api.platformPayments();}
+  @Roles('platform_admin') @Get('platform/users') platformUsers(){return this.api.platformUsers();}
+  @Roles('platform_admin') @Get('platform/plans') platformPlans(){return this.api.platformPlans();}
+  @Roles('platform_admin') @Patch('platform/tenants/:id') platformUpdateTenant(@Param('id') id:string,@Body() b:PlatformTenantDto){return this.api.platformUpdateTenant(id,b);}
+  @Roles('platform_admin') @Patch('platform/users/:id') platformUpdateUser(@Param('id') id:string,@Body() b:PlatformUserDto){return this.api.platformUpdateUser(id,b);}
+  @Roles('platform_admin') @Patch('platform/plans/:plan') platformUpdatePlan(@Param('plan') plan:string,@Body() b:PlatformPlanDto){return this.api.platformUpdatePlan(plan,b);}
   @Public() @Post('auth/forgot-password') forgotPassword(@Body() b:ForgotPasswordDto){return this.api.forgotPassword(b.email);}
   @Public() @Post('auth/reset-password') resetPassword(@Body() b:ResetPasswordDto){return this.api.resetPassword(b.token,b.password);}
   @Public() @Post('auth/register') register(@Body() b:RegisterDto){return this.api.register(b);}
@@ -26,6 +32,9 @@ const Public=()=>SetMetadata('public',true);
   @Roles('owner','admin') @Permissions('settings.manage') @Post('account/logo/remove') removeLogo(@Req() r:any){return this.api.removeLogo(r.user.tenantId,r.user.sub);}
   @Patch('account/password') changePassword(@Req() r:any,@Body() b:ChangePasswordDto){return this.api.changePassword(r.user.tenantId,r.user.sub,b.currentPassword,b.newPassword);}
   @Roles('owner') @Patch('account/plan') updatePlan(@Req() r:any,@Body() b:UpdatePlanDto){return this.api.updatePlan(r.user.tenantId,b.plan,b.period,r.user.sub);}
+  @Roles('owner') @Post('billing/checkout') createCheckout(@Req() r:any,@Body() b:CreateCheckoutDto){return this.api.createCheckout(r.user.tenantId,r.user.sub,b.plan,b.period);}
+  @Roles('owner','admin') @Get('billing/payments') billingPayments(@Req() r:any){return this.api.billingPayments(r.user.tenantId);}
+  @Public() @Post('billing/webhooks/mercado-pago') mercadoPagoWebhook(@Body() b:any,@Query('data.id') dataId:string,@Query('id') id:string,@Headers('x-signature') signature:string,@Headers('x-request-id') requestId:string){return this.api.mercadoPagoWebhook(b,dataId||id,signature,requestId);}
 
   @Roles('owner','admin') @Get('users') users(@Req() r:any){return this.api.users(r.user.tenantId);}
   @Roles('owner') @Post('users') createUser(@Req() r:any,@Body() b:CreateUserDto){return this.api.createUser(r.user.tenantId,b,r.user.sub);}

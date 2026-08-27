@@ -34,6 +34,11 @@ async function main() {
   if(process.env.DEMO_SEED==='1'){
     const cities=['Presidente Prudente','São Paulo','Londrina','Maringá','Bauru','Ribeirão Preto'];
     for(let i=1;i<=24;i++) await db.client.upsert({where:{id:`demo-client-${i}`},update:{},create:{id:`demo-client-${i}`,tenantId:tenant.id,name:`Cliente demonstração ${String(i).padStart(2,'0')}`,phone:`(18) 99000-${String(i).padStart(4,'0')}`,email:`cliente${i}@demo.luviepro.local`,city:cities[i%cities.length],state:'SP'}} as any);
+    const demoClients=await db.client.findMany({where:{tenantId:tenant.id,id:{startsWith:'demo-client-'}},take:8,orderBy:{id:'asc'}});
+    const today=new Date();today.setHours(9,0,0,0);
+    const eventTypes=['appointment','visit','meeting','deadline'];
+    for(let i=0;i<12;i++){const start=new Date(today);start.setDate(start.getDate()+i-2);start.setHours(9+(i%4)*2,0,0,0);const end=new Date(start);end.setHours(start.getHours()+1);await db.calendarEvent.upsert({where:{id:`demo-event-${i+1}`},update:{},create:{id:`demo-event-${i+1}`,tenantId:tenant.id,createdById:(await db.user.findFirstOrThrow({where:{tenantId:tenant.id}})).id,clientId:demoClients[i%demoClients.length]?.id??null,title:`Compromisso demonstração ${i+1}`,description:'Evento criado pela massa de testes.',type:eventTypes[i%eventTypes.length],startAt:start,endAt:end,allDay:false,location:i%2?'Escritório LuviePro':'Online',recurrence:'none',status:'scheduled',reminderMinutes:30}} as any)}
+    for(let i=0;i<6;i++){const target=demoClients[i%demoClients.length];await db.project.upsert({where:{id:`demo-project-${i+1}`},update:{},create:{id:`demo-project-${i+1}`,tenantId:tenant.id,clientId:target.id,name:`Projeto demonstração ${String(i+1).padStart(2,'0')}`,status:i<2?'scheduled':i<5?'in_progress':'completed',progress:i<2?0:i<5?35+i*10:100,startDate:new Date(today.getFullYear(),today.getMonth(),today.getDate()-i*3),endDate:new Date(today.getFullYear(),today.getMonth()+1,today.getDate()+i*2),notes:'Registro criado pela massa de testes.'}} as any)}
   }
 }
 main().finally(()=>db.$disconnect());

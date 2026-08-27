@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcryptjs';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { PrismaService } from './prisma.service';
 import { MailService } from './mail.service';
 type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number;variableCostMode?:string};
@@ -47,6 +47,12 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
   async platformOverview(){const now=new Date();const [tenants,activeTenants,users,clients,subscriptions,monthlyRevenue]=await Promise.all([this.db.tenant.count(),this.db.tenant.count({where:{status:'active'}}),this.db.user.count({where:{active:true}}),this.db.client.count({where:{active:true}}),this.db.subscription.count({where:{status:{in:['active','trial']}}}),this.db.subscription.aggregate({where:{status:{in:['active','trial']},period:'monthly'},_sum:{amountCents:true}})]);return {tenants,activeTenants,users,clients,subscriptions,monthlyRevenueCents:monthlyRevenue._sum.amountCents??0};}
   async platformTenants(){return this.db.tenant.findMany({select:{id:true,name:true,slug:true,plan:true,planPeriod:true,status:true,subscriptionExpiresAt:true,createdAt:true,_count:{select:{users:true,clients:true,subscriptions:true}}},orderBy:{createdAt:'desc'}});}
   async platformSubscriptions(){return this.db.subscription.findMany({select:{id:true,plan:true,period:true,amountCents:true,status:true,startsAt:true,expiresAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},take:200});}
+  async platformPayments(){return this.db.payment.findMany({select:{id:true,provider:true,providerPaymentId:true,plan:true,period:true,amountCents:true,status:true,paymentMethod:true,paidAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},take:300});}
+  async platformUsers(){return this.db.user.findMany({select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}},orderBy:{createdAt:'desc'},take:500});}
+  async platformPlans(){return this.db.planLimit.findMany({orderBy:{monthlyPriceCents:'asc'}});}
+  async platformUpdateTenant(id:string,data:any){const tenant=await this.db.tenant.findUnique({where:{id}});if(!tenant)throw new NotFoundException('Empresa não encontrada');const updated=await this.db.tenant.update({where:{id},data:{...(data.status!==undefined&&{status:data.status}),...(data.plan!==undefined&&{plan:data.plan}),...(data.planPeriod!==undefined&&{planPeriod:data.planPeriod})}});await this.audit(id,undefined,'platform_update_tenant','tenant',id,data);return updated;}
+  async platformUpdateUser(id:string,data:any){const user=await this.db.user.findUnique({where:{id}});if(!user)throw new NotFoundException('Usuário não encontrado');const updated=await this.db.user.update({where:{id},data:{...(data.active!==undefined&&{active:data.active}),...(data.role!==undefined&&{role:data.role}),...(!data.active&&data.active!==undefined&&{refreshTokenHash:null})},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}}});await this.audit(user.tenantId,undefined,'platform_update_user','user',id,data);return updated;}
+  async platformUpdatePlan(plan:string,data:any){if(!['starter','pro','business'].includes(plan))throw new BadRequestException('Plano inválido');const current=await this.db.planLimit.findUnique({where:{plan}});if(!current)throw new NotFoundException('Plano não encontrado');return this.db.planLimit.update({where:{plan},data});}
   async refresh(refreshToken:string){
     let payload:any;try{payload=await this.jwt.verifyAsync(refreshToken,{secret:this.refreshSecret()});}catch{throw new UnauthorizedException('Sessão expirada');}
     if(payload.typ!=='refresh')throw new UnauthorizedException('Token de renovação inválido');
@@ -115,6 +121,50 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
     const updated=await this.db.tenant.update({where:{id:tenantId},data:{plan,planPeriod:period}});
     await this.audit(tenantId,actorUserId,'change_plan','tenant',tenantId,{plan,period});
     return updated;
+  }
+  private mercadoPagoToken(){const token=process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim();if(!token)throw new BadRequestException('Mercado Pago ainda não foi configurado. Informe MERCADO_PAGO_ACCESS_TOKEN no backend.');return token;}
+  private periodPrice(limit:any,period:string){return period==='annual'?limit.annualPriceCents:period==='semiannual'?limit.semiannualPriceCents:period==='quarterly'?limit.quarterlyPriceCents:limit.monthlyPriceCents;}
+  private periodEnd(start:Date,period:string){const end=new Date(start);if(period==='annual')end.setFullYear(end.getFullYear()+1);else end.setMonth(end.getMonth()+(period==='semiannual'?6:period==='quarterly'?3:1));return end;}
+  async billingPayments(tenantId:string){return this.db.payment.findMany({where:{tenantId},select:{id:true,provider:true,providerPaymentId:true,plan:true,period:true,amountCents:true,status:true,paymentMethod:true,paidAt:true,createdAt:true,updatedAt:true},orderBy:{createdAt:'desc'},take:100});}
+  async createCheckout(tenantId:string,actorUserId:string,plan:string,period:string){
+    const token=this.mercadoPagoToken();
+    const [tenant,limit,user]=await Promise.all([this.db.tenant.findUnique({where:{id:tenantId}}),this.db.planLimit.findUnique({where:{plan}}),this.db.user.findFirst({where:{id:actorUserId,tenantId}})]);
+    if(!tenant||!limit||!user)throw new NotFoundException('Conta, usuário ou plano não encontrado');
+    const amountCents=this.periodPrice(limit,period);if(amountCents<=0)throw new BadRequestException('Este plano não possui preço configurado para o período selecionado');
+    const externalReference=`luviepro_${tenantId}_${Date.now()}_${randomBytes(4).toString('hex')}`;
+    const payment=await this.db.payment.create({data:{tenantId,externalReference,plan,period,amountCents,status:'pending'}});
+    const appUrl=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');
+    const webhookUrl=process.env.MERCADO_PAGO_WEBHOOK_URL?.trim();
+    const hasUsableReturn=!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(appUrl);
+    const body:any={items:[{id:`${plan}-${period}`,title:`LuviePro ${plan[0].toUpperCase()+plan.slice(1)} — ${period}`,description:`Assinatura LuviePro (${period})`,currency_id:'BRL',quantity:1,unit_price:amountCents/100}],payer:{email:user.email},external_reference:externalReference,metadata:{payment_id:payment.id,tenant_id:tenantId,plan,period},statement_descriptor:'LUVIEPRO'};
+    if(hasUsableReturn){body.back_urls={success:`${appUrl}/plans?payment=success`,pending:`${appUrl}/plans?payment=pending`,failure:`${appUrl}/plans?payment=failure`};body.auto_return='approved';}
+    if(webhookUrl?.startsWith('https://'))body.notification_url=webhookUrl;
+    let response:Response;try{response=await fetch('https://api.mercadopago.com/checkout/preferences',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-Idempotency-Key':payment.id},body:JSON.stringify(body)});}catch{await this.db.payment.update({where:{id:payment.id},data:{status:'error'}});throw new BadRequestException('Não foi possível conectar ao Mercado Pago');}
+    const result:any=await response.json().catch(()=>({}));if(!response.ok){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:result}});throw new BadRequestException(result?.message||'Mercado Pago recusou a criação do checkout');}
+    const checkoutUrl=(process.env.MERCADO_PAGO_USE_SANDBOX==='true'?result.sandbox_init_point:result.init_point)||result.init_point;
+    await this.db.payment.update({where:{id:payment.id},data:{providerPreferenceId:String(result.id),checkoutUrl,raw:result}});
+    await this.audit(tenantId,actorUserId,'create_checkout','payment',payment.id,{plan,period,amountCents,provider:'mercado_pago'});
+    return {paymentId:payment.id,preferenceId:result.id,checkoutUrl,webhookConfigured:!!body.notification_url};
+  }
+  private validMercadoPagoSignature(dataId:string,signature?:string,requestId?:string){
+    const secret=process.env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();if(!secret)return process.env.NODE_ENV!=='production';if(!signature||!requestId||!dataId)return false;
+    const parts=Object.fromEntries(signature.split(',').map(part=>part.trim().split('=',2))) as Record<string,string>;if(!parts.ts||!parts.v1)return false;
+    const manifest=`id:${String(dataId).toLowerCase()};request-id:${requestId};ts:${parts.ts};`;
+    const expected=createHmac('sha256',secret).update(manifest).digest('hex');const received=parts.v1;
+    return expected.length===received.length&&timingSafeEqual(Buffer.from(expected),Buffer.from(received));
+  }
+  async mercadoPagoWebhook(body:any,dataId?:string,signature?:string,requestId?:string){
+    const paymentId=String(dataId||body?.data?.id||'');if(!paymentId)return {ok:true,ignored:true};
+    if(!this.validMercadoPagoSignature(paymentId,signature,requestId))throw new UnauthorizedException('Assinatura do webhook inválida');
+    const token=this.mercadoPagoToken();const response=await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`,{headers:{Authorization:`Bearer ${token}`}});if(!response.ok)throw new BadRequestException('Pagamento não encontrado no Mercado Pago');
+    const remote:any=await response.json();const externalReference=String(remote.external_reference||'');const local=await this.db.payment.findFirst({where:{OR:[{externalReference},{providerPaymentId:paymentId}]}});if(!local)return {ok:true,ignored:true};
+    const mapped=({approved:'approved',pending:'pending',in_process:'pending',rejected:'rejected',cancelled:'cancelled',refunded:'refunded',charged_back:'charged_back'} as Record<string,string>)[remote.status]||String(remote.status||'pending');
+    if(mapped==='approved'&&local.status!=='approved'){
+      const now=new Date(),tenant=await this.db.tenant.findUnique({where:{id:local.tenantId}});const start=tenant?.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>now?tenant.subscriptionExpiresAt:now;const expiresAt=this.periodEnd(start,local.period);
+      await this.db.$transaction(async tx=>{await tx.subscription.updateMany({where:{tenantId:local.tenantId,status:{in:['active','trial']}},data:{status:'replaced'}});const subscription=await tx.subscription.create({data:{tenantId:local.tenantId,plan:local.plan,period:local.period,amountCents:local.amountCents,status:'active',startsAt:start,expiresAt}});await tx.tenant.update({where:{id:local.tenantId},data:{plan:local.plan,planPeriod:local.period,subscriptionExpiresAt:expiresAt,status:'active'}});await tx.payment.update({where:{id:local.id},data:{subscriptionId:subscription.id,providerPaymentId:paymentId,status:mapped,paymentMethod:remote.payment_type_id||remote.payment_method_id||null,paidAt:remote.date_approved?new Date(remote.date_approved):now,raw:remote}})});
+      await this.audit(local.tenantId,undefined,'payment_approved','payment',local.id,{providerPaymentId:paymentId,plan:local.plan,period:local.period});
+    }else await this.db.payment.update({where:{id:local.id},data:{providerPaymentId:paymentId,status:mapped,paymentMethod:remote.payment_type_id||remote.payment_method_id||null,raw:remote}});
+    return {ok:true};
   }
   users(tenantId:string){return this.db.user.findMany({where:{tenantId},select:{id:true,name:true,email:true,role:true,customProfileId:true,customProfile:{select:{id:true,name:true,active:true}},active:true,createdAt:true,updatedAt:true},orderBy:[{role:'asc'},{name:'asc'}]});}
   private invitationHash(token:string){return createHash('sha256').update(token).digest('hex');}

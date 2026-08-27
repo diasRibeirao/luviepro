@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
+    if(!(exception instanceof HttpException)&&process.env.NODE_ENV!=='production')console.error('[HTTP_ERROR]',exception);
     const ctx=host.switchToHttp(),res=ctx.getResponse(),req=ctx.getRequest();
     const status=exception instanceof HttpException?exception.getStatus():HttpStatus.INTERNAL_SERVER_ERROR;
     const body=exception instanceof HttpException?exception.getResponse():undefined;
