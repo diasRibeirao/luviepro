@@ -9,6 +9,7 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
   constructor(private db:PrismaService,private jwt:JwtService,private mail:MailService){}
   private refreshSecret(){const secret=process.env.JWT_REFRESH_SECRET??(process.env.NODE_ENV==='production'?undefined:'local-dev-refresh-secret');if(!secret)throw new Error('JWT_REFRESH_SECRET não configurado');return secret;}
   private async issueSession(u:any){
+    const effectiveTenant=await this.activateScheduledSubscriptionIfDue(u.tenantId,u.tenant);if(effectiveTenant)u={...u,tenant:effectiveTenant};
     const profile=u.customProfileId?(u.customProfile??await this.db.accessProfile.findFirst({where:{id:u.customProfileId,tenantId:u.tenantId,active:true}})):null;
     if(u.customProfileId&&!profile)throw new ForbiddenException('Seu perfil de acesso está inativo ou indisponível');
     const permissions=profile&&Array.isArray(profile.permissions)?profile.permissions as string[]:[];
@@ -66,7 +67,7 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
   async register(data:any){const email=String(data.email??'').trim().toLowerCase(),password=String(data.password??''),name=String(data.name??'').trim(),company=String(data.company??'').trim();if(!email||!name||!company||password.length<8)throw new BadRequestException('Informe empresa, responsável, e-mail e senha com pelo menos 8 caracteres');if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já está cadastrado');const plan=['starter','pro','business'].includes(data.plan)?data.plan:'starter';const period=['monthly','quarterly','semiannual','annual'].includes(data.period)?data.period:'monthly';const limit=await this.db.planLimit.findUnique({where:{plan}});if(!limit)throw new BadRequestException('Plano indisponível');const amountCents=period==='annual'?limit.annualPriceCents:period==='semiannual'?limit.semiannualPriceCents:period==='quarterly'?limit.quarterlyPriceCents:limit.monthlyPriceCents;const now=new Date(),trialEnd=new Date(now);trialEnd.setDate(trialEnd.getDate()+14);const slug=`${company.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'empresa'}-${Date.now().toString(36)}`;const result=await this.db.$transaction(async tx=>{const tenant=await tx.tenant.create({data:{name:company,slug,responsibleName:name,phone:data.phone,contactEmail:email,plan,planPeriod:period,subscriptionExpiresAt:trialEnd}});const user=await tx.user.create({data:{tenantId:tenant.id,name,email,passwordHash:await hash(password,12),role:'owner'}});await tx.subscription.create({data:{tenantId:tenant.id,plan,period,amountCents,status:'trial',startsAt:now,expiresAt:trialEnd}});return {tenant,user}});await this.audit(result.tenant.id,result.user.id,'register','tenant',result.tenant.id,{plan,period});return this.issueSession({...result.user,tenant:result.tenant});}
   plans(){return this.db.planLimit.findMany({orderBy:{monthlyPriceCents:'asc'}});}
   async account(tenantId:string,userId?:string){
-    const tenant=await this.db.tenant.findUnique({where:{id:tenantId}});if(!tenant)throw new NotFoundException('Conta não encontrada');
+    const tenant=await this.activateScheduledSubscriptionIfDue(tenantId);if(!tenant)throw new NotFoundException('Conta não encontrada');
     const limit=await this.db.planLimit.findUnique({where:{plan:tenant.plan}});
     const month=new Date();month.setDate(1);month.setHours(0,0,0,0);const now=new Date();
     const[clients,quotes,users,pendingInvitations,currentUser]=await Promise.all([
@@ -117,55 +118,84 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
     ]);
     const used=activeUsers+pendingInvitations;
     if(targetLimit&&targetLimit.maxUsers>=0&&used>targetLimit.maxUsers)throw new BadRequestException(`Cancele convites pendentes ou desative ${used-targetLimit.maxUsers} acesso(s) antes de mudar para este plano`);
-    if(process.env.NODE_ENV==='production'&&process.env.ALLOW_DIRECT_PLAN_CHANGE!=='true')throw new ForbiddenException('Alteração direta de plano desabilitada em produção');
+    if(process.env.ALLOW_DIRECT_PLAN_CHANGE!=='true')throw new ForbiddenException('Alteração direta de plano desabilitada. Use o fluxo de cobrança ou o painel da plataforma.');
     const updated=await this.db.tenant.update({where:{id:tenantId},data:{plan,planPeriod:period}});
     await this.audit(tenantId,actorUserId,'change_plan','tenant',tenantId,{plan,period});
     return updated;
   }
   private mercadoPagoToken(){const token=process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim();if(!token)throw new BadRequestException('Mercado Pago ainda não foi configurado. Informe MERCADO_PAGO_ACCESS_TOKEN no backend.');return token;}
+  private mercadoPagoSandbox(){return process.env.MERCADO_PAGO_USE_SANDBOX==='true';}
   private periodPrice(limit:any,period:string){return period==='annual'?limit.annualPriceCents:period==='semiannual'?limit.semiannualPriceCents:period==='quarterly'?limit.quarterlyPriceCents:limit.monthlyPriceCents;}
   private periodEnd(start:Date,period:string){const end=new Date(start);if(period==='annual')end.setFullYear(end.getFullYear()+1);else end.setMonth(end.getMonth()+(period==='semiannual'?6:period==='quarterly'?3:1));return end;}
-  async billingPayments(tenantId:string){return this.db.payment.findMany({where:{tenantId},select:{id:true,provider:true,providerPaymentId:true,plan:true,period:true,amountCents:true,status:true,paymentMethod:true,paidAt:true,createdAt:true,updatedAt:true},orderBy:{createdAt:'desc'},take:100});}
+  private planRank(plan:string){return ({starter:1,pro:2,business:3} as Record<string,number>)[plan]??0;}
+  private billingAction(currentPlan:string,targetPlan:string,expiresAt?:Date|null){if(!expiresAt||expiresAt.getTime()<=Date.now())return 'new_subscription';if(currentPlan===targetPlan)return 'renewal';return this.planRank(targetPlan)>this.planRank(currentPlan)?'upgrade':'downgrade';}
+  private async activateScheduledSubscriptionIfDue(tenantId:string,currentTenant?:any){
+    const now=new Date();const scheduled=await this.db.subscription.findFirst({where:{tenantId,status:'scheduled',startsAt:{lte:now}},orderBy:{startsAt:'asc'}});
+    if(!scheduled)return currentTenant??this.db.tenant.findUnique({where:{id:tenantId}});
+    return this.db.$transaction(async tx=>{await tx.subscription.updateMany({where:{tenantId,status:{in:['active','trial']}},data:{status:'replaced'}});await tx.subscription.update({where:{id:scheduled.id},data:{status:'active'}});return tx.tenant.update({where:{id:tenantId},data:{plan:scheduled.plan,planPeriod:scheduled.period,subscriptionExpiresAt:scheduled.expiresAt,status:'active'}});});
+  }
+  async billingPayments(tenantId:string){await this.activateScheduledSubscriptionIfDue(tenantId);return this.db.payment.findMany({where:{tenantId},select:{id:true,provider:true,providerPaymentId:true,providerPreferenceId:true,plan:true,period:true,amountCents:true,status:true,billingAction:true,paymentMethod:true,providerStatus:true,providerStatusDetail:true,currency:true,payerEmail:true,paidAt:true,cancelledAt:true,refundedAt:true,chargebackAt:true,createdAt:true,updatedAt:true,subscription:{select:{id:true,status:true,startsAt:true,expiresAt:true}}},orderBy:{createdAt:'desc'},take:100});}
+  async reconcileMercadoPagoReturn(tenantId:string,providerPaymentId:string,actorUserId?:string){
+    if(!providerPaymentId)throw new BadRequestException('Identificador do pagamento não informado');
+    const remote=await this.fetchMercadoPagoPayment(providerPaymentId);
+    const externalReference=String(remote.external_reference||'');
+    if(!externalReference)throw new BadRequestException('Pagamento sem referência externa');
+    const local=await this.db.payment.findFirst({where:{tenantId,externalReference}});
+    if(!local)throw new NotFoundException('Cobrança correspondente não encontrada');
+    const result=await this.processMercadoPagoPayment(remote,local);
+    await this.audit(tenantId,actorUserId,'reconcile_checkout_return','payment',local.id,{providerPaymentId:String(providerPaymentId),status:result.status});
+    return result;
+  }
   async createCheckout(tenantId:string,actorUserId:string,plan:string,period:string){
+    if(!['starter','pro','business'].includes(plan))throw new BadRequestException('Plano inválido');if(!['monthly','quarterly','semiannual','annual'].includes(period))throw new BadRequestException('Período inválido');
     const token=this.mercadoPagoToken();
-    const [tenant,limit,user]=await Promise.all([this.db.tenant.findUnique({where:{id:tenantId}}),this.db.planLimit.findUnique({where:{plan}}),this.db.user.findFirst({where:{id:actorUserId,tenantId}})]);
+    const [tenant,limit,user]=await Promise.all([this.activateScheduledSubscriptionIfDue(tenantId),this.db.planLimit.findUnique({where:{plan}}),this.db.user.findFirst({where:{id:actorUserId,tenantId}})]);
     if(!tenant||!limit||!user)throw new NotFoundException('Conta, usuário ou plano não encontrado');
     const amountCents=this.periodPrice(limit,period);if(amountCents<=0)throw new BadRequestException('Este plano não possui preço configurado para o período selecionado');
+    const action=this.billingAction(tenant.plan,plan,tenant.subscriptionExpiresAt);const effectiveAt=action==='downgrade'&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>new Date()?tenant.subscriptionExpiresAt:new Date();
     const externalReference=`luviepro_${tenantId}_${Date.now()}_${randomBytes(4).toString('hex')}`;
-    const payment=await this.db.payment.create({data:{tenantId,externalReference,plan,period,amountCents,status:'pending'}});
-    const appUrl=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');
-    const webhookUrl=process.env.MERCADO_PAGO_WEBHOOK_URL?.trim();
-    const hasUsableReturn=!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(appUrl);
-    const body:any={items:[{id:`${plan}-${period}`,title:`LuviePro ${plan[0].toUpperCase()+plan.slice(1)} — ${period}`,description:`Assinatura LuviePro (${period})`,currency_id:'BRL',quantity:1,unit_price:amountCents/100}],payer:{email:user.email},external_reference:externalReference,metadata:{payment_id:payment.id,tenant_id:tenantId,plan,period},statement_descriptor:'LUVIEPRO'};
-    if(hasUsableReturn){body.back_urls={success:`${appUrl}/plans?payment=success`,pending:`${appUrl}/plans?payment=pending`,failure:`${appUrl}/plans?payment=failure`};body.auto_return='approved';}
-    if(webhookUrl?.startsWith('https://'))body.notification_url=webhookUrl;
+    const payment=await this.db.payment.create({data:{tenantId,externalReference,plan,period,amountCents,status:'pending',billingAction:action,currency:'BRL',payerEmail:user.email}});
+    const appUrl=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');const webhookUrl=process.env.MERCADO_PAGO_WEBHOOK_URL?.trim();const hasUsableReturn=!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(appUrl);
+    const periodLabel=({monthly:'mensal',quarterly:'trimestral',semiannual:'semestral',annual:'anual'} as Record<string,string>)[period]??period;
+    const body:any={items:[{id:`${plan}-${period}`,title:`LuviePro ${plan[0].toUpperCase()+plan.slice(1)} — ${periodLabel}`,description:`Assinatura LuviePro (${periodLabel})`,currency_id:'BRL',quantity:1,unit_price:amountCents/100}],payer:{email:user.email},external_reference:externalReference,metadata:{payment_id:payment.id,tenant_id:tenantId,plan,period,billing_action:action},statement_descriptor:'LUVIEPRO'};
+    if(hasUsableReturn){body.back_urls={success:`${appUrl}/plans?payment=success`,pending:`${appUrl}/plans?payment=pending`,failure:`${appUrl}/plans?payment=failure`};body.auto_return='approved';}if(webhookUrl?.startsWith('https://'))body.notification_url=webhookUrl;
     let response:Response;try{response=await fetch('https://api.mercadopago.com/checkout/preferences',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-Idempotency-Key':payment.id},body:JSON.stringify(body)});}catch{await this.db.payment.update({where:{id:payment.id},data:{status:'error'}});throw new BadRequestException('Não foi possível conectar ao Mercado Pago');}
     const result:any=await response.json().catch(()=>({}));if(!response.ok){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:result}});throw new BadRequestException(result?.message||'Mercado Pago recusou a criação do checkout');}
-    const checkoutUrl=(process.env.MERCADO_PAGO_USE_SANDBOX==='true'?result.sandbox_init_point:result.init_point)||result.init_point;
-    await this.db.payment.update({where:{id:payment.id},data:{providerPreferenceId:String(result.id),checkoutUrl,raw:result}});
-    await this.audit(tenantId,actorUserId,'create_checkout','payment',payment.id,{plan,period,amountCents,provider:'mercado_pago'});
-    return {paymentId:payment.id,preferenceId:result.id,checkoutUrl,webhookConfigured:!!body.notification_url};
+    const checkoutUrl=(this.mercadoPagoSandbox()?result.sandbox_init_point:result.init_point)||result.init_point;if(!checkoutUrl){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:result}});throw new BadRequestException('Mercado Pago não retornou uma URL de checkout');}
+    await this.db.payment.update({where:{id:payment.id},data:{providerPreferenceId:String(result.id),checkoutUrl,raw:result}});await this.audit(tenantId,actorUserId,'create_checkout','payment',payment.id,{plan,period,amountCents,provider:'mercado_pago',billingAction:action,sandbox:this.mercadoPagoSandbox(),effectiveAt});
+    return {paymentId:payment.id,preferenceId:result.id,checkoutUrl,webhookConfigured:!!body.notification_url,sandbox:this.mercadoPagoSandbox(),billingAction:action,effectiveAt};
   }
   private validMercadoPagoSignature(dataId:string,signature?:string,requestId?:string){
-    const secret=process.env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();if(!secret)return process.env.NODE_ENV!=='production';if(!signature||!requestId||!dataId)return false;
-    const parts=Object.fromEntries(signature.split(',').map(part=>part.trim().split('=',2))) as Record<string,string>;if(!parts.ts||!parts.v1)return false;
-    const manifest=`id:${String(dataId).toLowerCase()};request-id:${requestId};ts:${parts.ts};`;
-    const expected=createHmac('sha256',secret).update(manifest).digest('hex');const received=parts.v1;
-    return expected.length===received.length&&timingSafeEqual(Buffer.from(expected),Buffer.from(received));
+    const secret=process.env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();if(!secret)return process.env.NODE_ENV!=='production'&&process.env.MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS==='true';if(!signature||!requestId||!dataId)return false;
+    const parts=Object.fromEntries(signature.split(',').map(part=>part.trim().split('=',2))) as Record<string,string>;if(!parts.ts||!parts.v1)return false;const manifest=`id:${String(dataId).toLowerCase()};request-id:${requestId};ts:${parts.ts};`;const expected=createHmac('sha256',secret).update(manifest).digest('hex');const received=parts.v1;return expected.length===received.length&&timingSafeEqual(Buffer.from(expected),Buffer.from(received));
   }
-  async mercadoPagoWebhook(body:any,dataId?:string,signature?:string,requestId?:string){
-    const paymentId=String(dataId||body?.data?.id||'');if(!paymentId)return {ok:true,ignored:true};
-    if(!this.validMercadoPagoSignature(paymentId,signature,requestId))throw new UnauthorizedException('Assinatura do webhook inválida');
-    const token=this.mercadoPagoToken();const response=await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`,{headers:{Authorization:`Bearer ${token}`}});if(!response.ok)throw new BadRequestException('Pagamento não encontrado no Mercado Pago');
-    const remote:any=await response.json();const externalReference=String(remote.external_reference||'');const local=await this.db.payment.findFirst({where:{OR:[{externalReference},{providerPaymentId:paymentId}]}});if(!local)return {ok:true,ignored:true};
-    const mapped=({approved:'approved',pending:'pending',in_process:'pending',rejected:'rejected',cancelled:'cancelled',refunded:'refunded',charged_back:'charged_back'} as Record<string,string>)[remote.status]||String(remote.status||'pending');
+  private async fetchMercadoPagoPayment(providerPaymentId:string){const response=await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(providerPaymentId)}`,{headers:{Authorization:`Bearer ${this.mercadoPagoToken()}`}});if(!response.ok)throw new BadRequestException('Pagamento não encontrado no Mercado Pago');return response.json() as Promise<any>;}
+  private mapMercadoPagoStatus(status:string){return ({approved:'approved',pending:'pending',in_process:'pending',rejected:'rejected',cancelled:'cancelled',refunded:'refunded',charged_back:'charged_back'} as Record<string,string>)[status]||String(status||'pending');}
+  private async processMercadoPagoPayment(remote:any,local:any){
+    const paymentId=String(remote.id||'');const mapped=this.mapMercadoPagoStatus(remote.status);const remoteAmount=Math.round(Number(remote.transaction_amount??0)*100);const remoteCurrency=String(remote.currency_id||'BRL');
+    if(String(remote.external_reference||'')!==local.externalReference)throw new BadRequestException('Referência do pagamento não confere');if(remoteAmount!==local.amountCents)throw new BadRequestException('Valor confirmado pelo Mercado Pago não confere com a cobrança');if(remoteCurrency!=='BRL')throw new BadRequestException('Moeda do pagamento não confere com a cobrança');
+    const now=new Date();const common:any={providerPaymentId:paymentId,status:mapped,providerStatus:String(remote.status||mapped),providerStatusDetail:remote.status_detail?String(remote.status_detail):null,paymentMethod:remote.payment_type_id||remote.payment_method_id||null,currency:remoteCurrency,payerEmail:remote.payer?.email||local.payerEmail||null,raw:remote};
     if(mapped==='approved'&&local.status!=='approved'){
-      const now=new Date(),tenant=await this.db.tenant.findUnique({where:{id:local.tenantId}});const start=tenant?.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>now?tenant.subscriptionExpiresAt:now;const expiresAt=this.periodEnd(start,local.period);
-      await this.db.$transaction(async tx=>{await tx.subscription.updateMany({where:{tenantId:local.tenantId,status:{in:['active','trial']}},data:{status:'replaced'}});const subscription=await tx.subscription.create({data:{tenantId:local.tenantId,plan:local.plan,period:local.period,amountCents:local.amountCents,status:'active',startsAt:start,expiresAt}});await tx.tenant.update({where:{id:local.tenantId},data:{plan:local.plan,planPeriod:local.period,subscriptionExpiresAt:expiresAt,status:'active'}});await tx.payment.update({where:{id:local.id},data:{subscriptionId:subscription.id,providerPaymentId:paymentId,status:mapped,paymentMethod:remote.payment_type_id||remote.payment_method_id||null,paidAt:remote.date_approved?new Date(remote.date_approved):now,raw:remote}})});
-      await this.audit(local.tenantId,undefined,'payment_approved','payment',local.id,{providerPaymentId:paymentId,plan:local.plan,period:local.period});
-    }else await this.db.payment.update({where:{id:local.id},data:{providerPaymentId:paymentId,status:mapped,paymentMethod:remote.payment_type_id||remote.payment_method_id||null,raw:remote}});
-    return {ok:true};
+      common.paidAt=remote.date_approved?new Date(remote.date_approved):now;const tenant=await this.activateScheduledSubscriptionIfDue(local.tenantId);if(!tenant)throw new NotFoundException('Conta da cobrança não encontrada');
+      const action=local.billingAction||this.billingAction(tenant.plan,local.plan,tenant.subscriptionExpiresAt);let start=now;if(action==='renewal'&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>now)start=tenant.subscriptionExpiresAt;if(action==='downgrade'&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>now)start=tenant.subscriptionExpiresAt;const expiresAt=this.periodEnd(start,local.period);const scheduled=start.getTime()>now.getTime()+1000;
+      await this.db.$transaction(async tx=>{
+        if(!scheduled){await tx.subscription.updateMany({where:{tenantId:local.tenantId,status:{in:['active','trial']}},data:{status:'replaced'}});}
+        const subscription=await tx.subscription.create({data:{tenantId:local.tenantId,plan:local.plan,period:local.period,amountCents:local.amountCents,status:scheduled?'scheduled':'active',startsAt:start,expiresAt}});
+        if(action==='renewal'){await tx.tenant.update({where:{id:local.tenantId},data:{plan:local.plan,planPeriod:local.period,subscriptionExpiresAt:expiresAt,status:'active'}});}else if(!scheduled){await tx.tenant.update({where:{id:local.tenantId},data:{plan:local.plan,planPeriod:local.period,subscriptionExpiresAt:expiresAt,status:'active'}});}
+        await tx.payment.update({where:{id:local.id},data:{...common,subscriptionId:subscription.id}});
+      });
+      await this.audit(local.tenantId,undefined,'payment_approved','payment',local.id,{providerPaymentId:paymentId,plan:local.plan,period:local.period,billingAction:action,effectiveAt:start,expiresAt});
+    }else{
+      if(mapped==='cancelled')common.cancelledAt=now;if(mapped==='refunded')common.refundedAt=now;if(mapped==='charged_back')common.chargebackAt=now;await this.db.payment.update({where:{id:local.id},data:common});
+      if((mapped==='refunded'||mapped==='charged_back')&&local.subscriptionId){const subscription=await this.db.subscription.findUnique({where:{id:local.subscriptionId}});if(subscription){await this.db.subscription.update({where:{id:subscription.id},data:{status:subscription.status==='scheduled'?'cancelled':'payment_review'}});}}
+      if(['rejected','cancelled','refunded','charged_back'].includes(mapped))await this.audit(local.tenantId,undefined,`payment_${mapped}`,'payment',local.id,{providerPaymentId:paymentId,statusDetail:remote.status_detail||null});
+    }
+    return {ok:true,status:mapped,paymentId:local.id};
   }
+  async mercadoPagoWebhook(body:any,dataId?:string,signature?:string,requestId?:string){const paymentId=String(dataId||body?.data?.id||'');if(!paymentId)return {ok:true,ignored:true};if(!this.validMercadoPagoSignature(paymentId,signature,requestId))throw new UnauthorizedException('Assinatura do webhook inválida');const remote=await this.fetchMercadoPagoPayment(paymentId);const externalReference=String(remote.external_reference||'');const local=await this.db.payment.findFirst({where:{OR:[{externalReference},{providerPaymentId:paymentId}]}});if(!local)return {ok:true,ignored:true};return this.processMercadoPagoPayment(remote,local);}
+  async reconcilePayment(tenantId:string,id:string,actorUserId:string){const local=await this.db.payment.findFirst({where:{id,tenantId}});if(!local)throw new NotFoundException('Cobrança não encontrada');if(!local.providerPaymentId){
+      if(!local.externalReference)throw new BadRequestException('Cobrança sem referência externa');const search=await fetch(`https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(local.externalReference)}`,{headers:{Authorization:`Bearer ${this.mercadoPagoToken()}`}});if(!search.ok)throw new BadRequestException('Não foi possível consultar a cobrança no Mercado Pago');const result:any=await search.json();const remote=result?.results?.[0];if(!remote)throw new BadRequestException('Pagamento ainda não localizado no Mercado Pago');const processed=await this.processMercadoPagoPayment(remote,local);await this.audit(tenantId,actorUserId,'reconcile_payment','payment',id,{providerPaymentId:String(remote.id)});return processed;
+    }const remote=await this.fetchMercadoPagoPayment(local.providerPaymentId);const processed=await this.processMercadoPagoPayment(remote,local);await this.audit(tenantId,actorUserId,'reconcile_payment','payment',id,{providerPaymentId:local.providerPaymentId});return processed;}
   users(tenantId:string){return this.db.user.findMany({where:{tenantId},select:{id:true,name:true,email:true,role:true,customProfileId:true,customProfile:{select:{id:true,name:true,active:true}},active:true,createdAt:true,updatedAt:true},orderBy:[{role:'asc'},{name:'asc'}]});}
   private invitationHash(token:string){return createHash('sha256').update(token).digest('hex');}
   private invitationUrl(token:string){const base=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');return `${base}/invite/${encodeURIComponent(token)}`;}

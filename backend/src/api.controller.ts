@@ -34,6 +34,8 @@ const Public=()=>SetMetadata('public',true);
   @Roles('owner') @Patch('account/plan') updatePlan(@Req() r:any,@Body() b:UpdatePlanDto){return this.api.updatePlan(r.user.tenantId,b.plan,b.period,r.user.sub);}
   @Roles('owner') @Post('billing/checkout') createCheckout(@Req() r:any,@Body() b:CreateCheckoutDto){return this.api.createCheckout(r.user.tenantId,r.user.sub,b.plan,b.period);}
   @Roles('owner','admin') @Get('billing/payments') billingPayments(@Req() r:any){return this.api.billingPayments(r.user.tenantId);}
+  @Roles('owner','admin') @Post('billing/payments/:id/reconcile') reconcilePayment(@Req() r:any,@Param('id') id:string){return this.api.reconcilePayment(r.user.tenantId,id,r.user.sub);}
+  @Roles('owner','admin') @Post('billing/mercado-pago/return/:paymentId/reconcile') reconcileMercadoPagoReturn(@Req() r:any,@Param('paymentId') paymentId:string){return this.api.reconcileMercadoPagoReturn(r.user.tenantId,paymentId,r.user.sub);}
   @Public() @Post('billing/webhooks/mercado-pago') mercadoPagoWebhook(@Body() b:any,@Query('data.id') dataId:string,@Query('id') id:string,@Headers('x-signature') signature:string,@Headers('x-request-id') requestId:string){return this.api.mercadoPagoWebhook(b,dataId||id,signature,requestId);}
 
   @Roles('owner','admin') @Get('users') users(@Req() r:any){return this.api.users(r.user.tenantId);}

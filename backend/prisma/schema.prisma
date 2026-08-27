@@ -102,9 +102,17 @@ model Payment {
   period String
   amountCents Int
   status String @default("pending")
+  billingAction String @default("new_subscription")
   checkoutUrl String?
   paymentMethod String?
+  providerStatus String?
+  providerStatusDetail String?
+  currency String @default("BRL")
+  payerEmail String?
   paidAt DateTime?
+  cancelledAt DateTime?
+  refundedAt DateTime?
+  chargebackAt DateTime?
   raw Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
