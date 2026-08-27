@@ -14,6 +14,8 @@ export class MailService {
       port,
       secure:process.env.SMTP_SECURE==='true'||port===465,
       auth:process.env.SMTP_USER?{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS}:undefined,
+      disableFileAccess:true,
+      disableUrlAccess:true,
     });
     return this.transporter;
   }

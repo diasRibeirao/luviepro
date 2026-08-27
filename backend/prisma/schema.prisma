@@ -87,6 +87,8 @@ model Subscription {
   createdAt DateTime @default(now())
   payments Payment[]
   @@index([tenantId, status])
+  @@index([tenantId, status, startsAt])
+  @@index([createdAt])
 }
 model Payment {
   id String @id @default(cuid())
@@ -117,7 +119,10 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([tenantId, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, plan, period, status, createdAt])
   @@index([status])
+  @@index([createdAt])
 }
 model User {
   id String @id @default(cuid())

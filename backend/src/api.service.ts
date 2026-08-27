@@ -1,12 +1,13 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcryptjs';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { PrismaService } from './prisma.service';
 import { MailService } from './mail.service';
+import { RedisService } from './redis.service';
 type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number;variableCostMode?:string};
 @Injectable() export class ApiService {
-  constructor(private db:PrismaService,private jwt:JwtService,private mail:MailService){}
+  constructor(private db:PrismaService,private jwt:JwtService,private mail:MailService,@Optional() private redis?:RedisService){}
   private refreshSecret(){const secret=process.env.JWT_REFRESH_SECRET??(process.env.NODE_ENV==='production'?undefined:'local-dev-refresh-secret');if(!secret)throw new Error('JWT_REFRESH_SECRET não configurado');return secret;}
   private async issueSession(u:any){
     const effectiveTenant=await this.activateScheduledSubscriptionIfDue(u.tenantId,u.tenant);if(effectiveTenant)u={...u,tenant:effectiveTenant};
@@ -125,6 +126,15 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
   }
   private mercadoPagoToken(){const token=process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim();if(!token)throw new BadRequestException('Mercado Pago ainda não foi configurado. Informe MERCADO_PAGO_ACCESS_TOKEN no backend.');return token;}
   private mercadoPagoSandbox(){return process.env.MERCADO_PAGO_USE_SANDBOX==='true';}
+  private async mercadoPagoRequest(path:string,init:RequestInit={},timeoutMs=15_000){
+    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
+    try{
+      return await fetch(`https://api.mercadopago.com${path}`,{...init,signal:controller.signal,headers:{Authorization:`Bearer ${this.mercadoPagoToken()}`,...(init.headers??{})}});
+    }catch(error){
+      if(controller.signal.aborted)throw new BadRequestException('O Mercado Pago demorou para responder. Tente novamente em alguns instantes.');
+      throw new BadRequestException('Não foi possível conectar ao Mercado Pago');
+    }finally{clearTimeout(timer);}
+  }
   private periodPrice(limit:any,period:string){return period==='annual'?limit.annualPriceCents:period==='semiannual'?limit.semiannualPriceCents:period==='quarterly'?limit.quarterlyPriceCents:limit.monthlyPriceCents;}
   private periodEnd(start:Date,period:string){const end=new Date(start);if(period==='annual')end.setFullYear(end.getFullYear()+1);else end.setMonth(end.getMonth()+(period==='semiannual'?6:period==='quarterly'?3:1));return end;}
   private planRank(plan:string){return ({starter:1,pro:2,business:3} as Record<string,number>)[plan]??0;}
@@ -134,7 +144,7 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
     if(!scheduled)return currentTenant??this.db.tenant.findUnique({where:{id:tenantId}});
     return this.db.$transaction(async tx=>{await tx.subscription.updateMany({where:{tenantId,status:{in:['active','trial']}},data:{status:'replaced'}});await tx.subscription.update({where:{id:scheduled.id},data:{status:'active'}});return tx.tenant.update({where:{id:tenantId},data:{plan:scheduled.plan,planPeriod:scheduled.period,subscriptionExpiresAt:scheduled.expiresAt,status:'active'}});});
   }
-  async billingPayments(tenantId:string){await this.activateScheduledSubscriptionIfDue(tenantId);return this.db.payment.findMany({where:{tenantId},select:{id:true,provider:true,providerPaymentId:true,providerPreferenceId:true,plan:true,period:true,amountCents:true,status:true,billingAction:true,paymentMethod:true,providerStatus:true,providerStatusDetail:true,currency:true,payerEmail:true,paidAt:true,cancelledAt:true,refundedAt:true,chargebackAt:true,createdAt:true,updatedAt:true,subscription:{select:{id:true,status:true,startsAt:true,expiresAt:true}}},orderBy:{createdAt:'desc'},take:100});}
+  async billingPayments(tenantId:string){await this.activateScheduledSubscriptionIfDue(tenantId);const checkoutLimit=new Date(Date.now()-30*60*1000);await this.db.payment.updateMany({where:{tenantId,status:'pending',providerPaymentId:null,createdAt:{lt:checkoutLimit}},data:{status:'cancelled',cancelledAt:new Date(),providerStatusDetail:'checkout_expired'}});return this.db.payment.findMany({where:{tenantId},select:{id:true,provider:true,providerPaymentId:true,providerPreferenceId:true,plan:true,period:true,amountCents:true,status:true,billingAction:true,checkoutUrl:true,paymentMethod:true,providerStatus:true,providerStatusDetail:true,currency:true,payerEmail:true,paidAt:true,cancelledAt:true,refundedAt:true,chargebackAt:true,createdAt:true,updatedAt:true,subscription:{select:{id:true,status:true,startsAt:true,expiresAt:true}}},orderBy:{createdAt:'desc'},take:100});}
   async reconcileMercadoPagoReturn(tenantId:string,providerPaymentId:string,actorUserId?:string){
     if(!providerPaymentId)throw new BadRequestException('Identificador do pagamento não informado');
     const remote=await this.fetchMercadoPagoPayment(providerPaymentId);
@@ -147,19 +157,40 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
     return result;
   }
   async createCheckout(tenantId:string,actorUserId:string,plan:string,period:string){
+    if(!['starter','pro','business'].includes(plan))throw new BadRequestException('Plano inválido');
+    if(!['monthly','quarterly','semiannual','annual'].includes(period))throw new BadRequestException('Período inválido');
+    if(!this.redis)return this.createCheckoutUnlocked(tenantId,actorUserId,plan,period);
+    const lock=await this.redis.withLock(`checkout:${tenantId}:${plan}:${period}`,20_000,()=>this.createCheckoutUnlocked(tenantId,actorUserId,plan,period));
+    if(lock.acquired)return lock.value!;
+    const checkoutLimit=new Date(Date.now()-30*60*1000);
+    for(let attempt=0;attempt<12;attempt++){
+      await new Promise(resolve=>setTimeout(resolve,250));
+      const current=await this.db.payment.findFirst({where:{tenantId,plan,period,status:'pending',providerPaymentId:null,checkoutUrl:{not:null},createdAt:{gte:checkoutLimit}},orderBy:{createdAt:'desc'}});
+      if(current?.checkoutUrl){
+        await this.audit(tenantId,actorUserId,'resume_concurrent_checkout','payment',current.id,{plan,period});
+        return {paymentId:current.id,preferenceId:current.providerPreferenceId,checkoutUrl:current.checkoutUrl,webhookConfigured:!!process.env.MERCADO_PAGO_WEBHOOK_URL,sandbox:this.mercadoPagoSandbox(),billingAction:current.billingAction,reused:true};
+      }
+    }
+    throw new ConflictException('Um checkout já está sendo preparado. Aguarde alguns segundos e tente novamente.');
+  }
+  private async createCheckoutUnlocked(tenantId:string,actorUserId:string,plan:string,period:string){
     if(!['starter','pro','business'].includes(plan))throw new BadRequestException('Plano inválido');if(!['monthly','quarterly','semiannual','annual'].includes(period))throw new BadRequestException('Período inválido');
-    const token=this.mercadoPagoToken();
+    this.mercadoPagoToken();
     const [tenant,limit,user]=await Promise.all([this.activateScheduledSubscriptionIfDue(tenantId),this.db.planLimit.findUnique({where:{plan}}),this.db.user.findFirst({where:{id:actorUserId,tenantId}})]);
     if(!tenant||!limit||!user)throw new NotFoundException('Conta, usuário ou plano não encontrado');
     const amountCents=this.periodPrice(limit,period);if(amountCents<=0)throw new BadRequestException('Este plano não possui preço configurado para o período selecionado');
     const action=this.billingAction(tenant.plan,plan,tenant.subscriptionExpiresAt);const effectiveAt=action==='downgrade'&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>new Date()?tenant.subscriptionExpiresAt:new Date();
+    const checkoutTtlMs=30*60*1000;const checkoutLimit=new Date(Date.now()-checkoutTtlMs);
+    const reusable=await this.db.payment.findFirst({where:{tenantId,plan,period,status:'pending',providerPaymentId:null,checkoutUrl:{not:null},createdAt:{gte:checkoutLimit}},orderBy:{createdAt:'desc'}});
+    if(reusable?.checkoutUrl){await this.audit(tenantId,actorUserId,'resume_checkout','payment',reusable.id,{plan,period});return {paymentId:reusable.id,preferenceId:reusable.providerPreferenceId,checkoutUrl:reusable.checkoutUrl,webhookConfigured:!!process.env.MERCADO_PAGO_WEBHOOK_URL,sandbox:this.mercadoPagoSandbox(),billingAction:reusable.billingAction,effectiveAt,reused:true};}
+    await this.db.payment.updateMany({where:{tenantId,plan,period,status:'pending',providerPaymentId:null,createdAt:{lt:checkoutLimit}},data:{status:'cancelled',cancelledAt:new Date(),providerStatusDetail:'checkout_expired'}});
     const externalReference=`luviepro_${tenantId}_${Date.now()}_${randomBytes(4).toString('hex')}`;
     const payment=await this.db.payment.create({data:{tenantId,externalReference,plan,period,amountCents,status:'pending',billingAction:action,currency:'BRL',payerEmail:user.email}});
     const appUrl=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');const webhookUrl=process.env.MERCADO_PAGO_WEBHOOK_URL?.trim();const hasUsableReturn=!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(appUrl);
     const periodLabel=({monthly:'mensal',quarterly:'trimestral',semiannual:'semestral',annual:'anual'} as Record<string,string>)[period]??period;
     const body:any={items:[{id:`${plan}-${period}`,title:`LuviePro ${plan[0].toUpperCase()+plan.slice(1)} — ${periodLabel}`,description:`Assinatura LuviePro (${periodLabel})`,currency_id:'BRL',quantity:1,unit_price:amountCents/100}],payer:{email:user.email},external_reference:externalReference,metadata:{payment_id:payment.id,tenant_id:tenantId,plan,period,billing_action:action},statement_descriptor:'LUVIEPRO'};
     if(hasUsableReturn){body.back_urls={success:`${appUrl}/plans?payment=success`,pending:`${appUrl}/plans?payment=pending`,failure:`${appUrl}/plans?payment=failure`};body.auto_return='approved';}if(webhookUrl?.startsWith('https://'))body.notification_url=webhookUrl;
-    let response:Response;try{response=await fetch('https://api.mercadopago.com/checkout/preferences',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-Idempotency-Key':payment.id},body:JSON.stringify(body)});}catch{await this.db.payment.update({where:{id:payment.id},data:{status:'error'}});throw new BadRequestException('Não foi possível conectar ao Mercado Pago');}
+    let response:Response;try{response=await this.mercadoPagoRequest('/checkout/preferences',{method:'POST',headers:{'Content-Type':'application/json','X-Idempotency-Key':payment.id},body:JSON.stringify(body)});}catch(error){await this.db.payment.update({where:{id:payment.id},data:{status:'error'}});if(error instanceof BadRequestException)throw error;throw new BadRequestException('Não foi possível conectar ao Mercado Pago');}
     const result:any=await response.json().catch(()=>({}));if(!response.ok){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:result}});throw new BadRequestException(result?.message||'Mercado Pago recusou a criação do checkout');}
     const checkoutUrl=(this.mercadoPagoSandbox()?result.sandbox_init_point:result.init_point)||result.init_point;if(!checkoutUrl){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:result}});throw new BadRequestException('Mercado Pago não retornou uma URL de checkout');}
     await this.db.payment.update({where:{id:payment.id},data:{providerPreferenceId:String(result.id),checkoutUrl,raw:result}});await this.audit(tenantId,actorUserId,'create_checkout','payment',payment.id,{plan,period,amountCents,provider:'mercado_pago',billingAction:action,sandbox:this.mercadoPagoSandbox(),effectiveAt});
@@ -169,11 +200,29 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
     const secret=process.env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();if(!secret)return process.env.NODE_ENV!=='production'&&process.env.MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS==='true';if(!signature||!requestId||!dataId)return false;
     const parts=Object.fromEntries(signature.split(',').map(part=>part.trim().split('=',2))) as Record<string,string>;if(!parts.ts||!parts.v1)return false;const manifest=`id:${String(dataId).toLowerCase()};request-id:${requestId};ts:${parts.ts};`;const expected=createHmac('sha256',secret).update(manifest).digest('hex');const received=parts.v1;return expected.length===received.length&&timingSafeEqual(Buffer.from(expected),Buffer.from(received));
   }
-  private async fetchMercadoPagoPayment(providerPaymentId:string){const response=await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(providerPaymentId)}`,{headers:{Authorization:`Bearer ${this.mercadoPagoToken()}`}});if(!response.ok)throw new BadRequestException('Pagamento não encontrado no Mercado Pago');return response.json() as Promise<any>;}
+  private async fetchMercadoPagoPayment(providerPaymentId:string){const response=await this.mercadoPagoRequest(`/v1/payments/${encodeURIComponent(providerPaymentId)}`);if(!response.ok)throw new BadRequestException('Pagamento não encontrado no Mercado Pago');return response.json() as Promise<any>;}
   private mapMercadoPagoStatus(status:string){return ({approved:'approved',pending:'pending',in_process:'pending',rejected:'rejected',cancelled:'cancelled',refunded:'refunded',charged_back:'charged_back'} as Record<string,string>)[status]||String(status||'pending');}
   private async processMercadoPagoPayment(remote:any,local:any){
+    if(!this.redis)return this.processMercadoPagoPaymentUnlocked(remote,local);
+    const key=`payment:${local.id}`;
+    for(let attempt=0;attempt<12;attempt++){
+      const lock=await this.redis.withLock(key,20_000,async()=>{
+        const current=await this.db.payment.findUnique({where:{id:local.id}});
+        if(!current)throw new NotFoundException('Cobrança não encontrada');
+        return this.processMercadoPagoPaymentUnlocked(remote,current);
+      });
+      if(lock.acquired)return lock.value!;
+      await new Promise(resolve=>setTimeout(resolve,250));
+    }
+    throw new ConflictException('Esta cobrança já está sendo processada. Tente novamente em alguns segundos.');
+  }
+  private async processMercadoPagoPaymentUnlocked(remote:any,local:any){
     const paymentId=String(remote.id||'');const mapped=this.mapMercadoPagoStatus(remote.status);const remoteAmount=Math.round(Number(remote.transaction_amount??0)*100);const remoteCurrency=String(remote.currency_id||'BRL');
     if(String(remote.external_reference||'')!==local.externalReference)throw new BadRequestException('Referência do pagamento não confere');if(remoteAmount!==local.amountCents)throw new BadRequestException('Valor confirmado pelo Mercado Pago não confere com a cobrança');if(remoteCurrency!=='BRL')throw new BadRequestException('Moeda do pagamento não confere com a cobrança');
+    if(local.status==='approved'&&['pending','rejected','cancelled'].includes(mapped)){
+      await this.audit(local.tenantId,undefined,'payment_status_regression_ignored','payment',local.id,{providerPaymentId:paymentId,currentStatus:local.status,receivedStatus:mapped});
+      return {ok:true,status:local.status,paymentId:local.id,ignored:true};
+    }
     const now=new Date();const common:any={providerPaymentId:paymentId,status:mapped,providerStatus:String(remote.status||mapped),providerStatusDetail:remote.status_detail?String(remote.status_detail):null,paymentMethod:remote.payment_type_id||remote.payment_method_id||null,currency:remoteCurrency,payerEmail:remote.payer?.email||local.payerEmail||null,raw:remote};
     if(mapped==='approved'&&local.status!=='approved'){
       common.paidAt=remote.date_approved?new Date(remote.date_approved):now;const tenant=await this.activateScheduledSubscriptionIfDue(local.tenantId);if(!tenant)throw new NotFoundException('Conta da cobrança não encontrada');
@@ -194,7 +243,7 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
   }
   async mercadoPagoWebhook(body:any,dataId?:string,signature?:string,requestId?:string){const paymentId=String(dataId||body?.data?.id||'');if(!paymentId)return {ok:true,ignored:true};if(!this.validMercadoPagoSignature(paymentId,signature,requestId))throw new UnauthorizedException('Assinatura do webhook inválida');const remote=await this.fetchMercadoPagoPayment(paymentId);const externalReference=String(remote.external_reference||'');const local=await this.db.payment.findFirst({where:{OR:[{externalReference},{providerPaymentId:paymentId}]}});if(!local)return {ok:true,ignored:true};return this.processMercadoPagoPayment(remote,local);}
   async reconcilePayment(tenantId:string,id:string,actorUserId:string){const local=await this.db.payment.findFirst({where:{id,tenantId}});if(!local)throw new NotFoundException('Cobrança não encontrada');if(!local.providerPaymentId){
-      if(!local.externalReference)throw new BadRequestException('Cobrança sem referência externa');const search=await fetch(`https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(local.externalReference)}`,{headers:{Authorization:`Bearer ${this.mercadoPagoToken()}`}});if(!search.ok)throw new BadRequestException('Não foi possível consultar a cobrança no Mercado Pago');const result:any=await search.json();const remote=result?.results?.[0];if(!remote)throw new BadRequestException('Pagamento ainda não localizado no Mercado Pago');const processed=await this.processMercadoPagoPayment(remote,local);await this.audit(tenantId,actorUserId,'reconcile_payment','payment',id,{providerPaymentId:String(remote.id)});return processed;
+      if(!local.externalReference)throw new BadRequestException('Cobrança sem referência externa');const search=await this.mercadoPagoRequest(`/v1/payments/search?external_reference=${encodeURIComponent(local.externalReference)}`);if(!search.ok)throw new BadRequestException('Não foi possível consultar a cobrança no Mercado Pago');const result:any=await search.json();const remote=result?.results?.[0];if(!remote)throw new BadRequestException('Pagamento ainda não localizado no Mercado Pago');const processed=await this.processMercadoPagoPayment(remote,local);await this.audit(tenantId,actorUserId,'reconcile_payment','payment',id,{providerPaymentId:String(remote.id)});return processed;
     }const remote=await this.fetchMercadoPagoPayment(local.providerPaymentId);const processed=await this.processMercadoPagoPayment(remote,local);await this.audit(tenantId,actorUserId,'reconcile_payment','payment',id,{providerPaymentId:local.providerPaymentId});return processed;}
   users(tenantId:string){return this.db.user.findMany({where:{tenantId},select:{id:true,name:true,email:true,role:true,customProfileId:true,customProfile:{select:{id:true,name:true,active:true}},active:true,createdAt:true,updatedAt:true},orderBy:[{role:'asc'},{name:'asc'}]});}
   private invitationHash(token:string){return createHash('sha256').update(token).digest('hex');}
