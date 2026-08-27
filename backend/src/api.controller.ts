@@ -15,7 +15,8 @@ const Public=()=>SetMetadata('public',true);
   @Roles('platform_admin') @Get('platform/users') platformUsers(){return this.api.platformUsers();}
   @Roles('platform_admin') @Get('platform/plans') platformPlans(){return this.api.platformPlans();}
   @Roles('platform_admin') @Post('platform/tenants') platformCreateTenant(@Req() r:any,@Body() b:PlatformCreateTenantDto){return this.api.platformCreateTenant(b,r.user.sub);}
-  @Roles('platform_admin') @Patch('platform/tenants/:id') platformUpdateTenant(@Param('id') id:string,@Body() b:PlatformTenantDto){return this.api.platformUpdateTenant(id,b);}
+  @Roles('platform_admin') @Patch('platform/tenants/:id') platformUpdateTenant(@Param('id') id:string,@Body() b:PlatformTenantDto){return this.api.platformChangeTenant(id,b);}
+  @Roles('platform_admin') @Post('platform/tenants/:id/cancel-scheduled-change') platformCancelScheduledChange(@Param('id') id:string){return this.api.platformCancelScheduledChange(id);}
   @Roles('platform_admin') @Post('platform/users/:id/password-reset') platformPasswordReset(@Param('id') id:string){return this.api.platformPasswordReset(id);}
   @Roles('platform_admin') @Patch('platform/users/:id') platformUpdateUser(@Param('id') id:string,@Body() b:PlatformUserDto){return this.api.platformUpdateUser(id,b);}
   @Roles('platform_admin') @Patch('platform/plans/:plan') platformUpdatePlan(@Param('plan') plan:string,@Body() b:PlatformPlanDto){return this.api.platformUpdatePlan(plan,b);}
