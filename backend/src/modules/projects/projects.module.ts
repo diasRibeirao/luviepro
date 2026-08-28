@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ProjectsCalendarService } from './projects-calendar.service';
-@Module({providers:[ProjectsCalendarService],exports:[ProjectsCalendarService]})
+import { ProjectsService } from './projects.service';
+
+@Module({ providers: [ProjectsService], exports: [ProjectsService] })
 export class ProjectsModule {}

@@ -1,11 +1,10 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcryptjs';
-import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from './prisma.service';
 import { MailService } from './mail.service';
 import { RedisService } from './redis.service';
-import { isBillingPeriod, isPlanCode, periodEnd, periodPrice, planRank } from './plan-policy';
+import { isBillingPeriod, isPlanCode } from './plan-policy';
 import { entitlementSnapshot } from './entitlements';
 import { BillingService } from './modules/billing/billing.service';
 import { SubscriptionService } from './modules/billing/subscription.service';
@@ -13,28 +12,31 @@ import { AUTH_SECURITY } from './modules/auth/auth-security';
 import { AuthService } from './modules/auth/auth.service';
 import { AuthSessionService } from './modules/auth/auth-session.service';
 import { AccessManagementService } from './modules/access/access-management.service';
-import { ProjectsCalendarService } from './modules/projects/projects-calendar.service';
+import { ProjectsService } from './modules/projects/projects.service';
+import { CalendarService } from './modules/calendar/calendar.service';
 import { QuotesService } from './modules/quotes/quotes.service';
 import { ClientsService } from './modules/clients/clients.service';
 import { CreateClientDto, UpdateClientDto } from './modules/clients/dto/clients.dto';
 import { ServicesService } from './modules/services/services.service';
 import { CreateServiceDto, UpdateServiceDto } from './modules/services/dto/services.dto';
+import { PlatformAdminService } from './modules/platform/platform-admin.service';
+import { PlatformCreateTenantDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './modules/platform/dto/platform.dto';
 type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number;variableCostMode?:string};
 type AuditLogFilters={action?:string;entity?:string;actorUserId?:string;search?:string;from?:string;to?:string;limit?:number};
 @Injectable() export class ApiService {
-  constructor(private db:PrismaService,private jwt:JwtService,private mail:MailService,@Optional() private redis?:RedisService,@Optional() private billing?:BillingService,@Optional() private subscriptions?:SubscriptionService,@Optional() private auth?:AuthService,@Optional() private authSessions?:AuthSessionService,@Optional() private accessManagement?:AccessManagementService,@Optional() private projectsCalendar?:ProjectsCalendarService,@Optional() private quotesDomain?:QuotesService,@Optional() private clientsDomain?:ClientsService,@Optional() private servicesDomain?:ServicesService){}
+  constructor(private db:PrismaService,private jwt:JwtService,private mail:MailService,@Optional() private redis?:RedisService,@Optional() private billing?:BillingService,@Optional() private subscriptions?:SubscriptionService,@Optional() private auth?:AuthService,@Optional() private authSessions?:AuthSessionService,@Optional() private accessManagement?:AccessManagementService,@Optional() private projectsDomain?:ProjectsService,@Optional() private quotesDomain?:QuotesService,@Optional() private clientsDomain?:ClientsService,@Optional() private servicesDomain?:ServicesService,@Optional() private platformDomain?:PlatformAdminService,@Optional() private calendarDomain?:CalendarService){}
   private subscriptionService(){return this.subscriptions??new SubscriptionService(this.db);}
   private billingService(){return this.billing??new BillingService(this.db,this.subscriptionService(),this.redis);}
   private sessionService(){return this.authSessions??new AuthSessionService(this.db,this.jwt,this.subscriptionService());}
   private authService(){return this.auth??new AuthService(this.db,this.mail,this.sessionService());}
   private accessService(){return this.accessManagement??new AccessManagementService(this.db,this.mail,this.sessionService());}
-  private projectsService(){return this.projectsCalendar??new ProjectsCalendarService(this.db);}
+  private projectsService(){return this.projectsDomain??new ProjectsService(this.db);}
+  private calendarService(){return this.calendarDomain??new CalendarService(this.db);}
   private quotesService(){return this.quotesDomain??new QuotesService(this.db);}
   private clientsService(){return this.clientsDomain??new ClientsService(this.db);}
   private servicesService(){return this.servicesDomain??new ServicesService(this.db);}
+  private platformService(){return this.platformDomain??new PlatformAdminService(this.db,this.mail,this.authService());}
   private issueSession(u:any){return this.sessionService().issueTenant(u);}
-  private invitationHash(token:string){return createHash('sha256').update(token).digest('hex');}
-  private invitationUrl(token:string){const base=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');return `${base}/invite/${encodeURIComponent(token)}`;}
 
   private async audit(tenantId:string,actorUserId:string|undefined,action:string,entity:string,entityId?:string,metadata?:any){
     await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity,entityId,metadata}}).catch(()=>undefined);
@@ -42,39 +44,19 @@ type AuditLogFilters={action?:string;entity?:string;actorUserId?:string;search?:
   calculate(x:Calc){for(const v of Object.values(x))if(typeof v==='number'&&(!Number.isInteger(v)||v<0))throw new BadRequestException('Use inteiros não negativos; dinheiro em centavos.');const laborCents=x.dailyRateCents*x.days;const mode=x.variableCostMode??'per_day';const variableCents=mode==='fixed'?x.variableCostCents:mode==='per_person'?x.variableCostCents*x.people:mode==='per_person_day'?x.variableCostCents*x.people*x.days:x.variableCostCents*x.days;const subtotal=laborCents+variableCents+x.fixedCostCents;const marginCents=Math.round(x.dailyRateCents*x.safetyMarginBps/10000);return {laborCents,variableCents,fixedCents:x.fixedCostCents,marginCents,totalCents:subtotal+marginCents};}
   login(email:string,password:string){return this.authService().login(email,password);}
   platformLogin(email:string,password:string){return this.authService().platformLogin(email,password);}
-  async platformOverview(){const now=new Date();const [tenants,activeTenants,users,clients,subscriptions,monthlyRevenue]=await Promise.all([this.db.tenant.count(),this.db.tenant.count({where:{status:'active'}}),this.db.user.count({where:{active:true}}),this.db.client.count({where:{active:true}}),this.db.subscription.count({where:{status:{in:['active','trial']}}}),this.db.subscription.aggregate({where:{status:{in:['active','trial']},period:'monthly'},_sum:{amountCents:true}})]);return {tenants,activeTenants,users,clients,subscriptions,monthlyRevenueCents:monthlyRevenue._sum.amountCents??0};}
-  async platformTenants(){const rows=await this.db.tenant.findMany({select:{id:true,name:true,slug:true,plan:true,planPeriod:true,status:true,subscriptionExpiresAt:true,createdAt:true,_count:{select:{users:true,clients:true,subscriptions:true}},subscriptions:{where:{status:'scheduled'},select:{id:true,plan:true,period:true,startsAt:true,expiresAt:true,amountCents:true},orderBy:{startsAt:'asc'},take:1}},orderBy:{createdAt:'desc'}});return rows.map(({subscriptions,...tenant})=>({...tenant,scheduledSubscription:subscriptions[0]??null}));}
-  async platformSubscriptions(){return this.db.subscription.findMany({select:{id:true,plan:true,period:true,amountCents:true,status:true,startsAt:true,expiresAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},take:200});}
-  async platformPayments(){return this.db.payment.findMany({select:{id:true,provider:true,providerPaymentId:true,plan:true,period:true,amountCents:true,status:true,paymentMethod:true,paidAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},take:300});}
-  async platformUsers(){return this.db.user.findMany({select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}},orderBy:{createdAt:'desc'},take:500});}
-  async platformPlans(){return this.db.planLimit.findMany({orderBy:{monthlyPriceCents:'asc'}});}
-  async platformChangeTenant(id:string,data:any){const tenant=await this.db.tenant.findUnique({where:{id}});if(!tenant)throw new NotFoundException('Empresa não encontrada');const plan=data.plan??tenant.plan,period=data.planPeriod??tenant.planPeriod??'monthly';if(data.plan&&planRank(plan)<planRank(tenant.plan)&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt.getTime()>Date.now()){const existing=await this.db.subscription.findFirst({where:{tenantId:id,status:'scheduled'}});if(existing)throw new ConflictException('Já existe uma alteração de plano agendada para esta empresa');const limit=await this.db.planLimit.findUnique({where:{plan}});if(!limit)throw new BadRequestException('Plano indisponível');const startsAt=tenant.subscriptionExpiresAt,expiresAt=periodEnd(startsAt,period),subscription=await this.db.subscription.create({data:{tenantId:id,plan,period,amountCents:periodPrice(limit,period),status:'scheduled',startsAt,expiresAt}});await this.audit(id,undefined,'platform_schedule_downgrade','subscription',subscription.id,{plan,period,effectiveAt:startsAt});return {...tenant,scheduledSubscription:subscription};}return this.platformUpdateTenant(id,data);}
-  async platformCancelScheduledChange(id:string){const scheduled=await this.db.subscription.findFirst({where:{tenantId:id,status:'scheduled'}});if(!scheduled)throw new NotFoundException('Nenhuma alteração agendada para esta empresa');const cancelled=await this.db.subscription.update({where:{id:scheduled.id},data:{status:'cancelled'}});await this.audit(id,undefined,'platform_cancel_scheduled_change','subscription',scheduled.id,{plan:scheduled.plan,period:scheduled.period});return {ok:true,subscription:cancelled};}
-  async platformCreateTenant(data:any,platformAdminId:string){
-    const email=String(data.ownerEmail??'').trim().toLowerCase(),company=String(data.company??'').trim(),ownerName=String(data.ownerName??'').trim();
-    if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já possui acesso ao LuviePro');
-    const pending=await this.db.userInvitation.findFirst({where:{email,status:'pending',expiresAt:{gt:new Date()}}});
-    if(pending)throw new ConflictException('Já existe um convite pendente para este e-mail');
-    const limit=await this.db.planLimit.findUnique({where:{plan:data.plan}});if(!limit)throw new BadRequestException('Plano indisponível');
-    const amountCents=data.period==='annual'?limit.annualPriceCents:data.period==='semiannual'?limit.semiannualPriceCents:data.period==='quarterly'?limit.quarterlyPriceCents:limit.monthlyPriceCents;
-    const now=new Date(),trialEnd=new Date(now);trialEnd.setDate(trialEnd.getDate()+14);
-    const slug=`${company.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'empresa'}-${Date.now().toString(36)}`;
-    const token=randomBytes(32).toString('hex'),expiresAt=new Date(Date.now()+Number(process.env.INVITATION_TTL_HOURS||48)*3600000);
-    const result=await this.db.$transaction(async tx=>{
-      const tenant=await tx.tenant.create({data:{name:company,slug,responsibleName:ownerName,phone:data.phone||null,contactEmail:email,plan:data.plan,planPeriod:data.period,subscriptionExpiresAt:trialEnd}});
-      await tx.subscription.create({data:{tenantId:tenant.id,plan:data.plan,period:data.period,amountCents,status:'trial',startsAt:now,expiresAt:trialEnd}});
-      const invitation=await tx.userInvitation.create({data:{tenantId:tenant.id,name:ownerName,email,role:'owner',tokenHash:this.invitationHash(token),expiresAt},select:{id:true,email:true,name:true,expiresAt:true}});
-      return {tenant,invitation};
-    });
-    const inviteUrl=this.invitationUrl(token);let delivery:any={sent:false,reason:'not_configured'};
-    try{delivery=await this.mail.sendUserInvitation({to:email,name:ownerName,tenantName:company,roleLabel:'Proprietário',inviteUrl,expiresAt});}catch{delivery={sent:false,reason:'send_failed'};}
-    await this.audit(result.tenant.id,undefined,'platform_create_tenant','tenant',result.tenant.id,{platformAdminId,plan:data.plan,period:data.period,email,delivery:delivery.sent?'sent':delivery.reason});
-    return {tenant:result.tenant,invitation:{...result.invitation,delivery,inviteUrl}};
-  }
-  async platformUpdateTenant(id:string,data:any){const tenant=await this.db.tenant.findUnique({where:{id}});if(!tenant)throw new NotFoundException('Empresa não encontrada');const plan=data.plan??tenant.plan,period=data.planPeriod??tenant.planPeriod??'monthly';const limit=await this.db.planLimit.findUnique({where:{plan}});if(!limit)throw new BadRequestException('Plano indisponível');const amountCents=period==='annual'?limit.annualPriceCents:period==='semiannual'?limit.semiannualPriceCents:period==='quarterly'?limit.quarterlyPriceCents:limit.monthlyPriceCents;const updated=await this.db.$transaction(async tx=>{const result=await tx.tenant.update({where:{id},data:{...(data.status!==undefined&&{status:data.status}),...(data.plan!==undefined&&{plan:data.plan}),...(data.planPeriod!==undefined&&{planPeriod:data.planPeriod})}});if(data.plan!==undefined||data.planPeriod!==undefined){const current=await tx.subscription.findFirst({where:{tenantId:id,status:{in:['active','trial']},expiresAt:{gte:new Date()}},orderBy:{expiresAt:'desc'}});if(current)await tx.subscription.update({where:{id:current.id},data:{plan,period,amountCents}});else{const startsAt=new Date(),expiresAt=new Date(startsAt);expiresAt.setDate(expiresAt.getDate()+14);await tx.subscription.create({data:{tenantId:id,plan,period,amountCents,status:'active',startsAt,expiresAt}})}}return result});await this.audit(id,undefined,'platform_update_tenant','tenant',id,{...data,amountCents});return updated;}
-  async platformUpdateUser(id:string,data:any){const user=await this.db.user.findUnique({where:{id}});if(!user)throw new NotFoundException('Usuário não encontrado');const updated=await this.db.$transaction(async tx=>{const result=await tx.user.update({where:{id},data:{...(data.active!==undefined&&{active:data.active}),...(data.role!==undefined&&{role:data.role})},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}}});if(data.active===false)await tx.authSession.updateMany({where:{userId:id,revokedAt:null},data:{revokedAt:new Date(),revokedReason:'user_deactivated'}});return result;});await this.audit(user.tenantId,undefined,'platform_update_user','user',id,data);return updated;}
-  async platformPasswordReset(id:string){const user=await this.db.user.findUnique({where:{id}});if(!user)throw new NotFoundException('Usuário não encontrado');if(!user.active)throw new BadRequestException('Ative o usuário antes de enviar a recuperação de senha');return this.forgotPassword(user.email);}
-  async platformUpdatePlan(plan:string,data:any){if(!isPlanCode(plan))throw new BadRequestException('Plano inválido');const current=await this.db.planLimit.findUnique({where:{plan}});if(!current)throw new NotFoundException('Plano não encontrado');return this.db.planLimit.update({where:{plan},data});}
+  platformOverview(){return this.platformService().overview();}
+  platformTenants(){return this.platformService().tenants();}
+  platformSubscriptions(){return this.platformService().subscriptions();}
+  platformPayments(){return this.platformService().payments();}
+  platformUsers(){return this.platformService().users();}
+  platformPlans(){return this.platformService().plans();}
+  platformChangeTenant(id:string,data:PlatformTenantDto){return this.platformService().changeTenant(id,data);}
+  platformCancelScheduledChange(id:string){return this.platformService().cancelScheduledChange(id);}
+  platformCreateTenant(data:PlatformCreateTenantDto,platformAdminId:string){return this.platformService().createTenant(data,platformAdminId);}
+  platformUpdateTenant(id:string,data:PlatformTenantDto){return this.platformService().updateTenant(id,data);}
+  platformUpdateUser(id:string,data:PlatformUserDto){return this.platformService().updateUser(id,data);}
+  platformPasswordReset(id:string){return this.platformService().passwordReset(id);}
+  platformUpdatePlan(plan:string,data:PlatformPlanDto){return this.platformService().updatePlan(plan,data);}
   refresh(refreshToken:string){return this.authService().refresh(refreshToken);}
   logout(userId:string,tenantId:string,sessionId?:string){return this.authService().logout(userId,tenantId,sessionId);}
   listAuthSessions(userId:string,tenantId:string,currentSessionId?:string){return this.sessionService().listTenantSessions(userId,tenantId,currentSessionId);}
@@ -238,9 +220,9 @@ type AuditLogFilters={action?:string;entity?:string;actorUserId?:string;search?:
   updateProjectTask(tenantId:string,projectId:string,taskId:string,data:any,actorUserId?:string){return this.projectsService().updateProjectTask(tenantId,projectId,taskId,data,actorUserId);}
   approve(tenantId:string,id:string,actorUserId?:string){return this.quotesService().approve(tenantId,id,actorUserId);}
 
-  calendar(tenantId:string){return this.projectsService().calendar(tenantId);}
-  createCalendarEvent(tenantId:string,userId:string,data:any){return this.projectsService().createCalendarEvent(tenantId,userId,data);}
-  cancelCalendarEvent(tenantId:string,id:string,userId:string){return this.projectsService().cancelCalendarEvent(tenantId,id,userId);}
-  updateCalendarEvent(tenantId:string,id:string,userId:string,data:any){return this.projectsService().updateCalendarEvent(tenantId,id,userId,data);}
+  calendar(tenantId:string){return this.calendarService().list(tenantId);}
+  createCalendarEvent(tenantId:string,userId:string,data:any){return this.calendarService().create(tenantId,userId,data);}
+  cancelCalendarEvent(tenantId:string,id:string,userId:string){return this.calendarService().cancel(tenantId,id,userId);}
+  updateCalendarEvent(tenantId:string,id:string,userId:string,data:any){return this.calendarService().update(tenantId,id,userId,data);}
 
 }

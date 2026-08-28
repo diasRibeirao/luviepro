@@ -15,9 +15,11 @@ import { BillingModule } from './modules/billing/billing.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AccessModule } from './modules/access/access.module';
 import { ProjectsModule } from './modules/projects/projects.module';
+import { CalendarModule } from './modules/calendar/calendar.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { ServicesModule } from './modules/services/services.module';
+import { PlatformModule } from './modules/platform/platform.module';
 
 @Module({
   imports:[
@@ -28,9 +30,11 @@ import { ServicesModule } from './modules/services/services.module';
     NotificationsModule,
     AccessModule,
     ProjectsModule,
+    CalendarModule,
     QuotesModule,
     ClientsModule,
     ServicesModule,
+    PlatformModule,
   ],
   controllers:[ApiController],
   providers:[
