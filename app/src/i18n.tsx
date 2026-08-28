@@ -633,17 +633,22 @@ export function tr(value:string,locale:Locale=activeLocale){
   return leading+translateCore(core,locale)+trailing;
 }
 
-function localizeNode(node:any):any{
+function localizeNode(node:ReactNode):ReactNode{
   if(typeof node==='string')return tr(node);
   if(Array.isArray(node))return node.map(localizeNode);
   return node;
 }
 
-export const Text=React.forwardRef<any,any>(function LocalizedText(props,ref){
+type TextRef=React.ElementRef<typeof RNText>;
+type TextProps=React.ComponentProps<typeof RNText>;
+type TextInputRef=React.ElementRef<typeof RNTextInput>;
+type TextInputProps=React.ComponentProps<typeof RNTextInput>;
+
+export const Text=React.forwardRef<TextRef,TextProps>(function LocalizedText(props,ref){
   const {children,...rest}=props;
   return <RNText ref={ref} {...rest}>{localizeNode(children)}</RNText>;
 });
-export const TextInput=React.forwardRef<any,React.ComponentProps<typeof RNTextInput>>(function LocalizedTextInput(props,ref){
+export const TextInput=React.forwardRef<TextInputRef,TextInputProps>(function LocalizedTextInput(props,ref){
   const {placeholder,accessibilityLabel,...rest}=props;
   return <RNTextInput ref={ref} placeholder={typeof placeholder==='string'?tr(placeholder):placeholder} accessibilityLabel={typeof accessibilityLabel==='string'?tr(accessibilityLabel):accessibilityLabel} {...rest}/>;
 });
