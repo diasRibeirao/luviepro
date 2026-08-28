@@ -1,0 +1,2 @@
+import {securityHeadersOptions} from './security-headers';
+describe('security headers',()=>{it('uses API-safe CSP',()=>{const c=securityHeadersOptions(false);expect(c.contentSecurityPolicy.directives.defaultSrc).toEqual(["'none'"]);expect(c.contentSecurityPolicy.directives.frameAncestors).toEqual(["'none'"]);expect(c.hsts).toBe(false)});it('enables HSTS in production',()=>expect(securityHeadersOptions(true).hsts).toEqual(expect.objectContaining({maxAge:15552000,includeSubDomains:true})))});

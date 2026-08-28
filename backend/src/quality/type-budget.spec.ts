@@ -33,6 +33,6 @@ describe('runtime production type budget', () => {
       0,
     );
 
-    expect(total).toBeLessThanOrEqual(40);
+    expect(total).toBeLessThanOrEqual(39);
   });
 });

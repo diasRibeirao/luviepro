@@ -1,0 +1,2 @@
+import {CircuitBreaker} from './circuit-breaker';
+describe('circuit breaker',()=>{it('opens and permits one half-open probe',()=>{let now=1000;const c=new CircuitBreaker(2,500,()=>now);c.failure();expect(c.canRequest()).toBe(true);c.failure();expect(c.state()).toBe('open');expect(c.canRequest()).toBe(false);now=1600;expect(c.state()).toBe('half_open');expect(c.canRequest()).toBe(true);expect(c.canRequest()).toBe(false);c.success();expect(c.state()).toBe('closed')})});

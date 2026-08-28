@@ -1,0 +1,2 @@
+import {backoffMs,retryAfterMs,shouldRetryHttp} from './http-retry';
+describe('http retry policy',()=>{it('retries only transient responses',()=>{expect(shouldRetryHttp(429)).toBe(true);expect(shouldRetryHttp(503)).toBe(true);expect(shouldRetryHttp(400)).toBe(false)});it('caps retry-after',()=>expect(retryAfterMs('999')).toBe(30000));it('backs off with cap',()=>expect(backoffMs(10)).toBe(4000))});

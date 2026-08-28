@@ -1,0 +1,2 @@
+import {createBackupManifest,verifyBackupPayload} from './backup-manifest';
+describe('backup manifest',()=>{it('detects payload corruption',()=>{const payload=Buffer.from('database-dump');const m=createBackupManifest('luviepro',payload,new Date('2026-08-28T00:00:00Z'));expect(verifyBackupPayload(m,payload)).toBe(true);expect(verifyBackupPayload(m,Buffer.from('tampered'))).toBe(false)});it('rejects empty backup',()=>expect(()=>createBackupManifest('db',Buffer.alloc(0))).toThrow('backup vazio'))});

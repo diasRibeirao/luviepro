@@ -1,0 +1,2 @@
+import {retentionCutoff,retentionPolicy} from './retention-policy';
+describe('retention policy',()=>{it('uses conservative defaults',()=>expect(retentionPolicy({})).toEqual({auditDays:365,webhookDays:90,paymentDays:1825,authSessionDays:30}));it('computes deterministic cutoff',()=>expect(retentionCutoff(1,new Date('2026-08-28T12:00:00Z')).toISOString()).toBe('2026-08-27T12:00:00.000Z'));it('rejects unsafe audit retention',()=>expect(()=>retentionPolicy({AUDIT_RETENTION_DAYS:'5'})).toThrow())});

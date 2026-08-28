@@ -14,6 +14,7 @@ import { buildExternalReference } from '../../domain/external-reference';
 import { errorMessage } from '../../security/error-message';
 import { verifyMercadoPagoSignature } from '../../security/webhook-signature';
 import { providerIdempotencyKey } from '../../security/provider-idempotency';
+import { backoffMs, retryAfterMs, shouldRetryHttp } from '../../resilience/http-retry';
 
 type LocalPayment=Prisma.PaymentGetPayload<{}>;
 import { SubscriptionService } from './subscription.service';
@@ -32,10 +33,22 @@ export class BillingService {
   private token(){const token=process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim();if(!token)throw new BadRequestException('Mercado Pago ainda não foi configurado. Informe MERCADO_PAGO_ACCESS_TOKEN no backend.');return token;}
   private sandbox(){return process.env.MERCADO_PAGO_USE_SANDBOX==='true';}
   private async request(path:string,init:RequestInit={},timeoutMs=15_000){
-    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
-    try{return await fetch(`https://api.mercadopago.com${path}`,{...init,signal:controller.signal,headers:{Authorization:`Bearer ${this.token()}`,...(init.headers??{})}});}
-    catch{if(controller.signal.aborted)throw new BadRequestException('O Mercado Pago demorou para responder. Tente novamente em alguns instantes.');throw new BadRequestException('Não foi possível conectar ao Mercado Pago');}
-    finally{clearTimeout(timer);}
+    const maxAttempts=3;
+    for(let attempt=0;attempt<maxAttempts;attempt++){
+      const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
+      try{
+        const response=await fetch(`https://api.mercadopago.com${path}`,{...init,signal:controller.signal,headers:{Authorization:`Bearer ${this.token()}`,'User-Agent':'LuviePro/0.1.0',...(init.headers??{})}});
+        if(attempt<maxAttempts-1&&shouldRetryHttp(response.status)){
+          const delay=Math.max(backoffMs(attempt),retryAfterMs(response.headers.get('retry-after')));await new Promise(resolve=>setTimeout(resolve,delay));continue;
+        }
+        return response;
+      }catch{
+        if(attempt<maxAttempts-1){await new Promise(resolve=>setTimeout(resolve,backoffMs(attempt)));continue;}
+        if(controller.signal.aborted)throw new BadRequestException('O Mercado Pago demorou para responder. Tente novamente em alguns instantes.');
+        throw new BadRequestException('Não foi possível conectar ao Mercado Pago');
+      }finally{clearTimeout(timer);}
+    }
+    throw new BadRequestException('Não foi possível conectar ao Mercado Pago');
   }
 
   async payments(tenantId:string){
