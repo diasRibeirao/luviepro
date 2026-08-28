@@ -48,4 +48,3 @@ export default function Settings(){
       {current==='Usuários e acessos'&&<UsersPanel limit={data.limit.maxUsers} plan={data.tenant.plan}/>} {current==='Perfis e permissões'&&<AccessProfilesPanel/>} {current==='Segurança'&&<SecurityPanel/>} {current==='Auditoria'&&<AuditPanel/>}</View></View>
   </AppShell>
 }
-
