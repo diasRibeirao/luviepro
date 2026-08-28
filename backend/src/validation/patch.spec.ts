@@ -1,0 +1,2 @@
+import { clampInteger, defined, nullableTrimmed } from './patch';
+describe('patch helpers',()=>{it('trims nullable strings',()=>{expect(nullableTrimmed('  x ')).toBe('x');expect(nullableTrimmed('  ')).toBeNull();expect(nullableTrimmed(undefined)).toBeUndefined();});it('keeps false and zero',()=>{expect(defined(false,true)).toBe(false);expect(defined(0,1)).toBe(0);});it('clamps integer values',()=>expect(clampInteger(101.9,0,100)).toBe(100));});

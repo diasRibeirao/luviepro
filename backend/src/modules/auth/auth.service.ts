@@ -5,6 +5,9 @@ import { PrismaService } from '../../prisma.service';
 import { MailService } from '../../mail.service';
 import { AUTH_SECURITY, accountLockedUntil, normalizeEmail, passwordResetExpiresAt } from './auth-security';
 import { AuthSessionService } from './auth-session.service';
+import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
+import type { ForgotPasswordResponse, RegisterInput } from './types/auth.types';
+import { isBillingPeriod, isPlanCode, type BillingPeriod, type PlanCode } from '../../plan-policy';
 
 @Injectable()
 export class AuthService {
@@ -14,8 +17,8 @@ export class AuthService {
     private readonly sessions: AuthSessionService,
   ) {}
 
-  private async audit(tenantId: string, actorUserId: string | undefined, action: string, entity: string, entityId?: string, metadata?: unknown) {
-    await this.db.auditLog.create({ data: { tenantId, actorUserId, action, entity, entityId, metadata: metadata as any } }).catch(() => undefined);
+  private async audit(tenantId: string, actorUserId: string | undefined, action: string, entity: string, entityId?: string, metadata?: AuditMetadata) {
+    await this.db.auditLog.create({ data: { tenantId, actorUserId, action, entity, entityId, metadata: auditMetadata(metadata) } }).catch(() => undefined);
   }
 
   async login(email: string, password: string) {
@@ -65,7 +68,7 @@ export class AuthService {
   async forgotPassword(email: string) {
     const normalized = normalizeEmail(email);
     const user = await this.db.user.findUnique({ where: { email: normalized } });
-    const response: any = { ok: true, message: 'Se o e-mail estiver cadastrado, enviaremos as instruções de recuperação.' };
+    const response: ForgotPasswordResponse = { ok: true, message: 'Se o e-mail estiver cadastrado, enviaremos as instruções de recuperação.' };
     if (!user?.active) return response;
     const raw = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(raw).digest('hex');
@@ -94,15 +97,17 @@ export class AuthService {
     return { ok: true };
   }
 
-  async register(data: any) {
+  async register(data: RegisterInput) {
     const email = normalizeEmail(String(data.email ?? ''));
     const password = String(data.password ?? '');
     const name = String(data.name ?? '').trim();
     const company = String(data.company ?? '').trim();
     if (!email || !name || !company || password.length < AUTH_SECURITY.minPasswordLength) throw new BadRequestException(`Informe empresa, responsável, e-mail e senha com pelo menos ${AUTH_SECURITY.minPasswordLength} caracteres`);
     if (await this.db.user.findUnique({ where: { email } })) throw new ConflictException('Este e-mail já está cadastrado');
-    const plan = ['starter', 'pro', 'business'].includes(data.plan) ? data.plan : 'starter';
-    const period = ['monthly', 'quarterly', 'semiannual', 'annual'].includes(data.period) ? data.period : 'monthly';
+    const planCandidate = data.plan ?? '';
+    const periodCandidate = data.period ?? '';
+    const plan: PlanCode = isPlanCode(planCandidate) ? planCandidate : 'starter';
+    const period: BillingPeriod = isBillingPeriod(periodCandidate) ? periodCandidate : 'monthly';
     const limit = await this.db.planLimit.findUnique({ where: { plan } });
     if (!limit) throw new BadRequestException('Plano indisponível');
     const amountCents = period === 'annual' ? limit.annualPriceCents : period === 'semiannual' ? limit.semiannualPriceCents : period === 'quarterly' ? limit.quarterlyPriceCents : limit.monthlyPriceCents;

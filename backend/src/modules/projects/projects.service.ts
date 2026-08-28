@@ -1,13 +1,15 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
+import { clampInteger, nullableTrimmed } from '../../validation/patch';
 import { CreateProjectStatusDto, CreateProjectTaskDto, UpdateProjectDto, UpdateProjectStatusDto, UpdateProjectTaskDto } from './dto/projects.dto';
 
 @Injectable()
 export class ProjectsService {
   constructor(private readonly db: PrismaService) {}
 
-  private audit(tenantId: string, actorUserId: string | undefined, action: string, entity: string, entityId?: string, metadata?: any) {
-    return this.db.auditLog.create({ data: { tenantId, actorUserId, action, entity, entityId, metadata } });
+  private audit(tenantId: string, actorUserId: string | undefined, action: string, entity: string, entityId?: string, metadata?: AuditMetadata) {
+    return this.db.auditLog.create({ data: { tenantId, actorUserId, action, entity, entityId, metadata: auditMetadata(metadata) } });
   }
 
   async projectStatuses(tenantId: string) {
@@ -101,7 +103,7 @@ export class ProjectsService {
   async updateProject(tenantId: string, id: string, data: UpdateProjectDto, actorUserId?: string) {
     const project = await this.db.project.findFirst({ where: { id, tenantId } });
     if (!project) throw new NotFoundException('Projeto não encontrado');
-    const progress = data.progress === undefined ? project.progress : Math.min(100, Math.max(0, data.progress));
+    const progress = data.progress === undefined ? project.progress : clampInteger(data.progress, 0, 100);
     const status = data.status ?? project.status;
     const normalizedProgress = status === 'completed' ? 100 : progress;
     const updated = await this.db.project.update({
@@ -109,7 +111,7 @@ export class ProjectsService {
       data: {
         status,
         progress: normalizedProgress,
-        notes: data.notes ?? project.notes,
+        notes: data.notes === undefined ? project.notes : nullableTrimmed(data.notes),
         startDate: data.startDate ? new Date(data.startDate) : project.startDate,
         endDate: data.endDate ? new Date(data.endDate) : project.endDate,
       },

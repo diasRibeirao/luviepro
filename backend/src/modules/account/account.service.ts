@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { compare, hash } from 'bcryptjs';
 import { PrismaService } from '../../prisma.service';
+import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
 import { entitlementSnapshot } from '../../entitlements';
 import { isBillingPeriod, isPlanCode } from '../../plan-policy';
 import { AUTH_SECURITY } from '../auth/auth-security';
@@ -10,7 +11,7 @@ import { UpdateAccountDto } from './dto/account.dto';
 export type LogoFile={buffer:Buffer;mimetype:string;size:number};
 @Injectable() export class AccountService {
  constructor(private db:PrismaService,private subscriptions:SubscriptionService){}
- private async audit(tenantId:string,actorUserId:string|undefined,action:string,entity:string,entityId?:string,metadata?:any){await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity,entityId,metadata}}).catch(()=>undefined);}
+ private async audit(tenantId:string,actorUserId:string|undefined,action:string,entity:string,entityId?:string,metadata?:AuditMetadata){await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity,entityId,metadata:auditMetadata(metadata)}}).catch(()=>undefined);}
  plans(){return this.db.planLimit.findMany({orderBy:{monthlyPriceCents:'asc'}});}
  async account(tenantId:string,userId?:string){
   const tenant=await this.subscriptions.activateScheduledIfDue(tenantId);if(!tenant)throw new NotFoundException('Conta não encontrada');

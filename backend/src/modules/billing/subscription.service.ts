@@ -1,11 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 
+type CurrentTenantSnapshot = {
+  id: string;
+  plan: string;
+  subscriptionExpiresAt?: Date | null;
+};
+
 @Injectable()
 export class SubscriptionService {
   constructor(private readonly db: PrismaService) {}
 
-  async activateScheduledIfDue(tenantId: string, currentTenant?: any) {
+  async activateScheduledIfDue<T extends CurrentTenantSnapshot>(tenantId: string, currentTenant?: T | null) {
     const now = new Date();
     const scheduled = await this.db.subscription.findFirst({
       where: { tenantId, status: 'scheduled', startsAt: { lte: now } },

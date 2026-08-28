@@ -1,0 +1,1 @@
+import { invitationExpiry, invitationTtlHours } from './invitation-config';describe('invitation config',()=>{it('defaults to 48h',()=>expect(invitationTtlHours({})).toBe(48));it('computes expiry',()=>expect(invitationExpiry(new Date('2026-01-01T00:00:00Z'),{INVITATION_TTL_HOURS:'24'}).toISOString()).toBe('2026-01-02T00:00:00.000Z'));});

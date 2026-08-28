@@ -3,6 +3,11 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma.service';
 import { capacityReached } from '../../entitlements';
 import { CreateQuoteDto, QuoteItemDto, UpdateQuoteDto } from './dto/quotes.dto';
+import { auditMetadata } from '../../observability/audit-metadata';
+import { toJsonValue } from '../../domain/json-value';
+import type { Prisma } from '../../../../generated-prisma';
+import type { BuiltQuoteItem, QuoteSnapshot, QuoteTimelineEvent } from './types/quote.types';
+import { isQuoteStatus, QUOTE_TRANSITIONS } from './types/quote.types';
 
 type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number;variableCostMode?:string};
 
@@ -10,8 +15,8 @@ type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:num
 export class QuotesService {
   constructor(private readonly db:PrismaService){}
 
-  private async audit(tenantId:string,actorUserId:string|undefined,action:string,entity:string,entityId?:string,metadata?:any){
-    await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity,entityId,metadata}}).catch(()=>undefined);
+  private async audit(tenantId:string,actorUserId:string|undefined,action:string,entity:string,entityId?:string,metadata?:Record<string,string|number|boolean|Date|null|undefined>){
+    await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity,entityId,metadata:auditMetadata(metadata)}}).catch(()=>undefined);
   }
 
   private calculate(x:Calc){
@@ -94,8 +99,19 @@ export class QuotesService {
     const quote=await this.db.quote.findFirst({where:{id,tenantId},select:{id:true,createdAt:true,updatedAt:true,sentAt:true,approvedAt:true,clientDecision:true,clientDecisionAt:true,clientDecisionName:true,status:true,version:true}});
     if(!quote)throw new NotFoundException('Orçamento não encontrado');
     const logs=await this.db.auditLog.findMany({where:{tenantId,entity:'quote',entityId:id},orderBy:{createdAt:'asc'}});
-    const events:any[]=[{type:'created',title:'Orçamento criado',at:quote.createdAt}];
-    for(const log of logs){const m:any=log.metadata??{};if(log.action==='update')events.push({type:'version',title:`Versão ${m.version??''} salva`.trim(),at:log.createdAt,detail:m.itemsChanged?'Serviços e valores atualizados':'Condições atualizadas'});else if(log.action==='change_status')events.push({type:'status',title:m.to==='sent'?'Proposta enviada':m.to==='rejected'?'Orçamento recusado':'Status alterado',at:log.createdAt,detail:m.to});else if(log.action==='share')events.push({type:'share',title:'Link público compartilhado',at:log.createdAt});else if(log.action==='revoke_share')events.push({type:'share',title:'Link público revogado',at:log.createdAt});else if(log.action==='approve')events.push({type:'approved',title:'Orçamento aprovado internamente',at:log.createdAt});else if(log.action==='client_approved')events.push({type:'approved',title:'Cliente aprovou a proposta',at:log.createdAt,detail:m.name});else if(log.action==='client_rejected')events.push({type:'rejected',title:'Cliente recusou a proposta',at:log.createdAt,detail:m.name});else if(log.action==='duplicate')events.push({type:'duplicate',title:'Orçamento duplicado',at:log.createdAt});}
+    const events:QuoteTimelineEvent[]=[{type:'created',title:'Orçamento criado',at:quote.createdAt}];
+    for(const log of logs){
+      const m=(log.metadata&&typeof log.metadata==='object'&&!Array.isArray(log.metadata)?log.metadata:{}) as Record<string,unknown>;
+      const detail=(value:unknown)=>value===undefined||value===null?undefined:String(value);
+      if(log.action==='update')events.push({type:'version',title:`Versão ${detail(m.version)??''} salva`.trim(),at:log.createdAt,detail:m.itemsChanged?'Serviços e valores atualizados':'Condições atualizadas'});
+      else if(log.action==='change_status')events.push({type:'status',title:m.to==='sent'?'Proposta enviada':m.to==='rejected'?'Orçamento recusado':'Status alterado',at:log.createdAt,detail:detail(m.to)});
+      else if(log.action==='share')events.push({type:'share',title:'Link público compartilhado',at:log.createdAt});
+      else if(log.action==='revoke_share')events.push({type:'share',title:'Link público revogado',at:log.createdAt});
+      else if(log.action==='approve')events.push({type:'approved',title:'Orçamento aprovado internamente',at:log.createdAt});
+      else if(log.action==='client_approved')events.push({type:'approved',title:'Cliente aprovou a proposta',at:log.createdAt,detail:detail(m.name)});
+      else if(log.action==='client_rejected')events.push({type:'rejected',title:'Cliente recusou a proposta',at:log.createdAt,detail:detail(m.name)});
+      else if(log.action==='duplicate')events.push({type:'duplicate',title:'Orçamento duplicado',at:log.createdAt});
+    }
     return events.sort((a,b)=>new Date(b.at).getTime()-new Date(a.at).getTime());
   }
 
@@ -105,10 +121,13 @@ export class QuotesService {
     return this.db.quoteVersion.findMany({where:{tenantId,quoteId:id},orderBy:{version:'desc'}});
   }
 
-  private quoteSnapshot(q:any){return {clientId:q.clientId,number:q.number,status:q.status,totalCents:q.totalCents,discountBps:q.discountBps,finalTotalCents:q.finalTotalCents,validityDays:q.validityDays,notes:q.notes,sentAt:q.sentAt,approvedAt:q.approvedAt,validUntil:q.validUntil,items:(q.items??[]).map((i:any)=>({serviceName:i.serviceName,days:i.days,people:i.people,laborCents:i.laborCents,variableCents:i.variableCents,fixedCents:i.fixedCents,marginCents:i.marginCents,totalCents:i.totalCents,configurationJson:i.configurationJson,stages:i.stages??[]}))};}
+  private quoteSnapshot(q:{clientId:string;number:string;status:string;totalCents:number;discountBps:number;finalTotalCents:number;validityDays:number;notes:string|null;sentAt:Date|null;approvedAt:Date|null;validUntil:Date|null;items:Array<{serviceName:string;days:number;people:number;laborCents:number;variableCents:number;fixedCents:number;marginCents:number;totalCents:number;configurationJson:unknown;stages:unknown[]}>}):Prisma.InputJsonObject{
+    const snapshot={clientId:q.clientId,number:q.number,status:q.status,totalCents:q.totalCents,discountBps:q.discountBps,finalTotalCents:q.finalTotalCents,validityDays:q.validityDays,notes:q.notes,sentAt:q.sentAt,approvedAt:q.approvedAt,validUntil:q.validUntil,items:(q.items??[]).map(i=>({serviceName:i.serviceName,days:i.days,people:i.people,laborCents:i.laborCents,variableCents:i.variableCents,fixedCents:i.fixedCents,marginCents:i.marginCents,totalCents:i.totalCents,configurationJson:i.configurationJson??null,stages:i.stages??[]}))};
+    return toJsonValue(snapshot as never) as Prisma.InputJsonObject;
+  }
 
   private async buildQuoteItems(tenantId:string,inputs:QuoteItemDto[]){
-    const items=[] as any[];
+    const items:BuiltQuoteItem[]=[];
     for(const input of inputs){
       const service=await this.db.service.findFirst({where:{id:input.serviceId,tenantId,active:true},include:{stages:{where:{tenantId},orderBy:{sequence:'asc'}}}});
       if(!service)throw new NotFoundException('Serviço não encontrado ou inativo');
@@ -125,7 +144,7 @@ export class QuotesService {
     if(quote.status!=='draft')throw new BadRequestException('Somente orçamentos em rascunho podem ser editados');
     const nextDiscount=data.discountBps??quote.discountBps,nextValidity=data.validityDays??quote.validityDays,nextNotes=data.notes===undefined?quote.notes:data.notes;
     const newItems=data.items?await this.buildQuoteItems(tenantId,data.items):null;
-    const totalCents=newItems?newItems.reduce((sum:number,i:any)=>sum+i.totalCents,0):quote.totalCents;
+    const totalCents=newItems?newItems.reduce((sum,item)=>sum+item.totalCents,0):quote.totalCents;
     const finalTotalCents=Math.round(totalCents*(10000-nextDiscount)/10000);
     const updated=await this.db.$transaction(async tx=>{await tx.quoteVersion.create({data:{tenantId,quoteId:id,version:quote.version,snapshot:this.quoteSnapshot(quote),createdById:actorUserId}});if(newItems)await tx.quoteItem.deleteMany({where:{tenantId,quoteId:id}});return tx.quote.update({where:{id},data:{discountBps:nextDiscount,validityDays:nextValidity,notes:nextNotes,totalCents,finalTotalCents,version:{increment:1},publicToken:null,publicSharedAt:null,clientDecision:null,clientDecisionAt:null,clientDecisionName:null,...(newItems?{items:{create:newItems}}:{})},include:{client:true,items:{where:{tenantId},include:{stages:{where:{tenantId},orderBy:{sequence:'asc'}}}},project:true}});});
     await this.audit(tenantId,actorUserId,'update','quote',id,{version:updated.version,itemsChanged:!!newItems});
@@ -148,7 +167,7 @@ export class QuotesService {
     const client=await this.db.client.findFirst({where:{id:data.clientId,tenantId}});
     if(!client)throw new NotFoundException('Cliente não encontrado');
     const items=await this.buildQuoteItems(tenantId,data.items);
-    const totalCents=items.reduce((sum:number,i:any)=>sum+i.totalCents,0);
+    const totalCents=items.reduce((sum,item)=>sum+item.totalCents,0);
     const discountBps=Math.max(0,Math.min(10000,Number(data.discountBps??0)));
     const finalTotalCents=Math.round(totalCents*(10000-discountBps)/10000);
     const year=new Date().getFullYear();
@@ -162,8 +181,7 @@ export class QuotesService {
     const quote=await this.db.quote.findFirst({where:{id,tenantId}});
     if(!quote)throw new NotFoundException('Orçamento não encontrado');
     if(quote.clientDecision)throw new BadRequestException('A decisão registrada pelo cliente não pode ser reaberta');
-    const allowed:any={draft:['sent'],sent:['draft','rejected'],rejected:['draft']};
-    if(!allowed[quote.status]?.includes(status))throw new BadRequestException(`Não é possível alterar orçamento ${quote.status} para ${status}`);
+    if(!isQuoteStatus(quote.status)||!isQuoteStatus(status)||quote.status==='approved'||!QUOTE_TRANSITIONS[quote.status].includes(status))throw new BadRequestException(`Não é possível alterar orçamento ${quote.status} para ${status}`);
     const now=new Date(),validUntil=status==='sent'?new Date(now.getTime()+quote.validityDays*86400000):quote.validUntil;
     const updated=await this.db.quote.update({where:{id},data:{status,sentAt:status==='sent'?now:quote.sentAt,validUntil:status==='sent'?validUntil:quote.validUntil}});
     await this.audit(tenantId,actorUserId,'change_status','quote',id,{from:quote.status,to:status});

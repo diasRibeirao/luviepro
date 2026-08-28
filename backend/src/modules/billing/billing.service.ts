@@ -2,7 +2,18 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException, 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../../prisma.service';
 import { RedisService } from '../../redis.service';
-import { billingAction, isBillingPeriod, isPlanCode, periodEnd, periodPrice } from '../../plan-policy';
+import { billingAction, isBillingPeriod, isPlanCode, periodEnd, periodPrice, type BillingPeriod, type PlanCode } from '../../plan-policy';
+import { auditMetadata } from '../../observability/audit-metadata';
+import { toJsonValue } from '../../domain/json-value';
+import type { MercadoPagoWebhookDto } from './dto/billing.dto';
+import type { CheckoutPreferenceBody, MercadoPagoPayment, MercadoPagoPreferenceResponse, MercadoPagoSearchResponse } from './types/mercado-pago.types';
+import { jsonObject } from './types/mercado-pago.types';
+import type { Prisma } from '../../../../generated-prisma';
+import { normalizePaymentStatus } from '../../domain/payment-status';
+import { buildExternalReference } from '../../domain/external-reference';
+import { errorMessage } from '../../security/error-message';
+
+type LocalPayment=Prisma.PaymentGetPayload<{}>;
 import { SubscriptionService } from './subscription.service';
 
 @Injectable()
@@ -13,8 +24,8 @@ export class BillingService {
     @Optional() private readonly redis?: RedisService,
   ) {}
 
-  private async audit(tenantId:string,actorUserId:string|undefined,action:string,entity:string,entityId?:string,metadata?:any){
-    await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity,entityId,metadata}}).catch(()=>undefined);
+  private async audit(tenantId:string,actorUserId:string|undefined,action:string,entity:string,entityId?:string,metadata?:Record<string,string|number|boolean|Date|null|undefined>){
+    await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity,entityId,metadata:auditMetadata(metadata)}}).catch(()=>undefined);
   }
   private token(){const token=process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim();if(!token)throw new BadRequestException('Mercado Pago ainda não foi configurado. Informe MERCADO_PAGO_ACCESS_TOKEN no backend.');return token;}
   private sandbox(){return process.env.MERCADO_PAGO_USE_SANDBOX==='true';}
@@ -47,34 +58,34 @@ export class BillingService {
     throw new ConflictException('Um checkout já está sendo preparado. Aguarde alguns segundos e tente novamente.');
   }
 
-  private async createCheckoutUnlocked(tenantId:string,actorUserId:string,plan:string,period:string){
+  private async createCheckoutUnlocked(tenantId:string,actorUserId:string,plan:PlanCode,period:BillingPeriod){
     this.token();
     const [tenant,limit,user]=await Promise.all([this.subscriptions.activateScheduledIfDue(tenantId),this.db.planLimit.findUnique({where:{plan}}),this.db.user.findFirst({where:{id:actorUserId,tenantId}})]);
     if(!tenant||!limit||!user)throw new NotFoundException('Conta, usuário ou plano não encontrado');
-    const amountCents=periodPrice(limit,period as any);if(amountCents<=0)throw new BadRequestException('Este plano não possui preço configurado para o período selecionado');
+    const amountCents=periodPrice(limit,period);if(amountCents<=0)throw new BadRequestException('Este plano não possui preço configurado para o período selecionado');
     const action=billingAction(tenant.plan,plan,tenant.subscriptionExpiresAt);const effectiveAt=action==='downgrade'&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>new Date()?tenant.subscriptionExpiresAt:new Date();
     const checkoutLimit=new Date(Date.now()-30*60*1000);
     const reusable=await this.db.payment.findFirst({where:{tenantId,plan,period,status:'pending',providerPaymentId:null,checkoutUrl:{not:null},createdAt:{gte:checkoutLimit}},orderBy:{createdAt:'desc'}});
     if(reusable?.checkoutUrl){await this.audit(tenantId,actorUserId,'resume_checkout','payment',reusable.id,{plan,period});return {paymentId:reusable.id,preferenceId:reusable.providerPreferenceId,checkoutUrl:reusable.checkoutUrl,webhookConfigured:!!process.env.MERCADO_PAGO_WEBHOOK_URL,sandbox:this.sandbox(),billingAction:reusable.billingAction,effectiveAt,reused:true};}
     await this.db.payment.updateMany({where:{tenantId,plan,period,status:'pending',providerPaymentId:null,createdAt:{lt:checkoutLimit}},data:{status:'cancelled',cancelledAt:new Date(),providerStatusDetail:'checkout_expired'}});
-    const externalReference=`luviepro_${tenantId}_${Date.now()}_${randomBytes(4).toString('hex')}`;
+    const externalReference=buildExternalReference('luviepro',tenantId,randomBytes(4).toString('hex'));
     const payment=await this.db.payment.create({data:{tenantId,externalReference,plan,period,amountCents,status:'pending',billingAction:action,currency:'BRL',payerEmail:user.email}});
     const appUrl=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');const webhookUrl=process.env.MERCADO_PAGO_WEBHOOK_URL?.trim();const hasUsableReturn=!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(appUrl);
     const periodLabel=({monthly:'mensal',quarterly:'trimestral',semiannual:'semestral',annual:'anual'} as Record<string,string>)[period]??period;
-    const body:any={items:[{id:`${plan}-${period}`,title:`LuviePro ${plan[0].toUpperCase()+plan.slice(1)} — ${periodLabel}`,description:`Assinatura LuviePro (${periodLabel})`,currency_id:'BRL',quantity:1,unit_price:amountCents/100}],payer:{email:user.email},external_reference:externalReference,metadata:{payment_id:payment.id,tenant_id:tenantId,plan,period,billing_action:action},statement_descriptor:'LUVIEPRO'};
+    const body:CheckoutPreferenceBody={items:[{id:`${plan}-${period}`,title:`LuviePro ${plan[0].toUpperCase()+plan.slice(1)} — ${periodLabel}`,description:`Assinatura LuviePro (${periodLabel})`,currency_id:'BRL',quantity:1,unit_price:amountCents/100}],payer:{email:user.email},external_reference:externalReference,metadata:{payment_id:payment.id,tenant_id:tenantId,plan,period,billing_action:action},statement_descriptor:'LUVIEPRO'};
     if(hasUsableReturn){body.back_urls={success:`${appUrl}/plans?payment=success`,pending:`${appUrl}/plans?payment=pending`,failure:`${appUrl}/plans?payment=failure`};body.auto_return='approved';}if(webhookUrl?.startsWith('https://'))body.notification_url=webhookUrl;
     let response:Response;try{response=await this.request('/checkout/preferences',{method:'POST',headers:{'Content-Type':'application/json','X-Idempotency-Key':payment.id},body:JSON.stringify(body)});}catch(error){await this.db.payment.update({where:{id:payment.id},data:{status:'error'}});if(error instanceof BadRequestException)throw error;throw new BadRequestException('Não foi possível conectar ao Mercado Pago');}
-    const result:any=await response.json().catch(()=>({}));if(!response.ok){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:result}});throw new BadRequestException(result?.message||'Mercado Pago recusou a criação do checkout');}
-    const checkoutUrl=(this.sandbox()?result.sandbox_init_point:result.init_point)||result.init_point;if(!checkoutUrl){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:result}});throw new BadRequestException('Mercado Pago não retornou uma URL de checkout');}
-    await this.db.payment.update({where:{id:payment.id},data:{providerPreferenceId:String(result.id),checkoutUrl,raw:result}});await this.audit(tenantId,actorUserId,'create_checkout','payment',payment.id,{plan,period,amountCents,provider:'mercado_pago',billingAction:action,sandbox:this.sandbox(),effectiveAt});
+    const result=await jsonObject<MercadoPagoPreferenceResponse>(response);if(!response.ok){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:toJsonValue(result) as Prisma.InputJsonValue}});throw new BadRequestException(result.message||'Mercado Pago recusou a criação do checkout');}
+    const checkoutUrl=(this.sandbox()?result.sandbox_init_point:result.init_point)||result.init_point;if(!checkoutUrl){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:toJsonValue(result) as Prisma.InputJsonValue}});throw new BadRequestException('Mercado Pago não retornou uma URL de checkout');}
+    await this.db.payment.update({where:{id:payment.id},data:{providerPreferenceId:String(result.id),checkoutUrl,raw:toJsonValue(result) as Prisma.InputJsonValue}});await this.audit(tenantId,actorUserId,'create_checkout','payment',payment.id,{plan,period,amountCents,provider:'mercado_pago',billingAction:action,sandbox:this.sandbox(),effectiveAt});
     return {paymentId:payment.id,preferenceId:result.id,checkoutUrl,webhookConfigured:!!body.notification_url,sandbox:this.sandbox(),billingAction:action,effectiveAt};
   }
 
   private validSignature(dataId:string,signature?:string,requestId?:string){const secret=process.env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();if(!secret)return process.env.NODE_ENV!=='production'&&process.env.MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS==='true';if(!signature||!requestId||!dataId)return false;const parts=Object.fromEntries(signature.split(',').map(part=>part.trim().split('=',2))) as Record<string,string>;if(!parts.ts||!parts.v1)return false;const manifest=`id:${String(dataId).toLowerCase()};request-id:${requestId};ts:${parts.ts};`;const expected=createHmac('sha256',secret).update(manifest).digest('hex');const received=parts.v1;return expected.length===received.length&&timingSafeEqual(Buffer.from(expected),Buffer.from(received));}
-  private async fetchPayment(providerPaymentId:string){const response=await this.request(`/v1/payments/${encodeURIComponent(providerPaymentId)}`);if(!response.ok)throw new BadRequestException('Pagamento não encontrado no Mercado Pago');return response.json() as Promise<any>;}
-  private mapStatus(status:string){return ({approved:'approved',pending:'pending',in_process:'pending',rejected:'rejected',cancelled:'cancelled',refunded:'refunded',charged_back:'charged_back'} as Record<string,string>)[status]||String(status||'pending');}
+  private async fetchPayment(providerPaymentId:string):Promise<MercadoPagoPayment>{const response=await this.request(`/v1/payments/${encodeURIComponent(providerPaymentId)}`);if(!response.ok)throw new BadRequestException('Pagamento não encontrado no Mercado Pago');const payload=await jsonObject<MercadoPagoPayment>(response);if(payload.id===undefined)throw new BadRequestException('Resposta inválida do Mercado Pago');return payload as MercadoPagoPayment;}
+  private mapStatus(status?:string|null){return normalizePaymentStatus(status);}
 
-  private async processPayment(remote:any,local:any){
+  private async processPayment(remote:MercadoPagoPayment,local:LocalPayment){
     if(!this.redis)return this.processPaymentUnlocked(remote,local);
     for(let attempt=0;attempt<12;attempt++){
       const lock=await this.redis.withLock(`payment:${local.id}`,20_000,async()=>{const current=await this.db.payment.findUnique({where:{id:local.id}});if(!current)throw new NotFoundException('Cobrança não encontrada');return this.processPaymentUnlocked(remote,current);});
@@ -83,11 +94,11 @@ export class BillingService {
     throw new ConflictException('Esta cobrança já está sendo processada. Tente novamente em alguns segundos.');
   }
 
-  private async processPaymentUnlocked(remote:any,local:any){
+  private async processPaymentUnlocked(remote:MercadoPagoPayment,local:LocalPayment){
     const paymentId=String(remote.id||'');const mapped=this.mapStatus(remote.status);const remoteAmount=Math.round(Number(remote.transaction_amount??0)*100);const remoteCurrency=String(remote.currency_id||'BRL');
     if(String(remote.external_reference||'')!==local.externalReference)throw new BadRequestException('Referência do pagamento não confere');if(remoteAmount!==local.amountCents)throw new BadRequestException('Valor confirmado pelo Mercado Pago não confere com a cobrança');if(remoteCurrency!=='BRL')throw new BadRequestException('Moeda do pagamento não confere com a cobrança');
     if(local.status==='approved'&&['pending','rejected','cancelled'].includes(mapped)){await this.audit(local.tenantId,undefined,'payment_status_regression_ignored','payment',local.id,{providerPaymentId:paymentId,currentStatus:local.status,receivedStatus:mapped});return {ok:true,status:local.status,paymentId:local.id,ignored:true};}
-    const now=new Date();const common:any={providerPaymentId:paymentId,status:mapped,providerStatus:String(remote.status||mapped),providerStatusDetail:remote.status_detail?String(remote.status_detail):null,paymentMethod:remote.payment_type_id||remote.payment_method_id||null,currency:remoteCurrency,payerEmail:remote.payer?.email||local.payerEmail||null,raw:remote};
+    const now=new Date();const common:Prisma.PaymentUncheckedUpdateInput={providerPaymentId:paymentId,status:mapped,providerStatus:String(remote.status||mapped),providerStatusDetail:remote.status_detail?String(remote.status_detail):null,paymentMethod:remote.payment_type_id||remote.payment_method_id||null,currency:remoteCurrency,payerEmail:remote.payer?.email||local.payerEmail||null,raw:toJsonValue(remote as unknown as Record<string,string|number|boolean|null|undefined>) as Prisma.InputJsonValue};
     if(mapped==='approved'&&local.status!=='approved'){
       common.paidAt=remote.date_approved?new Date(remote.date_approved):now;const tenant=await this.subscriptions.activateScheduledIfDue(local.tenantId);if(!tenant)throw new NotFoundException('Conta da cobrança não encontrada');
       const action=local.billingAction||billingAction(tenant.plan,local.plan,tenant.subscriptionExpiresAt);let start=now;if((action==='renewal'||action==='downgrade')&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>now)start=tenant.subscriptionExpiresAt;const expiresAt=periodEnd(start,local.period);const scheduled=start.getTime()>now.getTime()+1000;
@@ -97,19 +108,19 @@ export class BillingService {
     return {ok:true,status:mapped,paymentId:local.id};
   }
 
-  private webhookEventKey(body:any,paymentId:string,requestId?:string){
+  private webhookEventKey(body:MercadoPagoWebhookDto,paymentId:string,requestId?:string){
     const explicit=String(requestId||body?.id||body?.notification_id||'').trim();
     if(explicit)return explicit;
     return createHash('sha256').update(JSON.stringify({paymentId,type:body?.type??null,action:body?.action??null,date:body?.date_created??body?.created_at??null,body})).digest('hex');
   }
 
-  private async claimWebhookEvent(body:any,paymentId:string,requestId?:string){
+  private async claimWebhookEvent(body:MercadoPagoWebhookDto,paymentId:string,requestId?:string){
     const eventKey=this.webhookEventKey(body,paymentId,requestId);const provider='mercado_pago';
     try{
-      const event=await this.db.webhookEvent.create({data:{provider,eventKey,resourceId:paymentId,requestId:requestId||null,eventType:String(body?.action||body?.type||'payment'),payload:body,status:'processing'}});
+      const event=await this.db.webhookEvent.create({data:{provider,eventKey,resourceId:paymentId,requestId:requestId||null,eventType:String(body?.action||body?.type||'payment'),payload:toJsonValue(body as unknown as Record<string, string | number | null | undefined>) as Prisma.InputJsonValue,status:'processing'}});
       return {event,duplicate:false};
-    }catch(error:any){
-      if(error?.code!=='P2002')throw error;
+    }catch(error:unknown){
+      if(!(error&&typeof error==='object'&&'code' in error&&(error as {code?:string}).code==='P2002'))throw error;
       const existing=await this.db.webhookEvent.findUnique({where:{provider_eventKey:{provider,eventKey}}});
       if(!existing)return {event:null,duplicate:true};
       if(['processed','ignored'].includes(existing.status))return {event:existing,duplicate:true};
@@ -120,7 +131,7 @@ export class BillingService {
     }
   }
 
-  async webhook(body:any,dataId?:string,signature?:string,requestId?:string){
+  async webhook(body:MercadoPagoWebhookDto,dataId?:string,signature?:string,requestId?:string){
     const paymentId=String(dataId||body?.data?.id||'');if(!paymentId)return {ok:true,ignored:true};
     if(!this.validSignature(paymentId,signature,requestId))throw new UnauthorizedException('Assinatura do webhook inválida');
     const claimed=await this.claimWebhookEvent(body,paymentId,requestId);
@@ -134,8 +145,9 @@ export class BillingService {
       const result=await this.processPayment(remote,local);
       if(eventId)await this.db.webhookEvent.update({where:{id:eventId},data:{status:'processed',processedAt:new Date(),lastError:null}});
       return result;
-    }catch(error:any){
-      if(eventId)await this.db.webhookEvent.update({where:{id:eventId},data:{status:'failed',lastError:String(error?.message||error).slice(0,1000)}}).catch(()=>undefined);
+    }catch(error:unknown){
+      const message=errorMessage(error);
+      if(eventId)await this.db.webhookEvent.update({where:{id:eventId},data:{status:'failed',lastError:message.slice(0,1000)}}).catch(()=>undefined);
       throw error;
     }
   }
@@ -146,9 +158,9 @@ export class BillingService {
     const result={scanned:rows.length,approved:0,pending:0,failed:0,skipped:0};
     for(const local of rows){
       try{
-        let remote:any;
+        let remote:MercadoPagoPayment;
         if(local.providerPaymentId)remote=await this.fetchPayment(local.providerPaymentId);
-        else{const search=await this.request(`/v1/payments/search?external_reference=${encodeURIComponent(local.externalReference)}`);if(!search.ok){result.failed++;continue;}const payload:any=await search.json();remote=payload?.results?.[0];if(!remote){result.skipped++;continue;}}
+        else{const search=await this.request(`/v1/payments/search?external_reference=${encodeURIComponent(local.externalReference)}`);if(!search.ok){result.failed++;continue;}const payload=await jsonObject<MercadoPagoSearchResponse>(search);remote=payload.results?.[0] as MercadoPagoPayment;if(!remote){result.skipped++;continue;}}
         const processed=await this.processPayment(remote,local);if(processed.status==='approved')result.approved++;else result.pending++;
       }catch{result.failed++;}
     }
@@ -164,8 +176,8 @@ export class BillingService {
       this.db.webhookEvent.count({where:{tenantId,status:'failed',createdAt:{gte:since24h}}}),
       this.db.webhookEvent.count({where:{tenantId,createdAt:{gte:since24h}}}),
     ]);
-    return {payments:Object.fromEntries(byStatus.map((x:any)=>[x.status,x._count._all])),stalePending,approved24h:{count:approved24h._count._all,amountCents:approved24h._sum.amountCents??0},webhooks24h:{total:webhooks24h,failed:failedWebhooks24h},timestamp:new Date().toISOString()};
+    return {payments:Object.fromEntries(byStatus.map(x=>[x.status,x._count._all])),stalePending,approved24h:{count:approved24h._count._all,amountCents:approved24h._sum.amountCents??0},webhooks24h:{total:webhooks24h,failed:failedWebhooks24h},timestamp:new Date().toISOString()};
   }
   async reconcileReturn(tenantId:string,providerPaymentId:string,actorUserId?:string){if(!providerPaymentId)throw new BadRequestException('Identificador do pagamento não informado');const remote=await this.fetchPayment(providerPaymentId);const externalReference=String(remote.external_reference||'');if(!externalReference)throw new BadRequestException('Pagamento sem referência externa');const local=await this.db.payment.findFirst({where:{tenantId,externalReference}});if(!local)throw new NotFoundException('Cobrança correspondente não encontrada');const result=await this.processPayment(remote,local);await this.audit(tenantId,actorUserId,'reconcile_checkout_return','payment',local.id,{providerPaymentId:String(providerPaymentId),status:result.status});return result;}
-  async reconcile(tenantId:string,id:string,actorUserId:string){const local=await this.db.payment.findFirst({where:{id,tenantId}});if(!local)throw new NotFoundException('Cobrança não encontrada');if(!local.providerPaymentId){if(!local.externalReference)throw new BadRequestException('Cobrança sem referência externa');const search=await this.request(`/v1/payments/search?external_reference=${encodeURIComponent(local.externalReference)}`);if(!search.ok)throw new BadRequestException('Não foi possível consultar a cobrança no Mercado Pago');const result:any=await search.json();const remote=result?.results?.[0];if(!remote)throw new BadRequestException('Pagamento ainda não localizado no Mercado Pago');const processed=await this.processPayment(remote,local);await this.audit(tenantId,actorUserId,'reconcile_payment','payment',id,{providerPaymentId:String(remote.id)});return processed;}const remote=await this.fetchPayment(local.providerPaymentId);const processed=await this.processPayment(remote,local);await this.audit(tenantId,actorUserId,'reconcile_payment','payment',id,{providerPaymentId:local.providerPaymentId});return processed;}
+  async reconcile(tenantId:string,id:string,actorUserId:string){const local=await this.db.payment.findFirst({where:{id,tenantId}});if(!local)throw new NotFoundException('Cobrança não encontrada');if(!local.providerPaymentId){if(!local.externalReference)throw new BadRequestException('Cobrança sem referência externa');const search=await this.request(`/v1/payments/search?external_reference=${encodeURIComponent(local.externalReference)}`);if(!search.ok)throw new BadRequestException('Não foi possível consultar a cobrança no Mercado Pago');const result=await jsonObject<MercadoPagoSearchResponse>(search);const remote=result.results?.[0];if(!remote)throw new BadRequestException('Pagamento ainda não localizado no Mercado Pago');const processed=await this.processPayment(remote,local);await this.audit(tenantId,actorUserId,'reconcile_payment','payment',id,{providerPaymentId:String(remote.id)});return processed;}const remote=await this.fetchPayment(local.providerPaymentId);const processed=await this.processPayment(remote,local);await this.audit(tenantId,actorUserId,'reconcile_payment','payment',id,{providerPaymentId:local.providerPaymentId});return processed;}
 }

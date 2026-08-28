@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import type { Prisma } from '../../../../generated-prisma';
+import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
 import { capacityReached } from '../../entitlements';
 import { CreateClientDto, UpdateClientDto } from './dto/clients.dto';
 
@@ -7,38 +9,28 @@ import { CreateClientDto, UpdateClientDto } from './dto/clients.dto';
 export class ClientsService {
   constructor(private readonly db:PrismaService){}
 
-  private async audit(tenantId:string,actorUserId:string|undefined,action:string,entityId:string,metadata?:any){
-    await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity:'client',entityId,metadata}}).catch(()=>undefined);
+  private async audit(tenantId:string,actorUserId:string|undefined,action:string,entityId:string,metadata?:AuditMetadata){
+    await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity:'client',entityId,metadata:auditMetadata(metadata)}}).catch(()=>undefined);
   }
 
-  private normalize(data:CreateClientDto|UpdateClientDto,current?:any){
-    const value=(key:keyof CreateClientDto, fallback:any=null)=>{
-      const incoming=(data as any)[key];
-      if(incoming===undefined)return current ? current[key] : fallback;
-      if(typeof incoming==='string')return incoming.trim()||null;
-      return incoming;
+  private normalize(data:CreateClientDto|UpdateClientDto,current?:Prisma.ClientGetPayload<Record<string, never>>):Prisma.ClientUncheckedCreateWithoutTenantInput {
+    const input=data as UpdateClientDto;
+    const text=(key:keyof UpdateClientDto,fallback:string|null=null):string|null=>{
+      const incoming=input[key];
+      if(incoming===undefined)return current ? ((current[key as keyof typeof current] as string|null|undefined)??fallback) : fallback;
+      if(typeof incoming!=='string')return fallback;
+      return incoming.trim()||null;
     };
-    const name=(data as any).name===undefined&&current?current.name:String((data as any).name??'').trim();
+    const name=input.name===undefined&&current?current.name:String(input.name??'').trim();
     return {
-      type:value('type',current?.type??'individual')??'individual',
+      type:text('type',current?.type??'individual')??'individual',
       name,
-      legalName:value('legalName'),
-      document:value('document'),
-      stateRegistration:value('stateRegistration'),
-      municipalRegistration:value('municipalRegistration'),
-      contactName:value('contactName'),
-      phone:value('phone'),
-      whatsapp:value('whatsapp'),
-      email:value('email'),
-      zipCode:value('zipCode'),
-      addressLine:value('addressLine'),
-      addressNumber:value('addressNumber'),
-      addressComplement:value('addressComplement'),
-      neighborhood:value('neighborhood'),
-      city:value('city'),
-      state:value('state'),
-      notes:value('notes'),
-      active:(data as any).active===undefined?(current?.active??true):!!(data as any).active,
+      legalName:text('legalName'), document:text('document'), stateRegistration:text('stateRegistration'),
+      municipalRegistration:text('municipalRegistration'), contactName:text('contactName'), phone:text('phone'),
+      whatsapp:text('whatsapp'), email:text('email'), zipCode:text('zipCode'), addressLine:text('addressLine'),
+      addressNumber:text('addressNumber'), addressComplement:text('addressComplement'), neighborhood:text('neighborhood'),
+      city:text('city'), state:text('state'), notes:text('notes'),
+      active:input.active===undefined?(current?.active??true):input.active,
     };
   }
 

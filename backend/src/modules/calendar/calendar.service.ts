@@ -1,13 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
+import { assertDateOrder, parseDateOrThrow } from '../../validation/dates';
 import { CalendarEventDto, UpdateCalendarEventDto } from './dto/calendar.dto';
 
 @Injectable()
 export class CalendarService {
   constructor(private readonly db: PrismaService) {}
 
-  private audit(tenantId: string, actorUserId: string | undefined, action: string, entity: string, entityId?: string, metadata?: any) {
-    return this.db.auditLog.create({ data: { tenantId, actorUserId, action, entity, entityId, metadata } });
+  private audit(tenantId: string, actorUserId: string | undefined, action: string, entity: string, entityId?: string, metadata?: AuditMetadata) {
+    return this.db.auditLog.create({ data: { tenantId, actorUserId, action, entity, entityId, metadata: auditMetadata(metadata) } });
   }
 
   list(tenantId: string) {
@@ -19,8 +21,8 @@ export class CalendarService {
   }
 
   async create(tenantId: string, userId: string, data: CalendarEventDto) {
-    const startAt = new Date(data.startAt);
-    const endAt = data.endAt ? new Date(data.endAt) : null;
+    const startAt = parseDateOrThrow(data.startAt, 'Data inicial');
+    const endAt = data.endAt ? parseDateOrThrow(data.endAt, 'Data final') : null;
     this.validateDates(startAt, endAt);
     await this.validateRelations(tenantId, data.clientId, data.projectId);
     const event = await this.db.calendarEvent.create({
@@ -55,8 +57,8 @@ export class CalendarService {
   async update(tenantId: string, id: string, userId: string, data: UpdateCalendarEventDto) {
     const event = await this.db.calendarEvent.findFirst({ where: { id, tenantId } });
     if (!event) throw new NotFoundException('Compromisso não encontrado');
-    const startAt = data.startAt === undefined ? event.startAt : new Date(data.startAt);
-    const endAt = data.endAt === undefined ? event.endAt : (data.endAt ? new Date(data.endAt) : null);
+    const startAt = data.startAt === undefined ? event.startAt : parseDateOrThrow(data.startAt, 'Data inicial');
+    const endAt = data.endAt === undefined ? event.endAt : (data.endAt ? parseDateOrThrow(data.endAt, 'Data final') : null);
     this.validateDates(startAt, endAt);
     await this.validateRelations(tenantId, data.clientId, data.projectId);
     const updated = await this.db.calendarEvent.update({
@@ -82,7 +84,7 @@ export class CalendarService {
 
   private validateDates(startAt: Date, endAt: Date | null) {
     if (Number.isNaN(startAt.getTime()) || (endAt && Number.isNaN(endAt.getTime()))) throw new BadRequestException('Data do compromisso inválida');
-    if (endAt && endAt < startAt) throw new BadRequestException('O término deve ser posterior ao início');
+    assertDateOrder(startAt, endAt);
   }
 
   private async validateRelations(tenantId: string, clientId?: string, projectId?: string) {

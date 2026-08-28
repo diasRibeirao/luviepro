@@ -1,0 +1,2 @@
+import { MailService } from './mail.service';
+describe('MailService',()=>{it('returns not_configured when SMTP is absent',async()=>{const old=process.env.SMTP_HOST;delete process.env.SMTP_HOST;await expect(new MailService().sendPasswordReset({to:'a@b.com',name:'A',resetUrl:'https://example.test',expiresAt:new Date()})).resolves.toEqual({sent:false,reason:'not_configured'});if(old)process.env.SMTP_HOST=old;});});
