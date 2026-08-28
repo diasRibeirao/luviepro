@@ -1,0 +1,1 @@
+import {readFileSync} from 'fs';import {resolve} from 'path';describe('resilience architecture',()=>{it('bounds readiness dependency checks',()=>{const s=readFileSync(resolve(process.cwd(),'src','health.service.ts'),'utf8');expect(s).toContain("withTimeout(this.db.$queryRaw");expect(s).toContain('withTimeout(this.redis.ping()');});});

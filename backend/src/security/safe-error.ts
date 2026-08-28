@@ -1,0 +1,1 @@
+export function safeErrorMessage(error:unknown,production=process.env.NODE_ENV==='production'){if(production)return 'Erro interno do servidor';return error instanceof Error?error.message:String(error)}

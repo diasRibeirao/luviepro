@@ -1,0 +1,1 @@
+export type Pagination={page:number;pageSize:number;skip:number;take:number};export function pagination(page:unknown,pageSize:unknown,max=100):Pagination{const p=Math.max(1,Number.parseInt(String(page??'1'),10)||1);const size=Math.min(max,Math.max(1,Number.parseInt(String(pageSize??'20'),10)||20));return {page:p,pageSize:size,skip:(p-1)*size,take:size}}

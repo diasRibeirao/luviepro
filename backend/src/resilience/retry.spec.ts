@@ -1,0 +1,1 @@
+import {retry} from './retry';describe('retry',()=>{it('retries transient failures',async()=>{let n=0;await expect(retry(async()=>{if(++n<3)throw new Error('x');return 'ok'},{attempts:3})).resolves.toBe('ok');expect(n).toBe(3)});});

@@ -1,0 +1,1 @@
+import {MetricsService} from './metrics.service';describe('MetricsService',()=>{it('counts requests without high-cardinality paths',()=>{const m=new MetricsService();m.recordRequest('GET',200);m.recordRequest('GET',503);expect(m.snapshot().requests).toEqual({'GET|2xx':1,'GET|5xx':1});expect(m.prometheus()).toContain('luviepro_http_requests_total');});});

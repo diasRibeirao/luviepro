@@ -1,0 +1,1 @@
+import {envString} from './env';export function buildInfo(env:NodeJS.ProcessEnv=process.env){return {version:envString(env,'APP_VERSION','dev'),commit:envString(env,'GIT_COMMIT','unknown'),environment:envString(env,'NODE_ENV','development')}}

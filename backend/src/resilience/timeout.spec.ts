@@ -1,0 +1,1 @@
+import {withTimeout} from './timeout';describe('withTimeout',()=>{it('returns fast result',async()=>expect(await withTimeout(Promise.resolve(3),50)).toBe(3));it('rejects slow result',async()=>await expect(withTimeout(new Promise(r=>setTimeout(()=>r(1),30)),5,'db')).rejects.toThrow('db timed out'));});

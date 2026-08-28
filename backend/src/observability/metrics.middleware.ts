@@ -1,0 +1,1 @@
+import type {NextFunction,Request,Response} from 'express';import {MetricsService} from './metrics.service';export function metricsMiddleware(metrics:MetricsService){return(req:Request,res:Response,next:NextFunction)=>{res.on('finish',()=>metrics.recordRequest(req.method,res.statusCode));next();};}

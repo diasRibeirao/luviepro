@@ -24,10 +24,13 @@ import { PricingModule } from './modules/pricing/pricing.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AccountModule } from './modules/account/account.module';
+import {ObservabilityModule} from './observability/observability.module';
+import {MetricsController} from './observability/metrics.controller';
 
 @Module({
   imports:[
     CoreModule,
+    ObservabilityModule,
     JwtModule.register({global:true,secret:process.env.JWT_SECRET ?? (process.env.NODE_ENV==='production'?(()=>{throw new Error('JWT_SECRET não configurado')})():'local-dev-secret'),signOptions:{expiresIn:AUTH_SECURITY.accessTokenTtl}}),
     AuthModule,
     BillingModule,
@@ -44,7 +47,7 @@ import { AccountModule } from './modules/account/account.module';
     DashboardModule,
     PricingModule,
   ],
-  controllers:[HealthController],
+  controllers:[HealthController,MetricsController],
   providers:[
     HealthService,
     ApiService,

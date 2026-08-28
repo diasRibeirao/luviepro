@@ -1,0 +1,1 @@
+export async function retry<T>(fn:()=>Promise<T>,options:{attempts:number;delayMs?:number;shouldRetry?:(e:unknown)=>boolean}):Promise<T>{let last:unknown;for(let i=1;i<=options.attempts;i++){try{return await fn()}catch(e){last=e;if(i===options.attempts||options.shouldRetry?.(e)===false)throw e;if(options.delayMs)await new Promise(r=>setTimeout(r,options.delayMs))}}throw last}

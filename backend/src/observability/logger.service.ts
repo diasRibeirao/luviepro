@@ -1,0 +1,3 @@
+import {Injectable} from '@nestjs/common';import {redact} from './redact';
+type Level='debug'|'info'|'warn'|'error';
+@Injectable() export class AppLogger {private write(level:Level,event:string,meta:Record<string,unknown>={}){if(level==='debug'&&process.env.LOG_LEVEL!=='debug')return;const line=JSON.stringify({timestamp:new Date().toISOString(),level,event,...redact(meta) as object});(level==='error'?console.error:level==='warn'?console.warn:console.log)(line);}debug(e:string,m?:Record<string,unknown>){this.write('debug',e,m)}info(e:string,m?:Record<string,unknown>){this.write('info',e,m)}warn(e:string,m?:Record<string,unknown>){this.write('warn',e,m)}error(e:string,m?:Record<string,unknown>){this.write('error',e,m)}}

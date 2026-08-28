@@ -1,0 +1,1 @@
+import {redact} from './redact';describe('redact',()=>{it('redacts nested secrets',()=>expect(redact({email:'a@b.com',password:'x',nested:{accessToken:'y'}})).toEqual({email:'a@b.com',password:'[REDACTED]',nested:{accessToken:'[REDACTED]'}}));});

@@ -1,0 +1,1 @@
+import {Controller,Get,Header} from '@nestjs/common';import {Public} from '../public.decorator';import {MetricsService} from './metrics.service';@Controller('metrics')export class MetricsController{constructor(private metrics:MetricsService){}@Public()@Get()@Header('content-type','text/plain; version=0.0.4; charset=utf-8')get(){return this.metrics.prometheus()}}
