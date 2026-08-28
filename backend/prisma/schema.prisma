@@ -160,13 +160,13 @@ model User {
   role String @default("admin")
   customProfileId String?
   customProfile AccessProfile? @relation(fields: [customProfileId], references: [id], onDelete: SetNull)
-  refreshTokenHash String?
   active Boolean @default(true)
   lastLoginAt DateTime?
   failedLoginAttempts Int @default(0)
   lockedUntil DateTime?
   passwordChangedAt DateTime?
   passwordResetTokens PasswordResetToken[]
+  authSessions AuthSession[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([customProfileId])
@@ -180,9 +180,31 @@ model PlatformAdmin {
   role String @default("platform_admin")
   active Boolean @default(true)
   lastLoginAt DateTime?
-  refreshTokenHash String?
+  authSessions AuthSession[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+model AuthSession {
+  id String @id
+  familyId String
+  userId String?
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platformAdminId String?
+  platformAdmin PlatformAdmin? @relation(fields: [platformAdminId], references: [id], onDelete: Cascade)
+  tenantId String?
+  refreshTokenHash String
+  expiresAt DateTime
+  lastUsedAt DateTime?
+  revokedAt DateTime?
+  revokedReason String?
+  replacedBySessionId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([familyId, revokedAt])
+  @@index([userId, revokedAt, expiresAt])
+  @@index([platformAdminId, revokedAt, expiresAt])
+  @@index([tenantId, revokedAt, expiresAt])
+  @@index([expiresAt])
 }
 model PasswordResetToken {
   id String @id @default(cuid())

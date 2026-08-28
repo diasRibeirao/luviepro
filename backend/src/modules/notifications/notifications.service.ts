@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
-import { NotificationPreferencesDto } from '../../dtos';
+import { NotificationPreferencesDto } from './dto/notifications.dto';
 
 @Injectable()
 export class NotificationsService {

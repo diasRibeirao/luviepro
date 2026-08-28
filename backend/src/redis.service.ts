@@ -42,6 +42,12 @@ function redisOptions():{url?:string;options:RedisOptions}{
       }else this.localLocks.delete(key);
     }
   }
+  async consumeDistributedRateLimit(key:string,limit:number,windowSeconds:number){
+    if(this.client.status==='wait')await this.client.connect();
+    const result=await this.client.eval("local count=redis.call('INCR',KEYS[1]); if count==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]); end; return {count,redis.call('TTL',KEYS[1])}",1,key,String(windowSeconds)) as [number,number];
+    const count=Number(result[0]),retryAfter=Math.max(1,Number(result[1]));
+    return {allowed:count<=limit,remaining:Math.max(0,limit-count),retryAfter};
+  }
   async consumeRateLimit(key:string,limit:number,windowSeconds:number){
     try{
       if(this.client.status==='wait')await this.client.connect();

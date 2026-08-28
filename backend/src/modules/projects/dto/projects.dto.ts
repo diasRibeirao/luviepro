@@ -1,0 +1,7 @@
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+export class UpdateProjectDto { @IsOptional() @IsString() status?: string; @IsOptional() @IsInt() @Min(0) @Max(100) progress?: number; @IsOptional() @IsString() notes?: string; @IsOptional() @IsString() startDate?: string; @IsOptional() @IsString() endDate?: string; }
+export class CreateProjectStatusDto { @IsString() @MinLength(2) name!: string; @IsOptional() @IsString() color?: string; @IsOptional() @IsInt() @Min(0) position?: number; }
+export class UpdateProjectStatusDto { @IsOptional() @IsString() @MinLength(2) name?: string; @IsOptional() @IsString() color?: string; @IsOptional() @IsInt() @Min(0) position?: number; @IsOptional() @IsBoolean() active?: boolean; }
+export class CreateProjectTaskDto { @IsString() @MinLength(2) title!: string; @IsOptional() @IsString() description?: string; @IsOptional() @IsString() dueDate?: string; @IsOptional() @IsIn(['low','medium','high']) priority?: string; }
+export class UpdateProjectTaskDto { @IsOptional() @IsString() @MinLength(2) title?: string; @IsOptional() @IsString() description?: string; @IsOptional() @IsIn(['pending','in_progress','completed']) status?: string; @IsOptional() @IsString() dueDate?: string; @IsOptional() @IsIn(['low','medium','high']) priority?: string; }
+export class CreateProjectNoteDto { @IsString() @MinLength(2) content!: string; }

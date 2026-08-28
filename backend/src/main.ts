@@ -29,7 +29,19 @@ async function bootstrap(){
     const path=String(req.originalUrl??req.url).split('?',1)[0];
     const rule=path==='/api/auth/login'?{limit:8,window:60}:path==='/api/auth/forgot-password'?{limit:5,window:900}:path==='/api/auth/register'?{limit:5,window:900}:path==='/api/billing/webhooks/mercado-pago'?{limit:300,window:60}:null;
     if(!rule)return next();
-    const ip=String(req.ip??req.socket?.remoteAddress??'unknown');const result=await redis.consumeRateLimit(`rate:${path}:${ip}`,rule.limit,rule.window);
+    const ip=String(req.ip??req.socket?.remoteAddress??'unknown');
+    const criticalAuth=path==='/api/auth/login'||path==='/api/auth/forgot-password'||path==='/api/auth/register';
+    let result;
+    try{
+      result=process.env.NODE_ENV==='production'&&criticalAuth
+        ? await redis.consumeDistributedRateLimit(`rate:${path}:${ip}`,rule.limit,rule.window)
+        : await redis.consumeRateLimit(`rate:${path}:${ip}`,rule.limit,rule.window);
+    }catch{
+      if(process.env.NODE_ENV==='production'&&criticalAuth){
+        return res.status(503).json({statusCode:503,code:'AUTH_RATE_LIMIT_UNAVAILABLE',message:'Serviço de autenticação temporariamente indisponível.',path,requestId:req.requestId,timestamp:new Date().toISOString()});
+      }
+      throw new Error('Rate limiter indisponível');
+    }
     res.setHeader('X-RateLimit-Limit',String(rule.limit));res.setHeader('X-RateLimit-Remaining',String(result.remaining));
     if(result.allowed)return next();
     res.setHeader('Retry-After',String(result.retryAfter));return res.status(429).json({statusCode:429,code:'Too Many Requests',message:'Muitas tentativas. Aguarde e tente novamente.',path,requestId:req.requestId,timestamp:new Date().toISOString()});

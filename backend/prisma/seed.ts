@@ -42,4 +42,3 @@ async function main() {
   }
 }
 main().finally(()=>db.$disconnect());
-

@@ -1,0 +1,2 @@
+import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+export class NotificationPreferencesDto { @IsOptional() @IsBoolean() agendaReminders?: boolean; @IsOptional() @IsBoolean() projectDeadlines?: boolean; @IsOptional() @IsBoolean() quoteExpirations?: boolean; @IsOptional() @IsBoolean() taskDeadlines?: boolean; @IsOptional() @IsBoolean() emailEnabled?: boolean; @IsOptional() @IsBoolean() pushEnabled?: boolean; @IsOptional() @IsInt() @Min(0) @Max(10080) reminderMinutes?: number; }

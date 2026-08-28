@@ -1,0 +1,8 @@
+import { Type } from 'class-transformer';
+import { IsArray, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength, ValidateNested } from 'class-validator';
+export class CalculateDto { @IsInt() @Min(0) dailyRateCents!:number; @IsInt() @Min(0) days!:number; @IsInt() @Min(0) people!:number; @IsInt() @Min(0) variableCostCents!:number; @IsInt() @Min(0) fixedCostCents!:number; @IsInt() @Min(0) safetyMarginBps!:number; }
+export class QuoteItemDto { @IsString() serviceId!:string; @IsOptional() @IsInt() @Min(0) days?:number; @IsOptional() @IsInt() @Min(0) people?:number; @IsOptional() @IsInt() @Min(0) dailyRateCents?:number; @IsOptional() @IsInt() @Min(0) variableCostCents?:number; @IsOptional() @IsInt() @Min(0) fixedCostCents?:number; @IsOptional() @IsInt() @Min(0) safetyMarginBps?:number; }
+export class CreateQuoteDto { @IsString() clientId!:string; @IsArray() @ValidateNested({each:true}) @Type(()=>QuoteItemDto) items!:QuoteItemDto[]; @IsOptional() @IsInt() @Min(0) discountBps?:number; @IsOptional() @IsInt() @Min(1) validityDays?:number; @IsOptional() @IsString() notes?:string; }
+export class UpdateQuoteDto { @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>QuoteItemDto) items?: QuoteItemDto[]; @IsOptional() @IsInt() @Min(0) @Max(10000) discountBps?: number; @IsOptional() @IsInt() @Min(1) @Max(365) validityDays?: number; @IsOptional() @IsString() notes?: string; }
+export class QuoteStatusDto { @IsIn(['draft','sent','rejected']) status!: string; }
+export class PublicProposalDecisionDto { @IsIn(['approved','rejected']) decision!: string; @IsString() @MinLength(2) name!: string; }

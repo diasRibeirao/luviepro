@@ -1,0 +1,6 @@
+import { Module } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { AuthSessionService } from './auth-session.service';
+import { AuthSessionCleanupWorker } from './auth-session-cleanup.worker';
+@Module({providers:[AuthSessionService,AuthSessionCleanupWorker,AuthService],exports:[AuthSessionService,AuthService]})
+export class AuthModule {}

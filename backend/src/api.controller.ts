@@ -2,7 +2,18 @@ import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Req,
 import { ApiService } from './api.service'; import { HealthService } from './health.service'; import { NotificationsService } from './modules/notifications/notifications.service'; import { Roles } from './roles.guard'; import { Permissions } from './permissions.guard';
 import { PlatformRequest, TenantRequest } from './request-user';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CalculateDto, CalendarEventDto, ClientDto, CreateCheckoutDto, CreateProjectTaskDto, CreateProjectNoteDto, CreateProjectStatusDto, CreateQuoteDto, CreateUserDto, ForgotPasswordDto, LoginDto, NotificationPreferencesDto, PlatformAdminLoginDto, PlatformCreateTenantDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto, QuoteStatusDto, RefreshDto, RegisterDto, ResetPasswordDto, UpdateAccountDto, UpdatePlanDto, UpdateProjectDto, UpdateProjectStatusDto, UpdateProjectTaskDto, UpdateQuoteDto, UpdateUserDto, UpdateCalendarEventDto, ServiceDto, PublicProposalDecisionDto, ChangePasswordDto, AcceptInvitationDto, CreateAccessProfileDto, UpdateAccessProfileDto, AuditQueryDto } from './dtos';
+import { LoginDto, RefreshDto, RegisterDto, ForgotPasswordDto, ResetPasswordDto, ChangePasswordDto } from './modules/auth/dto/auth.dto';
+import { CreateUserDto, UpdateUserDto, AcceptInvitationDto, CreateAccessProfileDto, UpdateAccessProfileDto } from './modules/access/dto/access.dto';
+import { CreateCheckoutDto, UpdatePlanDto } from './modules/billing/dto/billing.dto';
+import { CalculateDto, CreateQuoteDto, UpdateQuoteDto, QuoteStatusDto, PublicProposalDecisionDto } from './modules/quotes/dto/quotes.dto';
+import { UpdateProjectDto, CreateProjectStatusDto, UpdateProjectStatusDto, CreateProjectTaskDto, UpdateProjectTaskDto, CreateProjectNoteDto } from './modules/projects/dto/projects.dto';
+import { CalendarEventDto, UpdateCalendarEventDto } from './modules/calendar/dto/calendar.dto';
+import { NotificationPreferencesDto } from './modules/notifications/dto/notifications.dto';
+import { CreateClientDto, UpdateClientDto } from './modules/clients/dto/clients.dto';
+import { CreateServiceDto, UpdateServiceDto } from './modules/services/dto/services.dto';
+import { PlatformAdminLoginDto, PlatformCreateTenantDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './modules/platform/dto/platform.dto';
+import { UpdateAccountDto } from './modules/account/dto/account.dto';
+import { AuditQueryDto } from './modules/audit/dto/audit.dto';
 const Public=()=>SetMetadata('public',true);
 @Controller() export class ApiController {
   constructor(private api:ApiService,private healthService:HealthService,private notificationsService:NotificationsService){}
@@ -27,7 +38,10 @@ const Public=()=>SetMetadata('public',true);
   @Public() @Get('auth/invitations/:token') invitationInfo(@Param('token') token:string){return this.api.invitationInfo(token);}
   @Public() @Post('auth/invitations/:token/accept') acceptInvitation(@Param('token') token:string,@Body() b:AcceptInvitationDto){return this.api.acceptInvitation(token,b.password);}
   @Public() @Post('auth/refresh') refresh(@Body() b:RefreshDto){return this.api.refresh(b.refreshToken);}
-  @Post('auth/logout') logout(@Req() r:TenantRequest){return this.api.logout(r.user.sub,r.user.tenantId);}
+  @Post('auth/logout') logout(@Req() r:TenantRequest){return this.api.logout(r.user.sub,r.user.tenantId,r.user.sid);}
+  @Get('auth/sessions') authSessions(@Req() r:TenantRequest){return this.api.listAuthSessions(r.user.sub,r.user.tenantId,r.user.sid);}
+  @Delete('auth/sessions/:sessionId') revokeAuthSession(@Req() r:TenantRequest,@Param('sessionId') sessionId:string){return this.api.revokeAuthSession(r.user.sub,r.user.tenantId,sessionId);}
+  @Delete('auth/sessions') revokeOtherAuthSessions(@Req() r:TenantRequest){return this.api.revokeOtherAuthSessions(r.user.sub,r.user.tenantId,r.user.sid);}
   @Public() @Get('plans') plans(){return this.api.plans();}
   @Public() @Get('public/proposals/:token') publicProposal(@Param('token') token:string){return this.api.publicProposal(token);}
   @Public() @Post('public/proposals/:token/decision') decidePublicProposal(@Param('token') token:string,@Body() b:PublicProposalDecisionDto){return this.api.decidePublicProposal(token,b.decision as 'approved'|'rejected',b.name);} @Get('account') account(@Req() r:TenantRequest){return this.api.account(r.user.tenantId,r.user.sub);}
@@ -64,9 +78,9 @@ const Public=()=>SetMetadata('public',true);
   @Get('notifications/preferences') notificationPreferences(@Req() r:TenantRequest){return this.notificationsService.preferencesFor(r.user.tenantId,r.user.sub);}
   @Patch('notifications/preferences') updateNotificationPreferences(@Req() r:TenantRequest,@Body() b:NotificationPreferencesDto){return this.notificationsService.updatePreferences(r.user.tenantId,r.user.sub,b);}
   @Permissions('dashboard.read') @Get('dashboard') dashboard(@Req() r:TenantRequest){return this.api.dashboard(r.user.tenantId);} @Permissions('clients.read') @Get('clients') clients(@Req() r:TenantRequest){return this.api.clients(r.user.tenantId);}
-  @Roles('owner','admin','commercial') @Permissions('clients.write') @Post('clients') createClient(@Req() r:TenantRequest,@Body() b:ClientDto){return this.api.createClient(r.user.tenantId,b,r.user.sub);} @Roles('owner','admin','commercial') @Permissions('clients.write') @Patch('clients/:id') updateClient(@Req() r:TenantRequest,@Param('id') id:string,@Body() b:ClientDto){return this.api.updateClient(r.user.tenantId,id,b,r.user.sub);}
-  @Roles('owner','admin','commercial') @Permissions('services.write') @Post('services') createService(@Req() r:TenantRequest,@Body() b:ServiceDto){return this.api.createService(r.user.tenantId,b,r.user.sub);}
-  @Roles('owner','admin','commercial') @Permissions('services.write') @Patch('services/:id') updateService(@Req() r:TenantRequest,@Param('id') id:string,@Body() b:ServiceDto){return this.api.updateService(r.user.tenantId,id,b,r.user.sub);}
+  @Roles('owner','admin','commercial') @Permissions('clients.write') @Post('clients') createClient(@Req() r:TenantRequest,@Body() b:CreateClientDto){return this.api.createClient(r.user.tenantId,b,r.user.sub);} @Roles('owner','admin','commercial') @Permissions('clients.write') @Patch('clients/:id') updateClient(@Req() r:TenantRequest,@Param('id') id:string,@Body() b:UpdateClientDto){return this.api.updateClient(r.user.tenantId,id,b,r.user.sub);}
+  @Roles('owner','admin','commercial') @Permissions('services.write') @Post('services') createService(@Req() r:TenantRequest,@Body() b:CreateServiceDto){return this.api.createService(r.user.tenantId,b,r.user.sub);}
+  @Roles('owner','admin','commercial') @Permissions('services.write') @Patch('services/:id') updateService(@Req() r:TenantRequest,@Param('id') id:string,@Body() b:UpdateServiceDto){return this.api.updateService(r.user.tenantId,id,b,r.user.sub);}
   @Roles('owner','admin','commercial') @Permissions('quotes.read') @Get('quotes/:id/timeline') quoteTimeline(@Req() r:TenantRequest,@Param('id') id:string){return this.api.quoteTimeline(r.user.tenantId,id);}
   @Roles('owner','admin','commercial') @Permissions('quotes.read') @Get('quotes/:id/versions') quoteVersions(@Req() r:TenantRequest,@Param('id') id:string){return this.api.quoteVersions(r.user.tenantId,id);}
   @Roles('owner','admin','commercial') @Permissions('quotes.write') @Patch('quotes/:id') updateQuote(@Req() r:TenantRequest,@Param('id') id:string,@Body() b:UpdateQuoteDto){return this.api.updateQuote(r.user.tenantId,id,b,r.user.sub);}
