@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {ActivityIndicator,Pressable,StyleSheet,View} from 'react-native';
 import {router,type Href} from 'expo-router';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {ApiError,api} from '../src/api';import {LanguageSwitch,Text,TextInput} from '../src/i18n';import {theme} from '../src/theme';
+import {ApiError,api} from '../../../api';import {LanguageSwitch,Text,TextInput} from '../../../i18n';import {theme} from '../../../theme';
 type ForgotPasswordResponse={devResetUrl?:string|null};
 const errorMessage=(error:unknown)=>error instanceof ApiError||error instanceof Error?error.message:'Erro inesperado';
 

@@ -1,9 +1,9 @@
 import { useEffect,useState } from 'react';
 import { ActivityIndicator,Pressable,StyleSheet,useWindowDimensions,View } from 'react-native';
 import { useLocalSearchParams,router } from 'expo-router';
-import { LanguageSwitch,Text,TextInput } from '../../src/i18n';
-import { ApiError,publicApi,establishSession } from '../../src/api';
-import { theme } from '../../src/theme';
+import { LanguageSwitch,Text,TextInput } from '../../../i18n';
+import { ApiError,publicApi,establishSession } from '../../../api';
+import { theme } from '../../../theme';
 
 type InviteInfo={name:string;tenantName:string;roleLabel:string;email:string;expiresAt?:string|null};
 type AcceptedSession=Parameters<typeof establishSession>[0];

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ActivityIndicator,Pressable,ScrollView,StyleSheet,useWindowDimensions,View } from 'react-native';
-import { LanguageSwitch, Text, TextInput } from '../src/i18n';
+import { LanguageSwitch, Text, TextInput } from '../../../i18n';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router'; import { ApiError,api,establishSession } from '../src/api'; import { theme } from '../src/theme';
+import { router } from 'expo-router'; import { ApiError,api,establishSession } from '../../../api'; import { theme } from '../../../theme';
 const periods = [
   ['monthly', 'Mensal'],
   ['quarterly', 'Trimestral'],

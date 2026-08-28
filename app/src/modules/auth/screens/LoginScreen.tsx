@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { ActivityIndicator,Pressable,StyleSheet,useWindowDimensions,View } from 'react-native';
-import { LanguageSwitch, Text, TextInput } from '../src/i18n';
+import { LanguageSwitch, Text, TextInput } from '../../../i18n';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { api,establishSession,type AuthSessionResponse } from '../src/api'; import { theme } from '../src/theme';
+import { api,establishSession,type AuthSessionResponse } from '../../../api'; import { theme } from '../../../theme';
 export default function Login(){
   const wide=useWindowDimensions().width>=900;
   const[email,setEmail]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');

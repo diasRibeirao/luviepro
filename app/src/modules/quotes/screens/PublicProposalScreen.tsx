@@ -1,10 +1,10 @@
 import { useEffect,useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ActivityIndicator,Image,Pressable,ScrollView,StyleSheet,View } from 'react-native';
-import { LanguageSwitch, Text, TextInput } from '../../src/i18n';
+import { LanguageSwitch, Text, TextInput } from '../../../i18n';
 import { useLocalSearchParams } from 'expo-router';
-import { ApiError,money,publicApi } from '../../src/api';
-import { theme } from '../../src/theme';
+import { ApiError,money,publicApi } from '../../../api';
+import { theme } from '../../../theme';
 type ProposalStage={description:string};
 type ProposalItem={serviceName:string;days:number;people:number;totalCents:number;stages?:ProposalStage[]};
 type ProposalTenant={logoUrl?:string|null;name:string;document?:string|null;siteUrl?:string|null;contactEmail?:string|null;proposalText?:string|null;proposalPaymentTerms?:string|null;pixKey?:string|null;responsibleName?:string|null;phone?:string|null;proposalFooter?:string|null};
