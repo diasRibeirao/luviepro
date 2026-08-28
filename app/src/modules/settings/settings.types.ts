@@ -1,0 +1,9 @@
+export type Role='owner'|'admin'|'commercial'|'operational'|'finance';
+export type TenantSettings={name?:string;plan?:string;responsibleName?:string;phone?:string;contactEmail?:string;siteUrl?:string;instagram?:string;legalName?:string;document?:string;stateRegistration?:string;municipalRegistration?:string;zipCode?:string;addressLine?:string;addressNumber?:string;addressComplement?:string;neighborhood?:string;city?:string;state?:string;proposalValidityDays?:number|string;proposalPaymentTerms?:string;proposalFooter?:string;pixKey?:string;primaryColor?:string;secondaryColor?:string;proposalText?:string;logoUrl?:string};
+export type AccountData={tenant:TenantSettings&{plan:string};currentUser?:{role?:Role};features:{customPdf:boolean;logoPdf:boolean;customRoles?:boolean;auditAccess?:boolean};usage:{clients:number;quotes:number;users:number};limit:{maxClients:number;maxQuotesPerMonth:number;maxUsers:number}};
+export type UserRecord={id:string;name:string;email:string;role:Role|string;active:boolean;customProfile?:{name?:string|null}|null};
+export type InviteRecord={id:string;name:string;email:string;role:Role|string;status:string;expiresAt:string;inviteUrl?:string;delivery?:{sent?:boolean};customProfile?:{name?:string|null}|null};
+export type AccessProfile={id:string;name:string;description?:string|null;permissions?:string[];active:boolean};
+export type InviteResult=InviteRecord&{inviteUrl?:string;delivery?:{sent?:boolean}};
+export type AuditLog={id?:string;createdAt:string;action:string;entity:string;entityId?:string|null;metadata?:unknown;actor?:{id?:string;name?:string|null;email?:string|null}|null};
+export type AuditResponse={items?:AuditLog[];actors?:Array<{id:string;name?:string|null;email?:string|null}>};

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { NotificationPreferencesDto } from './dto/notifications.dto';
+import { notificationRoutes } from './types/notification-routes';
 
 @Injectable()
 export class NotificationsService {
@@ -36,7 +37,7 @@ export class NotificationsService {
         type: 'agenda',
         title: `Compromisso: ${x.title}`,
         message: `Agendado para ${x.startAt.toLocaleString('pt-BR')}`,
-        route: '/calendar',
+        route: notificationRoutes.calendar,
         entityId: x.id,
       })),
       ...tasks.filter(x => x.dueDate).map(x => ({
@@ -44,7 +45,7 @@ export class NotificationsService {
         type: 'task_due',
         title: `Prazo: ${x.title}`,
         message: x.project?.name ?? null,
-        route: `/project/${x.projectId}`,
+        route: notificationRoutes.project(x.projectId),
         entityId: x.id,
       })),
       ...quotes.filter(x => x.validUntil).map(x => ({
@@ -52,7 +53,7 @@ export class NotificationsService {
         type: 'quote_expiring',
         title: `Proposta ${x.number} próxima do vencimento`,
         message: `Válida até ${x.validUntil!.toLocaleDateString('pt-BR')}`,
-        route: `/quote/${x.id}`,
+        route: notificationRoutes.quote(x.id),
         entityId: x.id,
       })),
     ];

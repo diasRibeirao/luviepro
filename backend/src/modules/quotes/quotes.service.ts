@@ -6,7 +6,7 @@ import { CreateQuoteDto, QuoteItemDto, UpdateQuoteDto } from './dto/quotes.dto';
 import { auditMetadata } from '../../observability/audit-metadata';
 import { toJsonValue } from '../../domain/json-value';
 import type { Prisma } from '../../../../generated-prisma';
-import type { BuiltQuoteItem, QuoteSnapshot, QuoteTimelineEvent } from './types/quote.types';
+import type { BuiltQuoteItem, QuoteTimelineEvent } from './types/quote.types';
 import { isQuoteStatus, QUOTE_TRANSITIONS } from './types/quote.types';
 
 type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number;variableCostMode?:string};

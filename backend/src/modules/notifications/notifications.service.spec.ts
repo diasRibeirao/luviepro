@@ -33,4 +33,24 @@ describe('NotificationsService tenant isolation', () => {
     await service.preferencesFor('tenant-a','user-a');
     expect(db.notificationPreference.upsert).toHaveBeenCalledWith(expect.objectContaining({create:{tenantId:'tenant-a',userId:'user-a'}}));
   });
+
+  it('persists task notifications with the projects detail route', async () => {
+    const db:any=baseDb();
+    db.notificationPreference.upsert.mockResolvedValue({ agendaReminders:false, taskDeadlines:true, quoteExpirations:false });
+    db.projectTask.findMany.mockResolvedValue([{
+      id:'task-1',
+      title:'Entrega',
+      projectId:'project-1',
+      dueDate:new Date('2026-08-30T12:00:00.000Z'),
+      project:{name:'Projeto 1'},
+    }]);
+    const service=new NotificationsService(db);
+
+    await service.list('tenant-a','user-a');
+
+    expect(db.userNotification.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create:expect.objectContaining({route:'/projects/project-1'}),
+    }));
+  });
+
 });

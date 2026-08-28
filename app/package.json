@@ -11,7 +11,8 @@
     "ios": "expo start --ios",
     "export:web": "expo export --platform web --output-dir dist",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm run export:web"
+    "verify": "npm run verify:routes && npm run typecheck && npm run export:web",
+    "verify:routes": "node scripts/verify-routes.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
