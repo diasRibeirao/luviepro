@@ -1,0 +1,2 @@
+export type PageQuery={page:number;pageSize:number;skip:number;take:number};
+export function pageQuery(page:unknown,pageSize:unknown,maxPageSize=100):PageQuery{const p=Number(page??1);const s=Number(pageSize??20);const safePage=Number.isInteger(p)&&p>0?p:1;const safeSize=Number.isInteger(s)&&s>0?Math.min(s,maxPageSize):20;return {page:safePage,pageSize:safeSize,skip:(safePage-1)*safeSize,take:safeSize};}

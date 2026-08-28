@@ -1,0 +1,1 @@
+import {auditDiff} from './audit-diff';describe('audit diff',()=>{it('keeps only changed fields',()=>expect(auditDiff({name:'A',active:true},{name:'B',active:true})).toEqual({before:{name:'A'},after:{name:'B'},changed:['name']}));it('captures added fields',()=>expect(auditDiff({}, {plan:'pro'}).changed).toEqual(['plan']))});

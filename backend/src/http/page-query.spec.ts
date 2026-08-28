@@ -1,0 +1,1 @@
+import {pageQuery} from './page-query';describe('page query',()=>{it('normalizes paging',()=>expect(pageQuery('2','25')).toEqual({page:2,pageSize:25,skip:25,take:25}));it('bounds page size',()=>expect(pageQuery(1,999,50).pageSize).toBe(50));it('falls back for invalid input',()=>expect(pageQuery('x',0)).toEqual({page:1,pageSize:20,skip:0,take:20}))});

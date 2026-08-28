@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma.service';
 import { RedisService } from '../../redis.service';
 import { billingAction, isBillingPeriod, isPlanCode, periodEnd, periodPrice, type BillingPeriod, type PlanCode } from '../../plan-policy';
@@ -12,6 +12,8 @@ import type { Prisma } from '../../../../generated-prisma';
 import { normalizePaymentStatus } from '../../domain/payment-status';
 import { buildExternalReference } from '../../domain/external-reference';
 import { errorMessage } from '../../security/error-message';
+import { verifyMercadoPagoSignature } from '../../security/webhook-signature';
+import { providerIdempotencyKey } from '../../security/provider-idempotency';
 
 type LocalPayment=Prisma.PaymentGetPayload<{}>;
 import { SubscriptionService } from './subscription.service';
@@ -74,14 +76,14 @@ export class BillingService {
     const periodLabel=({monthly:'mensal',quarterly:'trimestral',semiannual:'semestral',annual:'anual'} as Record<string,string>)[period]??period;
     const body:CheckoutPreferenceBody={items:[{id:`${plan}-${period}`,title:`LuviePro ${plan[0].toUpperCase()+plan.slice(1)} — ${periodLabel}`,description:`Assinatura LuviePro (${periodLabel})`,currency_id:'BRL',quantity:1,unit_price:amountCents/100}],payer:{email:user.email},external_reference:externalReference,metadata:{payment_id:payment.id,tenant_id:tenantId,plan,period,billing_action:action},statement_descriptor:'LUVIEPRO'};
     if(hasUsableReturn){body.back_urls={success:`${appUrl}/plans?payment=success`,pending:`${appUrl}/plans?payment=pending`,failure:`${appUrl}/plans?payment=failure`};body.auto_return='approved';}if(webhookUrl?.startsWith('https://'))body.notification_url=webhookUrl;
-    let response:Response;try{response=await this.request('/checkout/preferences',{method:'POST',headers:{'Content-Type':'application/json','X-Idempotency-Key':payment.id},body:JSON.stringify(body)});}catch(error){await this.db.payment.update({where:{id:payment.id},data:{status:'error'}});if(error instanceof BadRequestException)throw error;throw new BadRequestException('Não foi possível conectar ao Mercado Pago');}
+    let response:Response;try{response=await this.request('/checkout/preferences',{method:'POST',headers:{'Content-Type':'application/json','X-Idempotency-Key':providerIdempotencyKey('checkout',tenantId,payment.id)},body:JSON.stringify(body)});}catch(error){await this.db.payment.update({where:{id:payment.id},data:{status:'error'}});if(error instanceof BadRequestException)throw error;throw new BadRequestException('Não foi possível conectar ao Mercado Pago');}
     const result=await jsonObject<MercadoPagoPreferenceResponse>(response);if(!response.ok){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:toJsonValue(result) as Prisma.InputJsonValue}});throw new BadRequestException(result.message||'Mercado Pago recusou a criação do checkout');}
     const checkoutUrl=(this.sandbox()?result.sandbox_init_point:result.init_point)||result.init_point;if(!checkoutUrl){await this.db.payment.update({where:{id:payment.id},data:{status:'error',raw:toJsonValue(result) as Prisma.InputJsonValue}});throw new BadRequestException('Mercado Pago não retornou uma URL de checkout');}
     await this.db.payment.update({where:{id:payment.id},data:{providerPreferenceId:String(result.id),checkoutUrl,raw:toJsonValue(result) as Prisma.InputJsonValue}});await this.audit(tenantId,actorUserId,'create_checkout','payment',payment.id,{plan,period,amountCents,provider:'mercado_pago',billingAction:action,sandbox:this.sandbox(),effectiveAt});
     return {paymentId:payment.id,preferenceId:result.id,checkoutUrl,webhookConfigured:!!body.notification_url,sandbox:this.sandbox(),billingAction:action,effectiveAt};
   }
 
-  private validSignature(dataId:string,signature?:string,requestId?:string){const secret=process.env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();if(!secret)return process.env.NODE_ENV!=='production'&&process.env.MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS==='true';if(!signature||!requestId||!dataId)return false;const parts=Object.fromEntries(signature.split(',').map(part=>part.trim().split('=',2))) as Record<string,string>;if(!parts.ts||!parts.v1)return false;const manifest=`id:${String(dataId).toLowerCase()};request-id:${requestId};ts:${parts.ts};`;const expected=createHmac('sha256',secret).update(manifest).digest('hex');const received=parts.v1;return expected.length===received.length&&timingSafeEqual(Buffer.from(expected),Buffer.from(received));}
+  private validSignature(dataId:string,signature?:string,requestId?:string){const secret=process.env.MERCADO_PAGO_WEBHOOK_SECRET?.trim();if(!secret)return process.env.NODE_ENV!=='production'&&process.env.MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS==='true';return verifyMercadoPagoSignature(String(dataId),requestId,signature,secret);}
   private async fetchPayment(providerPaymentId:string):Promise<MercadoPagoPayment>{const response=await this.request(`/v1/payments/${encodeURIComponent(providerPaymentId)}`);if(!response.ok)throw new BadRequestException('Pagamento não encontrado no Mercado Pago');const payload=await jsonObject<MercadoPagoPayment>(response);if(payload.id===undefined)throw new BadRequestException('Resposta inválida do Mercado Pago');return payload as MercadoPagoPayment;}
   private mapStatus(status?:string|null){return normalizePaymentStatus(status);}
 
