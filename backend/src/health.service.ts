@@ -4,7 +4,7 @@ import { RedisService } from './redis.service';
 
 @Injectable() export class HealthService {
   constructor(private db:PrismaService,private redis:RedisService){}
-  live(){return {status:'ok',service:'luviepro-api',timestamp:new Date().toISOString()};}
+  live(){return {status:'ok',service:'luviepro-api',uptimeSeconds:Math.floor(process.uptime()),timestamp:new Date().toISOString()};}
   async ready(){
     const checks={postgres:false,redis:false};
     try{await this.db.$queryRaw`SELECT 1`;checks.postgres=true}catch{}

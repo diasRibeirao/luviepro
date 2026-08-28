@@ -22,7 +22,8 @@
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
     "test:coverage": "jest --runInBand --coverage",
-    "verify": "npm run prisma:generate && npm run typecheck && npm run build && npm test"
+    "verify": "npm run prisma:generate && npm run typecheck && npm run build && npm test",
+    "verify:production": "npm run prisma:generate && npm run typecheck && npm run build && npm test"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

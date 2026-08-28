@@ -1,0 +1,1 @@
+import {errorCode} from './error-response';describe('error response',()=>{it('normalizes codes',()=>{expect(errorCode('Bad Request')).toBe('BAD_REQUEST');expect(errorCode(undefined)).toBe('HTTP_ERROR')})});

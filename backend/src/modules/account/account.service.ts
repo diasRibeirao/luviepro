@@ -7,7 +7,7 @@ import { AUTH_SECURITY } from '../auth/auth-security';
 import { SubscriptionService } from '../billing/subscription.service';
 import { UpdateAccountDto } from './dto/account.dto';
 
-type LogoFile={buffer:Buffer;mimetype:string;size:number};
+export type LogoFile={buffer:Buffer;mimetype:string;size:number};
 @Injectable() export class AccountService {
  constructor(private db:PrismaService,private subscriptions:SubscriptionService){}
  private async audit(tenantId:string,actorUserId:string|undefined,action:string,entityId?:string,metadata?:any){await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity:'tenant',entityId,metadata}}).catch(()=>undefined);}

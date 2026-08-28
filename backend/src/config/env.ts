@@ -1,0 +1,4 @@
+export function envString(env:NodeJS.ProcessEnv,key:string,fallback=''){const v=String(env[key]??'').trim();return v||fallback;}
+export function envBoolean(env:NodeJS.ProcessEnv,key:string,fallback=false){const v=envString(env,key);if(!v)return fallback;if(v==='true')return true;if(v==='false')return false;throw new Error(`${key} deve ser true ou false`);}
+export function envInt(env:NodeJS.ProcessEnv,key:string,fallback:number,o:{min?:number;max?:number}={}){const raw=envString(env,key);const v=raw===''?fallback:Number(raw);if(!Number.isInteger(v))throw new Error(`${key} deve ser um número inteiro`);if(o.min!==undefined&&v<o.min)throw new Error(`${key} deve ser >= ${o.min}`);if(o.max!==undefined&&v>o.max)throw new Error(`${key} deve ser <= ${o.max}`);return v;}
+export function envCsv(env:NodeJS.ProcessEnv,key:string,fallback:string[]=[]){const raw=envString(env,key);return raw?raw.split(',').map(v=>v.trim()).filter(Boolean):fallback;}

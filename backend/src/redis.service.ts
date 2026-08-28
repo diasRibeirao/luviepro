@@ -42,6 +42,10 @@ function redisOptions():{url?:string;options:RedisOptions}{
       }else this.localLocks.delete(key);
     }
   }
+  async withDistributedLock<T>(key:string,ttlMs:number,callback:()=>Promise<T>):Promise<{acquired:boolean;value?:T}> {
+    const token=`${Date.now()}-${Math.random().toString(36).slice(2)}`;if(this.client.status==='wait')await this.client.connect();const acquired=(await this.client.set(key,token,'PX',ttlMs,'NX'))==='OK';if(!acquired)return {acquired:false};try{return {acquired:true,value:await callback()};}finally{await this.client.eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end",1,key,token).catch(()=>undefined);}
+  }
+  async withWorkerLock<T>(key:string,ttlMs:number,callback:()=>Promise<T>){return process.env.NODE_ENV==='production'?this.withDistributedLock(key,ttlMs,callback):this.withLock(key,ttlMs,callback);}
   async consumeDistributedRateLimit(key:string,limit:number,windowSeconds:number){
     if(this.client.status==='wait')await this.client.connect();
     const result=await this.client.eval("local count=redis.call('INCR',KEYS[1]); if count==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]); end; return {count,redis.call('TTL',KEYS[1])}",1,key,String(windowSeconds)) as [number,number];
