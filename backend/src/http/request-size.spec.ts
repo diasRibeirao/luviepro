@@ -1,0 +1,1 @@
+import {exceedsContentLength,parseContentLength} from './request-size';describe('request size',()=>{it('parses only safe decimal content lengths',()=>{expect(parseContentLength('12')).toBe(12);expect(parseContentLength('-1')).toBeUndefined();expect(exceedsContentLength('11',10)).toBe(true);});});

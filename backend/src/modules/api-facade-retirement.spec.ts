@@ -1,0 +1,2 @@
+import {readFileSync} from 'fs';import {resolve} from 'path';
+describe('ApiService retirement',()=>{it('does not register compatibility facade in AppModule',()=>{const app=readFileSync(resolve(process.cwd(),'src/app.module.ts'),'utf8');expect(app).not.toContain("import { ApiService }");expect(app).not.toMatch(/\bApiService,\s*$/m);});it('keeps feature controllers as HTTP owners',()=>{const marker=readFileSync(resolve(process.cwd(),'src/api.controller.ts'),'utf8');expect(marker).toContain('MIGRATED_TO_FEATURES');});});

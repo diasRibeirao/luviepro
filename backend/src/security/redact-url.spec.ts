@@ -1,0 +1,1 @@
+import {redactUrl} from './redact-url';describe('redactUrl',()=>{it('removes secrets from query strings',()=>{const v=redactUrl('/callback?token=abc&state=ok');expect(v).not.toContain('abc');expect(v).toContain('state=ok');});});

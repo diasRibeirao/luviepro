@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
 import { HealthController } from './health.controller';
-import { ApiService } from './api.service';
 import { AuthGuard } from './auth.guard';
 import { HealthService } from './health.service';
 import { TenantActiveGuard } from './tenant-active.guard';
@@ -50,7 +49,6 @@ import {MetricsController} from './observability/metrics.controller';
   controllers:[HealthController,MetricsController],
   providers:[
     HealthService,
-    ApiService,
     {provide:APP_GUARD,useClass:AuthGuard},
     {provide:APP_GUARD,useClass:TenantActiveGuard},
     {provide:APP_GUARD,useClass:RolesGuard},

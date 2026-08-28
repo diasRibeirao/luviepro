@@ -26,7 +26,9 @@
     "verify:production": "npm run prisma:generate && npm run typecheck && npm run build && npm test",
     "test:ci": "jest --runInBand --ci",
     "verify:ci": "npm run prisma:generate && npm run typecheck && npm run build && npm run test:ci",
-    "quality:gate": "npm run verify:ci"
+    "quality:gate": "npm run verify:ci",
+    "verify:architecture": "jest --runInBand src/modules/api-facade-retirement.spec.ts src/modules/production-boundaries.spec.ts src/modules/controller-architecture.spec.ts src/modules/module-architecture.spec.ts",
+    "verify:domain-contracts": "jest --runInBand src/contracts src/domain src/validation src/security/redact-url.spec.ts src/http/request-size.spec.ts src/observability/timing.spec.ts src/operations/health-state.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

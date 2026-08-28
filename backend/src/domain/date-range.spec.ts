@@ -1,0 +1,1 @@
+import {parseDateRange} from './date-range'; describe('date range',()=>{it('parses ordered range',()=>expect(parseDateRange('2026-01-01','2026-01-02').from).toBeInstanceOf(Date));it('rejects invalid/reversed range',()=>{expect(()=>parseDateRange('x')).toThrow();expect(()=>parseDateRange('2026-02-01','2026-01-01')).toThrow();});});

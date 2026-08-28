@@ -1,0 +1,3 @@
+export function assertCents(value:number,name='amountCents'):number { if(!Number.isSafeInteger(value)||value<0) throw new RangeError(`${name} must be a non-negative safe integer`); return value; }
+export function sumCents(values:readonly number[]):number { return values.reduce((sum,value)=>{assertCents(value); const next=sum+value;if(!Number.isSafeInteger(next))throw new RangeError('money total exceeds safe integer range');return next;},0); }
+export function applyBps(cents:number,bps:number):number { assertCents(cents); if(!Number.isInteger(bps)||bps<0||bps>10000)throw new RangeError('bps must be between 0 and 10000'); return Math.round(cents*bps/10000); }

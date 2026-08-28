@@ -1,0 +1,1 @@
+import {applyBps,assertCents,sumCents} from './money'; describe('money',()=>{it('uses integer cents',()=>{expect(sumCents([100,250])).toBe(350);expect(applyBps(10000,1250)).toBe(1250);});it('rejects invalid amounts',()=>{expect(()=>assertCents(-1)).toThrow();expect(()=>applyBps(1,10001)).toThrow();});});

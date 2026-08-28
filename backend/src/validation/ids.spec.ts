@@ -1,0 +1,1 @@
+import {assertSafeId} from './ids';describe('safe ids',()=>{it('accepts opaque safe ids and rejects path syntax',()=>{expect(assertSafeId('abc_123-x')).toBe('abc_123-x');expect(()=>assertSafeId('../x')).toThrow();});});

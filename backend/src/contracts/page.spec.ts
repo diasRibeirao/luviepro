@@ -1,0 +1,1 @@
+import {pageOf} from './page'; describe('pageOf',()=>{it('calculates stable metadata',()=>{expect(pageOf(['a'],21,2,10).meta).toEqual({page:2,pageSize:10,total:21,totalPages:3,hasNext:true,hasPrevious:true});});it('normalizes invalid numeric boundaries',()=>{expect(pageOf([], -1,0,0).meta).toEqual({page:1,pageSize:1,total:0,totalPages:0,hasNext:false,hasPrevious:false});});});

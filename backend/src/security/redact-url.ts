@@ -1,0 +1,2 @@
+const SECRET_PARAMS=new Set(['token','access_token','refresh_token','code','key','secret','signature']);
+export function redactUrl(raw:string):string { try{const u=new URL(raw,'http://local');for(const key of [...u.searchParams.keys()])if(SECRET_PARAMS.has(key.toLowerCase()))u.searchParams.set(key,'[REDACTED]');return raw.startsWith('http')?u.toString():`${u.pathname}${u.search}`;}catch{return raw.split('?')[0]??raw;} }

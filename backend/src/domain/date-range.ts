@@ -1,0 +1,2 @@
+export interface DateRange { from?: Date; to?: Date; }
+export function parseDateRange(from?:string,to?:string):DateRange { const result:DateRange={}; if(from){const d=new Date(from);if(Number.isNaN(d.getTime()))throw new RangeError('invalid from date');result.from=d;} if(to){const d=new Date(to);if(Number.isNaN(d.getTime()))throw new RangeError('invalid to date');result.to=d;} if(result.from&&result.to&&result.from>result.to)throw new RangeError('from must not be after to');return result; }

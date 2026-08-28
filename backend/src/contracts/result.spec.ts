@@ -1,0 +1,1 @@
+import {failure,success} from './result'; describe('Result',()=>{it('creates typed success/failure',()=>{expect(success(3)).toEqual({ok:true,value:3});expect(failure('x')).toEqual({ok:false,error:'x'});});});

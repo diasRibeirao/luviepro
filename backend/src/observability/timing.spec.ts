@@ -1,0 +1,1 @@
+import {startTiming} from './timing';describe('timing',()=>{it('reports monotonic non-negative elapsed duration',()=>{let n=10;const t=startTiming(()=>n);n=17;expect(t.elapsedMs()).toBe(7);n=5;expect(t.elapsedMs()).toBe(0);});});

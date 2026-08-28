@@ -1,0 +1,1 @@
+import {normalizeEmail,normalizeOptionalText,requireNonBlank} from './strings';describe('string normalization',()=>{it('normalizes boundaries',()=>{expect(normalizeEmail(' A@B.COM ')).toBe('a@b.com');expect(normalizeOptionalText('  ')).toBeUndefined();expect(requireNonBlank(' x ','name')).toBe('x');});});

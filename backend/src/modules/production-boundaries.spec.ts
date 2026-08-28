@@ -1,0 +1,2 @@
+import {readFileSync} from 'fs';import {resolve} from 'path';
+describe('production boundaries',()=>{it('keeps compatibility facade out of runtime DI',()=>{const app=readFileSync(resolve(process.cwd(),'src/app.module.ts'),'utf8');expect(app).not.toContain('ApiService');});it('uses global auth and tenant guards',()=>{const app=readFileSync(resolve(process.cwd(),'src/app.module.ts'),'utf8');for(const guard of ['AuthGuard','TenantActiveGuard','RolesGuard','PermissionsGuard'])expect(app).toContain(guard);});});
