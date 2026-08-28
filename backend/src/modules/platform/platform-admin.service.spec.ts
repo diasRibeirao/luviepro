@@ -14,7 +14,7 @@ describe('PlatformAdminService',()=>{
     user:{count:jest.fn(),findMany:jest.fn(),findUnique:jest.fn()},
     client:{count:jest.fn()},
     subscription:{count:jest.fn(),aggregate:jest.fn(),findMany:jest.fn(),findFirst:jest.fn(),create:jest.fn(),update:jest.fn()},
-    payment:{findMany:jest.fn()},
+    payment:{count:jest.fn(),findMany:jest.fn()},
     planLimit:{findMany:jest.fn(),findUnique:jest.fn(),update:jest.fn()},
     userInvitation:{findFirst:jest.fn()},
     auditLog:{create:jest.fn()},
@@ -42,6 +42,13 @@ describe('PlatformAdminService',()=>{
     db.tenant.findMany.mockResolvedValue([{id:'t1',name:'A',subscriptions:[{id:'s1'}]}]);
     await expect(service.tenants()).resolves.toEqual([{id:'t1',name:'A',scheduledSubscription:{id:'s1'}}]);
     expect(db.tenant.findMany).toHaveBeenCalledWith(expect.objectContaining({select:expect.objectContaining({subscriptions:expect.objectContaining({where:{status:'scheduled'},take:1})})}));
+  });
+
+  it('paginates and filters platform users on the server',async()=>{
+    db.user.findMany.mockResolvedValue([{id:'u1',name:'Maria'}]);
+    db.user.count.mockResolvedValue(21);
+    await expect(service.users({page:2,pageSize:10,q:'maria',status:'active',plan:'pro',tenantId:'t1'})).resolves.toEqual({items:[{id:'u1',name:'Maria'}],total:21,page:2,pageSize:10,totalPages:3});
+    expect(db.user.findMany).toHaveBeenCalledWith(expect.objectContaining({skip:10,take:10,where:expect.objectContaining({active:true,tenantId:'t1',tenant:{plan:'pro'}})}));
   });
 
   it('schedules a downgrade instead of changing the active tenant immediately',async()=>{

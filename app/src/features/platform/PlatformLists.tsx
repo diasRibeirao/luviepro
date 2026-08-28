@@ -1,0 +1,50 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import type { ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { money } from '../../api';
+import { Text } from '../../i18n';
+import { theme } from '../../theme';
+import type { PlatformCompany, PlatformPayment, PlatformPlan, PlatformSubscription, PlatformUser } from './contracts';
+
+type EditorItem = ({kind:'tenant'}&PlatformCompany)|({kind:'user'}&PlatformUser)|({kind:'plan'}&PlatformPlan);
+type EditHandler = (item:EditorItem)=>void;
+
+const statusLabel=(value:string)=>({active:'Ativa',trial:'Teste',suspended:'Suspensa',cancelled:'Cancelada',replaced:'Substituída',approved:'Aprovado',pending:'Pendente',rejected:'Recusado',refunded:'Estornado',charged_back:'Contestado',error:'Erro'} as Record<string,string>)[value]??value;
+const periodLabel=(value?:string)=>({monthly:'Mensal',quarterly:'Trimestral',semiannual:'Semestral',annual:'Anual'} as Record<string,string>)[value??'monthly']??'Mensal';
+const roleLabel=(value:string)=>({owner:'Proprietário',admin:'Administrador',commercial:'Comercial',operational:'Operacional',finance:'Financeiro'} as Record<string,string>)[value]??value;
+
+export function PlatformCompanies({rows,onEdit}:{rows:PlatformCompany[];onEdit:EditHandler}) {
+ return <Table headers={['EMPRESA','PLANO','USUÁRIOS','CLIENTES','STATUS','AÇÃO']}>{rows.map(company=><Row key={company.id}><Cell wide><Entity icon="business-outline" title={company.name} sub={company.scheduledSubscription?`Próximo: ${company.scheduledSubscription.plan.toUpperCase()} · ${periodLabel(company.scheduledSubscription.period)}`:(company.contactEmail||company.slug)}/></Cell><Cell><Strong>{company.plan.toUpperCase()}</Strong><Small>{periodLabel(company.planPeriod)}</Small></Cell><Cell><Strong>{company._count?.users??0}</Strong></Cell><Cell><Strong>{company._count?.clients??0}</Strong></Cell><Cell><Badge label={statusLabel(company.status)}/></Cell><Cell><Action onPress={()=>onEdit({kind:'tenant',...company})}/></Cell></Row>)}</Table>;
+}
+
+export function PlatformUsers({rows,onEdit}:{rows:PlatformUser[];onEdit:EditHandler}) {
+ return <Table headers={['USUÁRIO','EMPRESA','PERFIL','ÚLTIMO ACESSO','STATUS','AÇÃO']}>{rows.map(user=><Row key={user.id}><Cell wide><Entity icon="person-outline" title={user.name} sub={user.email}/></Cell><Cell><Strong>{user.tenant?.name??'Sem empresa'}</Strong><Small>{user.tenant?.plan?.toUpperCase()??'—'}</Small></Cell><Cell><Strong>{roleLabel(user.role)}</Strong></Cell><Cell><Small>{user.lastLoginAt?new Date(user.lastLoginAt).toLocaleString('pt-BR'):'Nunca acessou'}</Small></Cell><Cell><Badge label={user.active?'Ativo':'Inativo'}/></Cell><Cell><Action onPress={()=>onEdit({kind:'user',...user})}/></Cell></Row>)}</Table>;
+}
+
+export function PlatformPlans({rows,onEdit}:{rows:PlatformPlan[];onEdit:EditHandler}) {
+ return <View style={styles.planGrid}>{rows.map(plan=><View key={plan.plan} style={[styles.planCard,plan.plan==='pro'&&styles.planFeatured]}><View style={styles.planTop}><View><Text style={styles.planName}>{plan.plan.toUpperCase()}</Text><Text style={styles.planPrice}>{money(plan.monthlyPriceCents)}<Text style={styles.small}>/mês</Text></Text></View><Icon name="diamond-outline"/></View><View style={styles.rule}/><PlanLine label="Clientes" value={plan.maxClients<0?'Ilimitados':plan.maxClients}/><PlanLine label="Orçamentos/mês" value={plan.maxQuotesPerMonth<0?'Ilimitados':plan.maxQuotesPerMonth}/><PlanLine label="Usuários" value={plan.maxUsers}/><PlanLine label="Trimestral" value={money(plan.quarterlyPriceCents)}/><PlanLine label="Semestral" value={money(plan.semiannualPriceCents)}/><PlanLine label="Anual" value={money(plan.annualPriceCents)}/><Pressable onPress={()=>onEdit({kind:'plan',...plan})} style={styles.planAction}><Ionicons name="settings-outline" size={16} color={theme.green2}/><Text style={styles.actionText}>Configurar plano</Text></Pressable></View>)}</View>;
+}
+
+export function PlatformSubscriptions({rows}:{rows:PlatformSubscription[]}) {
+ return <Table headers={['EMPRESA','PLANO','PERÍODO','VALOR','VENCIMENTO','STATUS']}>{rows.map(subscription=><Row key={subscription.id}><Cell wide><Entity icon="repeat-outline" title={subscription.tenant?.name??'Sem empresa'} sub={subscription.tenant?.slug??'—'}/></Cell><Cell><Strong>{subscription.plan.toUpperCase()}</Strong></Cell><Cell><Strong>{periodLabel(subscription.period)}</Strong></Cell><Cell><Strong>{money(subscription.amountCents)}</Strong></Cell><Cell><Small>{new Date(subscription.expiresAt).toLocaleDateString('pt-BR')}</Small></Cell><Cell><Badge label={statusLabel(subscription.status)}/></Cell></Row>)}</Table>;
+}
+
+export function PlatformPayments({rows}:{rows:PlatformPayment[]}) {
+ if(!rows.length)return <View style={styles.emptyCard}><Ionicons name="wallet-outline" size={27} color={theme.gold}/><Text style={styles.emptyTitle}>Nenhum pagamento registrado</Text><Small>Os pagamentos aparecerão após a criação dos checkouts pelo Mercado Pago.</Small></View>;
+ return <Table headers={['EMPRESA','REFERÊNCIA','PLANO','VALOR','DATA','STATUS']}>{rows.map(payment=><Row key={payment.id}><Cell wide><Entity icon="card-outline" title={payment.tenant?.name??'Sem empresa'} sub={payment.paymentMethod||'Mercado Pago'}/></Cell><Cell><Small>{payment.providerPaymentId||'Aguardando'}</Small></Cell><Cell><Strong>{payment.plan.toUpperCase()}</Strong><Small>{periodLabel(payment.period)}</Small></Cell><Cell><Strong>{money(payment.amountCents)}</Strong></Cell><Cell><Small>{new Date(payment.createdAt).toLocaleDateString('pt-BR')}</Small></Cell><Cell><Badge label={statusLabel(payment.status)}/></Cell></Row>)}</Table>;
+}
+
+function Table({headers,children}:{headers:string[];children:ReactNode}){return <ScrollView horizontal contentContainerStyle={styles.tableScroll}><View style={styles.table}><View style={styles.headerRow}>{headers.map((header,index)=><Text key={header} style={[styles.headerText,index===0&&styles.wide]}>{header}</Text>)}</View>{children}</View></ScrollView>}
+function Row({children}:{children:ReactNode}){return <View style={styles.row}>{children}</View>}
+function Cell({children,wide}:{children:ReactNode;wide?:boolean}){return <View style={[styles.cell,wide&&styles.wide]}>{children}</View>}
+function Strong({children}:{children:ReactNode}){return <Text style={styles.strong}>{children}</Text>}
+function Small({children}:{children:ReactNode}){return <Text style={styles.small}>{children}</Text>}
+function Entity({icon,title,sub}:{icon:string;title:string;sub:string}){return <View style={styles.entity}><Icon name={icon}/><View style={styles.fill}><Strong>{title}</Strong><Text numberOfLines={1} style={styles.small}>{sub}</Text></View></View>}
+function Action({onPress}:{onPress:()=>void}){return <Pressable onPress={onPress} style={styles.action}><Ionicons name="create-outline" size={16} color={theme.green2}/><Text style={styles.actionText}>Gerenciar</Text></Pressable>}
+function Badge({label}:{label:string}){const danger=['Inativo','Suspensa','Cancelada','Recusado','Erro'].includes(label),warning=['Pendente','Teste'].includes(label);return <View style={[styles.badge,danger&&styles.badgeDanger,warning&&styles.badgeWarning]}><Text style={[styles.badgeText,danger&&styles.badgeTextDanger]}>{label}</Text></View>}
+function Icon({name}:{name:string}){return <View style={styles.icon}><Ionicons name={name as never} size={18} color={theme.green2}/></View>}
+function PlanLine({label,value}:{label:string;value:string|number}){return <View style={styles.planLine}><Small>{label}</Small><Strong>{String(value)}</Strong></View>}
+
+const styles=StyleSheet.create({
+ tableScroll:{minWidth:980,width:'100%'},table:{flex:1,backgroundColor:'#fff',borderWidth:1,borderColor:theme.border,borderRadius:14,overflow:'hidden'},headerRow:{height:42,backgroundColor:'#F7F9F7',flexDirection:'row',alignItems:'center',paddingHorizontal:15},headerText:{flex:1,fontSize:9,fontWeight:'900',letterSpacing:.6,color:theme.muted},row:{minHeight:66,borderTopWidth:1,borderTopColor:theme.border,flexDirection:'row',alignItems:'center',paddingHorizontal:15},cell:{flex:1,paddingRight:8},wide:{flex:1.7},entity:{flexDirection:'row',alignItems:'center',gap:9},fill:{flex:1},strong:{fontSize:11,fontWeight:'800',color:theme.ink},small:{fontSize:9.5,color:theme.muted,marginTop:3},icon:{width:36,height:36,borderRadius:10,backgroundColor:theme.green50,alignItems:'center',justifyContent:'center'},badge:{alignSelf:'flex-start',borderRadius:20,paddingHorizontal:9,paddingVertical:5,backgroundColor:'#E7F6EC'},badgeWarning:{backgroundColor:'#FFF4D8'},badgeDanger:{backgroundColor:'#FBEAEA'},badgeText:{fontSize:9,fontWeight:'800',color:'#2F7450'},badgeTextDanger:{color:'#963737'},action:{height:32,alignSelf:'flex-start',borderWidth:1,borderColor:theme.border,borderRadius:8,paddingHorizontal:9,flexDirection:'row',alignItems:'center',gap:5},actionText:{fontSize:9,fontWeight:'800',color:theme.green2},planGrid:{flexDirection:'row',flexWrap:'wrap',gap:15},planCard:{flex:1,minWidth:270,maxWidth:420,backgroundColor:'#fff',borderWidth:1,borderColor:theme.border,borderRadius:15,padding:19},planFeatured:{borderColor:theme.gold,borderWidth:2},planTop:{flexDirection:'row',justifyContent:'space-between'},planName:{fontSize:10,fontWeight:'900',letterSpacing:1.1,color:theme.green2},planPrice:{fontFamily:'serif',fontSize:23,fontWeight:'800',color:theme.ink,marginTop:7},rule:{height:1,backgroundColor:theme.border,marginVertical:10},planLine:{flexDirection:'row',justifyContent:'space-between',paddingVertical:7,borderBottomWidth:1,borderBottomColor:'#EEF1EF'},planAction:{height:38,borderRadius:9,backgroundColor:theme.green50,flexDirection:'row',gap:7,alignItems:'center',justifyContent:'center',marginTop:16},emptyCard:{backgroundColor:'#fff',borderWidth:1,borderColor:theme.border,borderRadius:14,padding:30,alignItems:'center',gap:8},emptyTitle:{fontFamily:'serif',fontSize:17,fontWeight:'800',color:theme.ink}
+});

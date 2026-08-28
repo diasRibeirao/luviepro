@@ -4,7 +4,8 @@ import { PrismaService } from '../../prisma.service';
 import { MailService } from '../../mail.service';
 import { AuthService } from '../auth/auth.service';
 import { isPlanCode, periodEnd, periodPrice, planRank } from '../../plan-policy';
-import { PlatformCreateTenantDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
+import { pagination } from '../../http/pagination';
+import { PlatformCreateTenantDto, PlatformListQueryDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
 
 @Injectable()
 export class PlatformAdminService {
@@ -32,17 +33,29 @@ export class PlatformAdminService {
     return {tenants,activeTenants,users,clients,subscriptions,monthlyRevenueCents:monthlyRevenue._sum.amountCents??0};
   }
 
-  async tenants(){
-    const rows=await this.db.tenant.findMany({
-      select:{id:true,name:true,slug:true,plan:true,planPeriod:true,status:true,subscriptionExpiresAt:true,createdAt:true,_count:{select:{users:true,clients:true,subscriptions:true}},subscriptions:{where:{status:'scheduled'},select:{id:true,plan:true,period:true,startsAt:true,expiresAt:true,amountCents:true},orderBy:{startsAt:'asc'},take:1}},
-      orderBy:{createdAt:'desc'},
-    });
-    return rows.map(({subscriptions,...tenant})=>({...tenant,scheduledSubscription:subscriptions[0]??null}));
+  private usesPagination(query?:PlatformListQueryDto){return Boolean(query&&Object.values(query).some(value=>value!==undefined&&value!==''));}
+  private pageResult<T>(items:T[],total:number,page:number,pageSize:number){return {items,total,page,pageSize,totalPages:Math.max(1,Math.ceil(total/pageSize))};}
+
+  async tenants(query?:PlatformListQueryDto){
+    const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);
+    const q=query?.q?.trim();
+    const where:any={
+      ...(query?.status&&query.status!=='all'&&{status:query.status}),
+      ...(query?.plan&&query.plan!=='all'&&{plan:query.plan}),
+      ...(q&&{OR:[{name:{contains:q,mode:'insensitive'}},{slug:{contains:q,mode:'insensitive'}},{contactEmail:{contains:q,mode:'insensitive'}}]}),
+    };
+    const select={id:true,name:true,slug:true,plan:true,planPeriod:true,status:true,subscriptionExpiresAt:true,createdAt:true,_count:{select:{users:true,clients:true,subscriptions:true}},subscriptions:{where:{status:'scheduled'},select:{id:true,plan:true,period:true,startsAt:true,expiresAt:true,amountCents:true},orderBy:{startsAt:'asc' as const},take:1}};
+    const [rows,total]=await Promise.all([
+      this.db.tenant.findMany({where,select,orderBy:{createdAt:'desc'},...(paged&&{skip:p.skip,take:p.take})}),
+      paged?this.db.tenant.count({where}):Promise.resolve(0),
+    ]);
+    const items=rows.map(({subscriptions,...tenant})=>({...tenant,scheduledSubscription:subscriptions[0]??null}));
+    return paged?this.pageResult(items,total,p.page,p.pageSize):items;
   }
 
-  subscriptions(){return this.db.subscription.findMany({select:{id:true,plan:true,period:true,amountCents:true,status:true,startsAt:true,expiresAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},take:200});}
-  payments(){return this.db.payment.findMany({select:{id:true,provider:true,providerPaymentId:true,plan:true,period:true,amountCents:true,status:true,paymentMethod:true,paidAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},take:300});}
-  users(){return this.db.user.findMany({select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}},orderBy:{createdAt:'desc'},take:500});}
+  async subscriptions(query?:PlatformListQueryDto){const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);const q=query?.q?.trim();const where:any={...(query?.status&&query.status!=='all'&&{status:query.status}),...(query?.plan&&query.plan!=='all'&&{plan:query.plan}),...(query?.tenantId&&query.tenantId!=='all'&&{tenantId:query.tenantId}),...(q&&{OR:[{tenant:{name:{contains:q,mode:'insensitive'}}},{plan:{contains:q,mode:'insensitive'}}]})};const args:any={where,select:{id:true,plan:true,period:true,amountCents:true,status:true,startsAt:true,expiresAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},...(paged?{skip:p.skip,take:p.take}:{take:200})};const[items,total]=await Promise.all([this.db.subscription.findMany(args),paged?this.db.subscription.count({where}):Promise.resolve(0)]);return paged?this.pageResult(items,total,p.page,p.pageSize):items;}
+  async payments(query?:PlatformListQueryDto){const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);const q=query?.q?.trim();const where:any={...(query?.status&&query.status!=='all'&&{status:query.status}),...(query?.plan&&query.plan!=='all'&&{plan:query.plan}),...(query?.tenantId&&query.tenantId!=='all'&&{tenantId:query.tenantId}),...(q&&{OR:[{tenant:{name:{contains:q,mode:'insensitive'}}},{providerPaymentId:{contains:q,mode:'insensitive'}},{paymentMethod:{contains:q,mode:'insensitive'}}]})};const args:any={where,select:{id:true,provider:true,providerPaymentId:true,plan:true,period:true,amountCents:true,status:true,paymentMethod:true,paidAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},...(paged?{skip:p.skip,take:p.take}:{take:300})};const[items,total]=await Promise.all([this.db.payment.findMany(args),paged?this.db.payment.count({where}):Promise.resolve(0)]);return paged?this.pageResult(items,total,p.page,p.pageSize):items;}
+  async users(query?:PlatformListQueryDto){const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);const q=query?.q?.trim();const where:any={...(query?.status&&query.status!=='all'&&{active:query.status==='active'}),...(query?.plan&&query.plan!=='all'&&{tenant:{plan:query.plan}}),...(query?.tenantId&&query.tenantId!=='all'&&{tenantId:query.tenantId}),...(q&&{OR:[{name:{contains:q,mode:'insensitive'}},{email:{contains:q,mode:'insensitive'}},{tenant:{name:{contains:q,mode:'insensitive'}}}]})};const args:any={where,select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}},orderBy:{createdAt:'desc'},...(paged?{skip:p.skip,take:p.take}:{take:500})};const[items,total]=await Promise.all([this.db.user.findMany(args),paged?this.db.user.count({where}):Promise.resolve(0)]);return paged?this.pageResult(items,total,p.page,p.pageSize):items;}
   plans(){return this.db.planLimit.findMany({orderBy:{monthlyPriceCents:'asc'}});}
 
   async changeTenant(id:string,data:PlatformTenantDto){
