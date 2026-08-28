@@ -39,6 +39,11 @@ describe('AuthSessionService persistent sessions', () => {
   });
 
 
+  it('permite emitir sessão para conta expirada somente para posterior controle pelo guard', async () => {
+    const user = { id: 'u1', tenantId: 't1', name: 'User', email: 'u@example.com', role: 'owner', customProfileId: null, tenant: { id: 't1', plan: 'pro', status: 'expired', subscriptionExpiresAt: new Date(Date.now() - 60_000) } };
+    await expect(service.issueTenant(user)).resolves.toEqual(expect.objectContaining({ token: 'new-access-token', refreshToken: 'new-refresh-token' }));
+  });
+
   it('rejects legacy refresh tokens without a persistent session id', async () => {
     jwt.verifyAsync.mockResolvedValue({ sub: 'u1', tenantId: 't1', role: 'owner', typ: 'refresh' });
     await expect(service.refresh('legacy-refresh')).rejects.toBeInstanceOf(UnauthorizedException);

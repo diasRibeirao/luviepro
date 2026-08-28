@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { BillingService } from './billing.service';
 import { SubscriptionService } from './subscription.service';
 
@@ -15,6 +15,19 @@ describe('BillingService',()=>{
     const result=await service.createCheckout('t1','u1','pro','monthly');
     expect(result).toEqual(expect.objectContaining({paymentId:'pay-1',reused:true}));
     expect(db.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('impede novo downgrade quando já existe alteração de plano agendada',async()=>{
+    process.env.MERCADO_PAGO_ACCESS_TOKEN='test-token';
+    const db:any={
+      planLimit:{findUnique:jest.fn().mockResolvedValue({monthlyPriceCents:9990})},
+      user:{findFirst:jest.fn().mockResolvedValue({id:'u1',email:'owner@test.local'})},
+      subscription:{findFirst:jest.fn().mockResolvedValue({id:'scheduled-1',status:'scheduled'})},
+      auditLog:{create:jest.fn().mockResolvedValue({})},
+    };
+    const subscriptions:any={activateScheduledIfDue:jest.fn().mockResolvedValue({id:'t1',plan:'business',subscriptionExpiresAt:new Date(Date.now()+86400000)})};
+    const service=new BillingService(db,subscriptions);
+    await expect(service.createCheckout('t1','u1','pro','monthly')).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('isola reconciliação manual pelo tenant',async()=>{
@@ -39,9 +52,50 @@ describe('BillingService',()=>{
     await expect((service as any).processPaymentUnlocked(remote,local)).resolves.toEqual(expect.objectContaining({status:'approved',ignored:true}));
   });
 
+
+  it('rejeita metadado remoto incompatível com a cobrança local',async()=>{
+    const db:any={};const service=new BillingService(db,{} as any);
+    const remote={id:'mp1',external_reference:'ref1',transaction_amount:99.9,currency_id:'BRL',status:'approved',metadata:{payment_id:'outro'}};
+    const local={id:'p1',tenantId:'t1',externalReference:'ref1',amountCents:9990,status:'pending',plan:'pro',period:'monthly',billingAction:'renewal'};
+    await expect((service as any).processPaymentUnlocked(remote,local)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('coloca tenant em payment_review quando assinatura efetiva sofre chargeback',async()=>{
+    const tx:any={subscription:{update:jest.fn()},tenant:{update:jest.fn()}};
+    const db:any={payment:{update:jest.fn()},subscription:{findUnique:jest.fn().mockResolvedValue({id:'s1',status:'active'})},$transaction:jest.fn((cb:any)=>cb(tx)),auditLog:{create:jest.fn().mockResolvedValue({})}};
+    const service=new BillingService(db,{} as any);
+    const remote={id:'mp1',external_reference:'ref1',transaction_amount:99.9,currency_id:'BRL',status:'charged_back'};
+    const local={id:'p1',tenantId:'t1',externalReference:'ref1',amountCents:9990,status:'approved',plan:'pro',period:'monthly',billingAction:'renewal',subscriptionId:'s1'};
+    await (service as any).processPaymentUnlocked(remote,local);
+    expect(tx.subscription.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:'s1'},data:{status:'payment_review'}}));
+    expect(tx.tenant.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:'t1'},data:{status:'payment_review'}}));
+  });
+
+  it('cancela assinatura futura estornada sem bloquear o tenant atual',async()=>{
+    const tx:any={subscription:{update:jest.fn()},tenant:{update:jest.fn()}};
+    const db:any={payment:{update:jest.fn()},subscription:{findUnique:jest.fn().mockResolvedValue({id:'s2',status:'scheduled'})},$transaction:jest.fn((cb:any)=>cb(tx)),auditLog:{create:jest.fn().mockResolvedValue({})}};
+    const service=new BillingService(db,{} as any);
+    const remote={id:'mp2',external_reference:'ref2',transaction_amount:99.9,currency_id:'BRL',status:'refunded'};
+    const local={id:'p2',tenantId:'t1',externalReference:'ref2',amountCents:9990,status:'approved',plan:'starter',period:'monthly',billingAction:'downgrade',subscriptionId:'s2'};
+    await (service as any).processPaymentUnlocked(remote,local);
+    expect(tx.subscription.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:'s2'},data:{status:'cancelled'}}));
+    expect(tx.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('não cria segunda assinatura quando aprovação já foi reclamada em transação concorrente',async()=>{
+    const tx:any={payment:{updateMany:jest.fn().mockResolvedValue({count:0}),update:jest.fn()},subscription:{updateMany:jest.fn(),create:jest.fn()},tenant:{update:jest.fn()}};
+    const db:any={$transaction:jest.fn((cb:any)=>cb(tx)),auditLog:{create:jest.fn().mockResolvedValue({})}};
+    const subscriptions:any={activateScheduledIfDue:jest.fn().mockResolvedValue({id:'t1',plan:'starter',subscriptionExpiresAt:null})};
+    const service=new BillingService(db,subscriptions);
+    const local={id:'p1',tenantId:'t1',externalReference:'ref1',amountCents:9990,status:'pending',plan:'pro',period:'monthly',billingAction:'upgrade',payerEmail:'a@b.com'};
+    const remote={id:'mp1',external_reference:'ref1',transaction_amount:99.9,currency_id:'BRL',status:'approved'};
+    await expect((service as any).processPaymentUnlocked(remote,local)).resolves.toEqual(expect.objectContaining({status:'approved',ignored:true}));
+    expect(tx.subscription.create).not.toHaveBeenCalled();
+  });
+
   it('processa downgrade aprovado como assinatura agendada',async()=>{
     const expiry=new Date(Date.now()+86400000*10);
-    const tx:any={subscription:{updateMany:jest.fn(),create:jest.fn().mockResolvedValue({id:'s2'})},tenant:{update:jest.fn()},payment:{update:jest.fn()}};
+    const tx:any={subscription:{updateMany:jest.fn(),create:jest.fn().mockResolvedValue({id:'s2'})},tenant:{update:jest.fn()},payment:{updateMany:jest.fn().mockResolvedValue({count:1}),update:jest.fn()}};
     const db:any={$transaction:jest.fn((cb:any)=>cb(tx)),auditLog:{create:jest.fn().mockResolvedValue({})}};
     const subscriptions:any={activateScheduledIfDue:jest.fn().mockResolvedValue({id:'t1',plan:'business',subscriptionExpiresAt:expiry})};
     const service=new BillingService(db,subscriptions);

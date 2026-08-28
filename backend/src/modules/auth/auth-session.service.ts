@@ -32,9 +32,10 @@ export class AuthSessionService {
       ? (user.customProfile ?? await this.db.accessProfile.findFirst({ where: { id: user.customProfileId, tenantId: user.tenantId, active: true } }))
       : null;
     if (user.customProfileId && !profile) throw new ForbiddenException('Seu perfil de acesso está inativo ou indisponível');
-    if (user.tenant.status !== 'active' || (user.tenant.subscriptionExpiresAt && user.tenant.subscriptionExpiresAt.getTime() < Date.now())) {
-      throw new ForbiddenException('Conta indisponível ou assinatura expirada');
-    }
+    const status = String(user.tenant.status ?? 'active');
+    if (status === 'suspended' || status === 'cancelled') throw new ForbiddenException('Conta indisponível');
+    // payment_review/expired ainda recebem uma sessão autenticada para acessar exclusivamente o billing.
+    // O TenantActiveGuard continua bloqueando todos os demais módulos.
     const permissions = profile && Array.isArray(profile.permissions) ? profile.permissions as string[] : [];
     return { user, profile, permissions };
   }
