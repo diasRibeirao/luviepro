@@ -6,7 +6,7 @@ type Tone='primary'|'secondary'|'danger'|'header';
 export function AsyncButton({label,busy=false,busyLabel='Salvando...',disabled=false,onPress,tone='primary',style,accessibilityHint}:{label:string;busy?:boolean;busyLabel?:string;disabled?:boolean;onPress:()=>void|Promise<void>;tone?:Tone;style?:ViewStyle|ViewStyle[];accessibilityHint?:string}){
   const blocked=busy||disabled;
   const fg=tone==='danger'||tone==='header'?theme.white:tone==='secondary'?theme.green2:theme.g900;
-  return <Pressable accessibilityRole="button" accessibilityLabel={busy?busyLabel:label} accessibilityHint={accessibilityHint} accessibilityState={{disabled:blocked,busy}} disabled={blocked} onPress={onPress} style={({pressed,focused}:any)=>[s.base,tone==='primary'&&s.primary,tone==='secondary'&&s.secondary,tone==='danger'&&s.danger,tone==='header'&&s.header,focused&&s.focused,blocked&&s.disabled,pressed&&!blocked&&s.pressed,style]}>
+  return <Pressable accessibilityRole="button" accessibilityLabel={busy?busyLabel:label} accessibilityHint={accessibilityHint} accessibilityState={{disabled:blocked,busy}} disabled={blocked} onPress={onPress} style={({pressed})=>[s.base,tone==='primary'&&s.primary,tone==='secondary'&&s.secondary,tone==='danger'&&s.danger,tone==='header'&&s.header,blocked&&s.disabled,pressed&&!blocked&&s.pressed,style]}>
     {busy?<ActivityIndicator size="small" color={fg}/>:null}
     <Text style={[s.label,{color:fg}]}>{busy?busyLabel:label}</Text>
   </Pressable>

@@ -1,4 +1,4 @@
-import { ReactNode,useState } from 'react';
+import { ComponentProps,ReactNode,useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Modal,Pressable,StyleSheet,View } from 'react-native';
 import { Text } from '../i18n';
@@ -42,7 +42,8 @@ export function Pagination({page,total,pageSize=10,onChange}:{page:number;total:
   </View>
 }
 
-export type ActionItem={label:string;icon?:string;danger?:boolean;disabled?:boolean;onPress:()=>void};
+type IoniconName=ComponentProps<typeof Ionicons>['name'];
+export type ActionItem={label:string;icon?:IoniconName;danger?:boolean;disabled?:boolean;onPress:()=>void};
 export function ActionMenu({items}:{items:ActionItem[]}){
   const[open,setOpen]=useState(false);
   return <>
@@ -52,7 +53,7 @@ export function ActionMenu({items}:{items:ActionItem[]}){
         <Pressable style={s.actionSheet} onPress={()=>{}}>
           <Text style={s.menuTitle}>Ações</Text>
           {items.map((item,index)=><Pressable key={`${item.label}-${index}`} disabled={item.disabled} onPress={()=>{setOpen(false);item.onPress()}} style={({pressed})=>[s.actionItem,item.disabled&&s.disabled,pressed&&s.pressed]}>
-            <Ionicons name={(item.icon??'chevron-forward-outline') as any} size={17} color={item.danger?theme.danger:theme.green2}/><Text style={[s.actionLabel,item.danger&&s.actionDanger]}>{item.label}</Text>
+            <Ionicons name={item.icon??'chevron-forward-outline'} size={17} color={item.danger?theme.danger:theme.green2}/><Text style={[s.actionLabel,item.danger&&s.actionDanger]}>{item.label}</Text>
           </Pressable>)}
           <Pressable onPress={()=>setOpen(false)} style={s.close}><Text style={s.closeText}>Cancelar</Text></Pressable>
         </Pressable>

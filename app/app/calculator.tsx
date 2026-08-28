@@ -1,4 +1,4 @@
-import { useEffect,useMemo,useState } from 'react';
+import { type ReactNode,useEffect,useMemo,useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable,StyleSheet,useWindowDimensions,View } from 'react-native';
 import { Text, TextInput } from '../src/i18n';
@@ -9,26 +9,31 @@ import { theme } from '../src/theme';
 import { decimalInput,integerInput } from '../src/inputFormatters';
 
 type Row={label:string;value:string};
+type ServiceTeamMember={role:string;dailyRateCents:number;included?:boolean};
+type ServiceCost={type:'variable'|'fixed'|string;description:string;amountCents:number};
+type ServiceOption={id:string;code?:string|null;name:string;active?:boolean;defaultDays:number;safetyMarginBps:number;dailyRateCents:number;variableCostCents?:number|null;fixedCostCents?:number|null;team?:ServiceTeamMember[];costs?:ServiceCost[]};
+type PricingResult={laborCents:number;variableCents:number;fixedCents:number;marginCents:number;totalCents:number};
+type PricingPayload={dailyRateCents:number;days:number;people:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number};
 const cents=(value:string)=>Math.max(0,Math.round((Number(value.replace(',','.'))||0)*100));
 const reais=(value:number)=>String(value/100);
 
 export default function Calculator(){
-  const[services,setServices]=useState<any[]>([]); const[serviceId,setServiceId]=useState('');
+  const[services,setServices]=useState<ServiceOption[]>([]); const[serviceId,setServiceId]=useState('');
   const[days,setDays]=useState('1'); const[margin,setMargin]=useState('50');
-  const[team,setTeam]=useState<Row[]>([]); const[variable,setVariable]=useState<Row[]>([]); const[fixed,setFixed]=useState<Row[]>([]); const[result,setResult]=useState<any>();
+  const[team,setTeam]=useState<Row[]>([]); const[variable,setVariable]=useState<Row[]>([]); const[fixed,setFixed]=useState<Row[]>([]); const[result,setResult]=useState<PricingResult>();
   const {width}=useWindowDimensions(); const compact=width<1040; const wide=width>=1440;
-  useEffect(()=>{api('/services').then((rows:any[])=>setServices(rows.filter(x=>x.active!==false)))},[]);
+  useEffect(()=>{api<ServiceOption[]>('/services').then(rows=>setServices(rows.filter(x=>x.active!==false)))},[]);
   useEffect(()=>{const service=services.find(x=>x.id===serviceId); if(!service)return;
     setDays(String(service.defaultDays)); setMargin(String(service.safetyMarginBps/100));
-    const members=service.team?.filter((x:any)=>x.included!==false)??[];
-    const variableCosts=service.costs?.filter((x:any)=>x.type==='variable')??[];
-    const fixedCosts=service.costs?.filter((x:any)=>x.type==='fixed')??[];
-    setTeam(members.length?members.map((x:any)=>({label:x.role,value:reais(x.dailyRateCents)})):[{label:'Profissional',value:reais(service.dailyRateCents)}]);
-    setVariable(variableCosts.length?variableCosts.map((x:any)=>({label:x.description,value:reais(x.amountCents)})):(service.variableCostCents?[{label:'Despesas diárias',value:reais(service.variableCostCents)}]:[]));
-    setFixed(fixedCosts.length?fixedCosts.map((x:any)=>({label:x.description,value:reais(x.amountCents)})):(service.fixedCostCents?[{label:'Custo do projeto',value:reais(service.fixedCostCents)}]:[]));
+    const members=service.team?.filter(x=>x.included!==false)??[];
+    const variableCosts=service.costs?.filter(x=>x.type==='variable')??[];
+    const fixedCosts=service.costs?.filter(x=>x.type==='fixed')??[];
+    setTeam(members.length?members.map(x=>({label:x.role,value:reais(x.dailyRateCents)})):[{label:'Profissional',value:reais(service.dailyRateCents)}]);
+    setVariable(variableCosts.length?variableCosts.map(x=>({label:x.description,value:reais(x.amountCents)})):(service.variableCostCents?[{label:'Despesas diárias',value:reais(service.variableCostCents)}]:[]));
+    setFixed(fixedCosts.length?fixedCosts.map(x=>({label:x.description,value:reais(x.amountCents)})):(service.fixedCostCents?[{label:'Custo do projeto',value:reais(service.fixedCostCents)}]:[]));
   },[serviceId,services]);
-  const payload=useMemo(()=>({dailyRateCents:team.reduce((n,x)=>n+cents(x.value),0),days:Math.max(1,Number(days)||1),people:1,variableCostCents:variable.reduce((n,x)=>n+cents(x.value),0),fixedCostCents:fixed.reduce((n,x)=>n+cents(x.value),0),safetyMarginBps:Math.max(0,Math.round((Number(margin.replace(',','.'))||0)*100))}),[team,days,variable,fixed,margin]);
-  useEffect(()=>{if(!payload.dailyRateCents){setResult(undefined);return} const timer=setTimeout(()=>api('/pricing/calculate',{method:'POST',body:JSON.stringify(payload)}).then(setResult),220);return()=>clearTimeout(timer)},[payload]);
+  const payload=useMemo<PricingPayload>(()=>({dailyRateCents:team.reduce((n,x)=>n+cents(x.value),0),days:Math.max(1,Number(days)||1),people:1,variableCostCents:variable.reduce((n,x)=>n+cents(x.value),0),fixedCostCents:fixed.reduce((n,x)=>n+cents(x.value),0),safetyMarginBps:Math.max(0,Math.round((Number(margin.replace(',','.'))||0)*100))}),[team,days,variable,fixed,margin]);
+  useEffect(()=>{if(!payload.dailyRateCents){setResult(undefined);return} const timer=setTimeout(()=>api<PricingResult>('/pricing/calculate',{method:'POST',body:JSON.stringify(payload)}).then(setResult),220);return()=>clearTimeout(timer)},[payload]);
   return <AppShell title="Calculadora Rápida" subtitle="Simule o valor de um serviço em tempo real, sem alterar seus cadastros.">
     <View style={[s.layout,wide&&s.layoutWide,compact&&s.layoutCompact]}><View style={s.formColumn}>
       <Card title="Serviço base" hint="opcional"><View style={s.serviceWrap}><Text style={s.fieldLabel}>Selecione para pré-preencher os valores</Text><View style={s.services}><Pressable onPress={()=>setServiceId('')} style={[s.service,serviceId===''&&s.serviceOn]}><Text style={[s.serviceText,serviceId===''&&s.serviceTextOn]}>Selecionar serviço...</Text></Pressable>{services.map(x=><Pressable key={x.id} onPress={()=>setServiceId(x.id)} style={[s.service,serviceId===x.id&&s.serviceOn]}><Text style={[s.serviceText,serviceId===x.id&&s.serviceTextOn]}>{x.code} — {x.name}</Text></Pressable>)}</View></View></Card>
@@ -44,7 +49,7 @@ export default function Calculator(){
   </AppShell>;
 }
 
-function Card({title,hint,children}:{title:string;hint?:string;children:any}){return <View style={s.card}><View style={s.cardTitleRow}><Text style={s.cardTitle}>{title}</Text>{hint&&<Text style={s.cardHint}>({hint})</Text>}</View>{children}</View>}
+function Card({title,hint,children}:{title:string;hint?:string;children:ReactNode}){return <View style={s.card}><View style={s.cardTitleRow}><Text style={s.cardTitle}>{title}</Text>{hint&&<Text style={s.cardHint}>({hint})</Text>}</View>{children}</View>}
 function EditableCard({title,hint,rows,setRows,addLabel}:{title:string;hint:string;rows:Row[];setRows:(x:Row[])=>void;addLabel:string}){const update=(i:number,key:keyof Row,value:string)=>setRows(rows.map((x,j)=>j===i?{...x,[key]:value}:x));return <View style={s.card}><View style={s.editHead}><View style={s.cardTitleRow}><Text style={s.cardTitle}>{title}</Text><Text style={s.cardHint}>({hint})</Text></View><Pressable style={s.add} onPress={()=>setRows([...rows,{label:addLabel,value:'0'}])}><Ionicons name="add" size={15} color={theme.green2}/><Text style={s.addText}>Adicionar</Text></Pressable></View>{rows.length===0?<Text style={s.emptyRow}>Nenhum item adicionado.</Text>:rows.map((row,i)=><View key={`${title}-${i}`} style={s.editRow}><TextInput value={row.label} onChangeText={(v:string)=>update(i,'label',v)} placeholder="Descrição" style={[s.input,s.nameInput]}/><View style={s.moneyInput}><Text style={s.currency}>R$</Text><TextInput value={row.value} onChangeText={(v:string)=>update(i,'value',decimalInput(v))} keyboardType="decimal-pad" style={s.moneyField}/></View><Pressable style={s.trash} onPress={()=>setRows(rows.filter((_,j)=>j!==i))}><Ionicons name="trash-outline" size={17} color={theme.danger}/></Pressable></View>)}</View>}
 function Field({label,value,onChange}:{label:string;value:string;onChange:(v:string)=>void}){return <View style={s.field}><Text style={s.fieldLabel}>{label}</Text><TextInput value={value} onChangeText={onChange} keyboardType="decimal-pad" style={s.input}/></View>}
 function ResultLine({label,value}:{label:string;value:number}){return <View style={s.resultLine}><Text style={s.resultLabel}>{label}</Text><Text style={s.resultValue}>{money(value)}</Text></View>}

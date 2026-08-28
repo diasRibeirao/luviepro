@@ -1,8 +1,8 @@
-import { StyleSheet,View } from 'react-native';
+import { type DimensionValue,StyleSheet,View } from 'react-native';
 import { theme } from '../theme';
 
-export function SkeletonLine({width='100%',height=10}:{width?:number|string;height?:number}){
-  return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[s.line,{width:width as any,height}]}/>;
+export function SkeletonLine({width='100%',height=10}:{width?:DimensionValue;height?:number}){
+  return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[s.line,{width,height}]}/>;
 }
 
 export function ListSkeleton({rows=3}:{rows?:number}){
