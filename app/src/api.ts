@@ -2,11 +2,12 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { clearAuth,readAuth,writeAuth } from './authStorage';
 const configuredBase=process.env.EXPO_PUBLIC_API_URL;
+const e2eBase=process.env.EXPO_PUBLIC_E2E_API_URL;
 const metroHost=Constants.expoConfig?.hostUri?.split(':')[0];
 const webHost=Platform.OS==='web'&&typeof window!=='undefined'?window.location.hostname:undefined;
 const development=typeof __DEV__!=='undefined'?__DEV__:process.env.NODE_ENV!=='production';
 function apiBase(){
-  const configured=configuredBase?.trim().replace(/\/$/,'');
+  const configured=(e2eBase||configuredBase)?.trim().replace(/\/$/,'');
   if(development&&configured?.includes('localhost')){
     if(Platform.OS!=='web'&&metroHost)return `http://${metroHost}:3333/api`;
     if(Platform.OS==='web'&&webHost)return `http://${webHost}:3333/api`;

@@ -8,6 +8,7 @@ import { api, getSession, logout } from '../api';
 import { theme } from '../theme';
 import { localeOptions, useI18n, Text } from '../i18n';
 import { useFeedback } from './Feedback';
+import { runLogout } from '../modules/auth/authFlow.mjs';
 
 const items=[
   {href:'/home',key:'dashboard',icon:'grid-outline',group:'principal'},
@@ -51,7 +52,7 @@ export function AppShell({title,subtitle,action,children}:{title:string;subtitle
   const active=(href:string)=>path===href||path.startsWith(`${href}/`);
   const navigate=(href:string)=>router.replace(href as Href);
   const notificationLabel=unread?`${t('notifications')}: ${unread}`:t('notifications');
-  const signOut=async()=>{const accepted=await confirm({title:'Sair da conta?',message:'Você precisará entrar novamente para acessar o LuviePro.',confirmLabel:'Sair',danger:true});if(!accepted)return;await logout();router.replace('/')};
+  const signOut=()=>runLogout(()=>confirm({title:'Sair da conta?',message:'Você precisará entrar novamente para acessar o LuviePro.',confirmLabel:'Sair',danger:true}),logout,route=>router.replace(route));
   const allowed=(key:string)=>!session.customProfileId||!itemPermissions[key]||(session.permissions??[]).includes(itemPermissions[key]!);
   const visibleItems=items.filter(item=>allowed(item.key));
   const activeItem=visibleItems.find(item=>active(item.href));

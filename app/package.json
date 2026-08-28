@@ -11,9 +11,12 @@
     "ios": "expo start --ios",
     "export:web": "expo export --platform web --output-dir dist",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run verify:routes && npm run verify:contracts && npm run typecheck && npm run export:web",
+    "verify": "npm run verify:routes && npm run verify:contracts && npm run test:auth && npm run typecheck && npm run export:web",
     "verify:routes": "node scripts/verify-routes.mjs",
-    "verify:contracts": "node scripts/verify-app-contracts.mjs"
+    "verify:contracts": "node scripts/verify-app-contracts.mjs",
+    "test:auth": "node scripts/test-auth-flows.mjs",
+    "test:e2e:web": "node scripts/run-web-e2e.mjs",
+    "test:e2e:web:install": "playwright install chromium"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -36,6 +39,7 @@
   "devDependencies": {
     "@types/react": "~19.1.10",
     "typescript": "~5.9.2",
-    "@types/react-dom": "~19.1.9"
+    "@types/react-dom": "~19.1.9",
+    "@playwright/test": "^1.55.0"
   }
 }
