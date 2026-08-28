@@ -10,7 +10,7 @@ describe('ApiService access-management facade compatibility',()=>{
 
     expect(api).not.toContain('private invitationHash(token:string)');
     expect(api).not.toContain('private invitationUrl(token:string)');
-    expect(api).toContain('platformCreateTenant(data:PlatformCreateTenantDto,platformAdminId:string){return this.platformService().createTenant(data,platformAdminId);}');
+    expect(api).toContain('platformCreateTenant(d:PlatformCreateTenantDto,u:string){return this.platformService().createTenant(d,u);}')
 
     expect(platform).toContain('private invitationHash(token:string)');
     expect(platform).toContain('private invitationUrl(token:string)');

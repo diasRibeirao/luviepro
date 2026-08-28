@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
-import { ApiController } from './api.controller';
+import { HealthController } from './health.controller';
 import { ApiService } from './api.service';
 import { AuthGuard } from './auth.guard';
 import { HealthService } from './health.service';
@@ -20,6 +20,10 @@ import { QuotesModule } from './modules/quotes/quotes.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { ServicesModule } from './modules/services/services.module';
 import { PlatformModule } from './modules/platform/platform.module';
+import { PricingModule } from './modules/pricing/pricing.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { AccountModule } from './modules/account/account.module';
 
 @Module({
   imports:[
@@ -35,8 +39,12 @@ import { PlatformModule } from './modules/platform/platform.module';
     ClientsModule,
     ServicesModule,
     PlatformModule,
+    AccountModule,
+    AuditModule,
+    DashboardModule,
+    PricingModule,
   ],
-  controllers:[ApiController],
+  controllers:[HealthController],
   providers:[
     HealthService,
     ApiService,

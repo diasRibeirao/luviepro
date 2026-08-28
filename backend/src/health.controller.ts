@@ -1,0 +1,1 @@
+import { Controller,Get } from '@nestjs/common'; import { Public } from './public.decorator'; import { HealthService } from './health.service'; @Controller() export class HealthController {constructor(private health:HealthService){} @Public() @Get('health/live') live(){return this.health.live()} @Public() @Get('health') ready(){return this.health.ready()}}

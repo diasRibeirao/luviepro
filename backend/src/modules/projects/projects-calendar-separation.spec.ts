@@ -20,8 +20,8 @@ describe('Projects and Calendar domain separation', () => {
   it('ApiService delegates calendar operations to CalendarService', () => {
     const api = readFileSync(resolve(process.cwd(), 'src', 'api.service.ts'), 'utf8');
     expect(api).toContain('private calendarService()');
-    expect(api).toContain('return this.calendarService().list(tenantId)');
-    expect(api).toContain('return this.calendarService().create(tenantId,userId,data)');
+    expect(api).toContain('calendar(t:string){return this.calendarService().list(t);}')
+    expect(api).toContain('createCalendarEvent(t:string,u:string,d:any){return this.calendarService().create(t,u,d);}')
     expect(api).not.toContain('ProjectsCalendarService');
   });
 });

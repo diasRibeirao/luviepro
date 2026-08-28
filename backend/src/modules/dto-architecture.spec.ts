@@ -11,10 +11,12 @@ describe('feature DTO architecture',()=>{
     expect(source).not.toMatch(/export class\s/);
     expect(source).toContain("export * from './modules/quotes/dto/quotes.dto';");
   });
-  it('controller imports feature DTOs directly',()=>{
-    const source=readFileSync(resolve(process.cwd(),'src/api.controller.ts'),'utf8');
-    expect(source).not.toContain("from './dtos'");
-    expect(source).toContain("from './modules/access/dto/access.dto'");
-    expect(source).toContain("from './modules/quotes/dto/quotes.dto'");
+  it('feature controllers import their own DTOs directly',()=>{
+    const access=readFileSync(resolve(process.cwd(),'src/modules/access/access.controller.ts'),'utf8');
+    const quotes=readFileSync(resolve(process.cwd(),'src/modules/quotes/quotes.controller.ts'),'utf8');
+    expect(access).not.toContain("from '../../dtos'");
+    expect(quotes).not.toContain("from '../../dtos'");
+    expect(access).toContain("from './dto/access.dto'");
+    expect(quotes).toContain("from './dto/quotes.dto'");
   });
 });
