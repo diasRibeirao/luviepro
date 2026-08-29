@@ -11,7 +11,7 @@ services:
     runtime: node
     plan: free
     region: virginia
-    buildCommand: cd backend && npm ci && npm run build
+    buildCommand: cd backend && npm ci --include=dev && npm run build
     startCommand: cd backend && npm run render:start
     healthCheckPath: /api/health/live
     envVars:
