@@ -10,9 +10,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_TIMEOUT_MS": "20000",
-        "EXPO_PUBLIC_API_URL": "http://192.168.4.74:3333/api",
-        "EXPO_PUBLIC_ALLOW_INSECURE_API": "true"
+        "EXPO_PUBLIC_API_TIMEOUT_MS": "90000",
+        "EXPO_PUBLIC_API_URL": "https://luviepro-api-hml.onrender.com/api"
       }
     },
     "production": {

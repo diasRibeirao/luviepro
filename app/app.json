@@ -9,15 +9,7 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-secure-store",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "usesCleartextTraffic": true
-          }
-        }
-      ]
+      "expo-secure-store"
     ],
     "ios": {
       "bundleIdentifier": "br.com.luvieorganiza.luviepro",
