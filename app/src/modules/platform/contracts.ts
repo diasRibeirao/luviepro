@@ -32,6 +32,7 @@ export type PlatformUser = {
 
 export type PlatformPlan = {
   plan: string;
+  name?: string;
   maxClients: number;
   maxQuotesPerMonth: number;
   maxUsers: number;

@@ -2,13 +2,41 @@
   "expo": {
     "name": "LuviePro",
     "slug": "luviepro",
+    "version": "0.1.0",
     "scheme": "luviepro",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
+    "ios": {
+      "bundleIdentifier": "br.com.luvieorganiza.luviepro",
+      "supportsTablet": true,
+      "buildNumber": "1"
+    },
+    "android": {
+      "package": "br.com.luvieorganiza.luviepro",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true
+    },
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ee7efe10-ff6f-4f56-b568-cf78c4ed68ab"
+      }
     }
   }
 }

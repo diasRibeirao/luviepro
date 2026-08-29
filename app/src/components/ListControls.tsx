@@ -1,21 +1,24 @@
 import { ComponentProps,ReactNode,useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Modal,Pressable,StyleSheet,View } from 'react-native';
+import { Modal,Pressable,StyleSheet,useWindowDimensions,View } from 'react-native';
 import { Text } from '../i18n';
 import { theme } from '../theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export type SortOption={value:string;label:string};
 
 export function SortMenu({value,options,onChange}:{value:string;options:SortOption[];onChange:(value:string)=>void}){
   const[open,setOpen]=useState(false);
+  const mobile=useWindowDimensions().width<620;
+  const insets=useSafeAreaInsets();
   const current=options.find(option=>option.value===value)?.label??'Ordenar';
   return <>
     <Pressable accessibilityLabel="Ordenar resultados" onPress={()=>setOpen(true)} style={({pressed})=>[s.sortButton,pressed&&s.pressed]}>
       <Ionicons name="swap-vertical-outline" size={15} color={theme.green2}/><Text numberOfLines={1} style={s.sortText}>{current}</Text><Ionicons name="chevron-down" size={13} color={theme.muted}/>
     </Pressable>
     <Modal visible={open} transparent animationType="fade" presentationStyle="overFullScreen" onRequestClose={()=>setOpen(false)}>
-      <Pressable style={s.backdrop} onPress={()=>setOpen(false)}>
-        <Pressable style={s.menu} onPress={()=>{}}>
+      <Pressable style={[s.backdrop,mobile&&s.backdropMobile]} onPress={()=>setOpen(false)}>
+        <Pressable style={[s.menu,mobile&&s.sheet,{paddingBottom:Math.max(12,insets.bottom+8)}]} onPress={()=>{}}>
           <Text style={s.menuTitle}>Ordenar por</Text>
           {options.map(option=><Pressable key={option.value} onPress={()=>{onChange(option.value);setOpen(false)}} style={({pressed})=>[s.option,option.value===value&&s.optionOn,pressed&&s.pressed]}>
             <Text style={[s.optionText,option.value===value&&s.optionTextOn]}>{option.label}</Text>{option.value===value?<Ionicons name="checkmark" size={16} color={theme.green2}/>:null}
@@ -46,11 +49,13 @@ type IoniconName=ComponentProps<typeof Ionicons>['name'];
 export type ActionItem={label:string;icon?:IoniconName;danger?:boolean;disabled?:boolean;onPress:()=>void};
 export function ActionMenu({items}:{items:ActionItem[]}){
   const[open,setOpen]=useState(false);
+  const mobile=useWindowDimensions().width<620;
+  const insets=useSafeAreaInsets();
   return <>
     <Pressable accessibilityLabel="Abrir ações" onPress={()=>setOpen(true)} style={({pressed})=>[s.more,pressed&&s.pressed]}><Ionicons name="ellipsis-horizontal" size={18} color={theme.green2}/></Pressable>
     <Modal visible={open} transparent animationType="fade" presentationStyle="overFullScreen" onRequestClose={()=>setOpen(false)}>
-      <Pressable style={s.backdrop} onPress={()=>setOpen(false)}>
-        <Pressable style={s.actionSheet} onPress={()=>{}}>
+      <Pressable style={[s.backdrop,mobile&&s.backdropMobile]} onPress={()=>setOpen(false)}>
+        <Pressable style={[s.actionSheet,mobile&&s.sheet,{paddingBottom:Math.max(12,insets.bottom+8)}]} onPress={()=>{}}>
           <Text style={s.menuTitle}>Ações</Text>
           {items.map((item,index)=><Pressable key={`${item.label}-${index}`} disabled={item.disabled} onPress={()=>{setOpen(false);item.onPress()}} style={({pressed})=>[s.actionItem,item.disabled&&s.disabled,pressed&&s.pressed]}>
             <Ionicons name={item.icon??'chevron-forward-outline'} size={17} color={item.danger?theme.danger:theme.green2}/><Text style={[s.actionLabel,item.danger&&s.actionDanger]}>{item.label}</Text>
@@ -67,4 +72,4 @@ export function MobileCard({children}:{children:ReactNode}){return <View style={
 export function paginate<T>(items:T[],page:number,pageSize=10){const safe=Math.max(1,page);return items.slice((safe-1)*pageSize,safe*pageSize)}
 
 function pageNumbers(page:number,pages:number):(number|'…')[]{if(pages<=5)return Array.from({length:pages},(_,i)=>i+1);if(page<=3)return [1,2,3,4,'…',pages];if(page>=pages-2)return [1,'…',pages-3,pages-2,pages-1,pages];return [1,'…',page-1,page,page+1,'…',pages]}
-const s=StyleSheet.create({sortButton:{height:36,maxWidth:185,paddingHorizontal:10,borderWidth:1,borderColor:theme.border,borderRadius:9,backgroundColor:theme.white,flexDirection:'row',alignItems:'center',gap:6},sortText:{flexShrink:1,fontSize:11,fontWeight:'800',color:theme.ink},backdrop:{flex:1,backgroundColor:'rgba(11,29,21,.34)',alignItems:'center',justifyContent:'center',padding:18},menu:{width:'100%',maxWidth:340,borderRadius:17,backgroundColor:theme.white,borderWidth:1,borderColor:theme.border,padding:12,shadowColor:'#000',shadowOpacity:.16,shadowRadius:26,shadowOffset:{width:0,height:12},elevation:15},menuTitle:{fontFamily:'serif',fontSize:15,fontWeight:'700',color:theme.ink,paddingHorizontal:7,paddingVertical:9},option:{minHeight:42,borderRadius:10,paddingHorizontal:10,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},optionOn:{backgroundColor:theme.green50},optionText:{fontSize:12,fontWeight:'700',color:theme.muted},optionTextOn:{color:theme.green2},pagination:{minHeight:56,paddingHorizontal:14,paddingVertical:10,borderTopWidth:1,borderTopColor:theme.border,backgroundColor:'#FCFDFC',flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'},range:{fontSize:11,fontWeight:'700',color:theme.muted},pageActions:{flexDirection:'row',gap:5,alignItems:'center'},pageButton:{minWidth:30,height:30,paddingHorizontal:8,borderWidth:1,borderColor:theme.border,borderRadius:8,alignItems:'center',justifyContent:'center',backgroundColor:theme.white},pageOn:{backgroundColor:theme.green2,borderColor:theme.green2},pageText:{fontSize:11,fontWeight:'800',color:theme.green2},pageTextOn:{color:theme.white},dots:{paddingHorizontal:3,fontSize:12,color:theme.muted},disabled:{opacity:.38},pressed:{opacity:.72},more:{width:34,height:34,borderRadius:9,borderWidth:1,borderColor:theme.border,backgroundColor:theme.white,alignItems:'center',justifyContent:'center'},actionSheet:{width:'100%',maxWidth:360,borderRadius:18,backgroundColor:theme.white,borderWidth:1,borderColor:theme.border,padding:12,shadowColor:'#000',shadowOpacity:.18,shadowRadius:28,shadowOffset:{width:0,height:13},elevation:16},actionItem:{minHeight:45,borderRadius:10,paddingHorizontal:10,flexDirection:'row',alignItems:'center',gap:10},actionLabel:{fontSize:12,fontWeight:'800',color:theme.ink},actionDanger:{color:theme.danger},close:{height:42,borderTopWidth:1,borderTopColor:theme.border,marginTop:5,alignItems:'center',justifyContent:'center'},closeText:{fontSize:11,fontWeight:'800',color:theme.muted},mobileCard:{backgroundColor:theme.white,borderWidth:1,borderColor:theme.border,borderRadius:13,padding:13}});
+const s=StyleSheet.create({sortButton:{height:36,maxWidth:185,paddingHorizontal:10,borderWidth:1,borderColor:theme.border,borderRadius:9,backgroundColor:theme.white,flexDirection:'row',alignItems:'center',gap:6},sortText:{flexShrink:1,fontSize:11,fontWeight:'800',color:theme.ink},backdrop:{flex:1,backgroundColor:'rgba(11,29,21,.34)',alignItems:'center',justifyContent:'center',padding:18},backdropMobile:{justifyContent:'flex-end',padding:0},sheet:{maxWidth:'100%',borderBottomLeftRadius:0,borderBottomRightRadius:0,paddingTop:14},menu:{width:'100%',maxWidth:340,borderRadius:17,backgroundColor:theme.white,borderWidth:1,borderColor:theme.border,padding:12,shadowColor:'#000',shadowOpacity:.16,shadowRadius:26,shadowOffset:{width:0,height:12},elevation:15},menuTitle:{fontFamily:'serif',fontSize:15,fontWeight:'700',color:theme.ink,paddingHorizontal:7,paddingVertical:9},option:{minHeight:42,borderRadius:10,paddingHorizontal:10,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},optionOn:{backgroundColor:theme.green50},optionText:{fontSize:12,fontWeight:'700',color:theme.muted},optionTextOn:{color:theme.green2},pagination:{minHeight:56,paddingHorizontal:14,paddingVertical:10,borderTopWidth:1,borderTopColor:theme.border,backgroundColor:'#FCFDFC',flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'},range:{fontSize:11,fontWeight:'700',color:theme.muted},pageActions:{flexDirection:'row',gap:5,alignItems:'center'},pageButton:{minWidth:30,height:30,paddingHorizontal:8,borderWidth:1,borderColor:theme.border,borderRadius:8,alignItems:'center',justifyContent:'center',backgroundColor:theme.white},pageOn:{backgroundColor:theme.green2,borderColor:theme.green2},pageText:{fontSize:11,fontWeight:'800',color:theme.green2},pageTextOn:{color:theme.white},dots:{paddingHorizontal:3,fontSize:12,color:theme.muted},disabled:{opacity:.38},pressed:{opacity:.72},more:{width:34,height:34,borderRadius:9,borderWidth:1,borderColor:theme.border,backgroundColor:theme.white,alignItems:'center',justifyContent:'center'},actionSheet:{width:'100%',maxWidth:360,borderRadius:18,backgroundColor:theme.white,borderWidth:1,borderColor:theme.border,padding:12,shadowColor:'#000',shadowOpacity:.18,shadowRadius:28,shadowOffset:{width:0,height:13},elevation:16},actionItem:{minHeight:45,borderRadius:10,paddingHorizontal:10,flexDirection:'row',alignItems:'center',gap:10},actionLabel:{fontSize:12,fontWeight:'800',color:theme.ink},actionDanger:{color:theme.danger},close:{height:42,borderTopWidth:1,borderTopColor:theme.border,marginTop:5,alignItems:'center',justifyContent:'center'},closeText:{fontSize:11,fontWeight:'800',color:theme.muted},mobileCard:{backgroundColor:theme.white,borderWidth:1,borderColor:theme.border,borderRadius:13,padding:13}});
