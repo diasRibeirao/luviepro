@@ -1,0 +1,85 @@
+services:
+  - type: keyvalue
+    name: luviepro-redis-hml
+    plan: free
+    region: virginia
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
+
+  - type: web
+    name: luviepro-api-hml
+    runtime: node
+    plan: free
+    region: virginia
+    buildCommand: cd backend && npm ci && npm run build
+    startCommand: cd backend && npm run render:start
+    healthCheckPath: /api/health/live
+    envVars:
+      - key: NODE_VERSION
+        value: 22.20.0
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: staging
+      - key: PORT
+        value: "10000"
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: HTTP_ACCESS_LOG
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: luviepro-postgres-hml
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: luviepro-redis-hml
+          property: connectionString
+      - key: REDIS_KEY_PREFIX
+        value: "luviepro:hml:"
+      - key: CORS_ORIGINS
+        value: https://luviepro-api-hml.onrender.com
+      - key: APP_WEB_URL
+        value: https://luviepro-api-hml.onrender.com
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: PLATFORM_ADMIN_EMAIL
+        value: master@luviepro.local
+      - key: PLATFORM_ADMIN_PASSWORD
+        sync: false
+      - key: MERCADO_PAGO_ACCESS_TOKEN
+        sync: false
+      - key: MERCADO_PAGO_WEBHOOK_SECRET
+        sync: false
+      - key: MERCADO_PAGO_WEBHOOK_URL
+        value: https://luviepro-api-hml.onrender.com/api/billing/webhooks/mercado-pago
+      - key: MERCADO_PAGO_USE_SANDBOX
+        value: "true"
+      - key: MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS
+        value: "false"
+      - key: ALLOW_DIRECT_PLAN_CHANGE
+        value: "false"
+      - key: AUTH_REFRESH_COOKIE_SECURE
+        value: "true"
+      - key: AUTH_REFRESH_COOKIE_SAMESITE
+        value: strict
+      - key: AUTH_SESSION_CLEANUP_ENABLED
+        value: "true"
+      - key: AUTH_SESSION_CLEANUP_INTERVAL_MS
+        value: "86400000"
+      - key: AUTH_SESSION_RETENTION_DAYS
+        value: "30"
+      - key: BILLING_RECONCILIATION_ENABLED
+        value: "false"
+      - key: DEMO_SEED
+        value: "0"
+
+databases:
+  - name: luviepro-postgres-hml
+    plan: free
+    region: virginia
+    databaseName: luviepro_hml
+    user: luviepro_hml

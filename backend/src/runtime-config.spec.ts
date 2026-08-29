@@ -5,6 +5,8 @@ const valid={NODE_ENV:'production',DATABASE_URL:'postgresql://db',JWT_SECRET:'a'
 describe('validateRuntimeConfig',()=>{
   it('não exige configuração externa no desenvolvimento',()=>expect(()=>validateRuntimeConfig({NODE_ENV:'development'})).not.toThrow());
   it('aceita configuração segura de produção',()=>expect(()=>validateRuntimeConfig(valid)).not.toThrow());
+  it('aceita sandbox em homologação mantendo NODE_ENV de produção',()=>expect(()=>validateRuntimeConfig({...valid,APP_ENV:'staging',MERCADO_PAGO_USE_SANDBOX:'true',SMTP_HOST:'',SMTP_FROM:''})).not.toThrow());
+  it('continua rejeitando webhook sem assinatura e alteração direta de plano em homologação',()=>expect(()=>validateRuntimeConfig({...valid,APP_ENV:'staging',MERCADO_PAGO_USE_SANDBOX:'true',MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS:'true',ALLOW_DIRECT_PLAN_CHANGE:'true'})).toThrow(/sem assinatura[\s\S]*ALLOW_DIRECT_PLAN_CHANGE/));
   it('rejeita segredos iguais, CORS HTTP e webhook sem assinatura',()=>expect(()=>validateRuntimeConfig({...valid,JWT_REFRESH_SECRET:valid.JWT_SECRET,CORS_ORIGINS:'http://localhost:8081',MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS:'true'})).toThrow(/devem ser diferentes[\s\S]*somente origens HTTPS[\s\S]*sem assinatura/));
   it('rejeita sandbox e alteração direta de plano em produção',()=>expect(()=>validateRuntimeConfig({...valid,MERCADO_PAGO_USE_SANDBOX:'true',ALLOW_DIRECT_PLAN_CHANGE:'true'})).toThrow(/SANDBOX[\s\S]*ALLOW_DIRECT_PLAN_CHANGE/));
   it('exige autenticação do Redis',()=>expect(()=>validateRuntimeConfig({...valid,REDIS_PASSWORD:'',REDIS_URL:''})).toThrow(/REDIS_URL ou REDIS_PASSWORD/));

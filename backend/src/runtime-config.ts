@@ -1,2 +1,64 @@
-import {envBoolean,envInt,envString} from './config/env';const isHttps=(s:string)=>/^https:\/\//i.test(s);
-export function validateRuntimeConfig(env:NodeJS.ProcessEnv=process.env){if(env.NODE_ENV!=='production')return;const errors:string[]=[];const required=['DATABASE_URL','JWT_SECRET','JWT_REFRESH_SECRET','CORS_ORIGINS','APP_WEB_URL','MERCADO_PAGO_ACCESS_TOKEN','MERCADO_PAGO_WEBHOOK_URL','MERCADO_PAGO_WEBHOOK_SECRET','SMTP_HOST','SMTP_FROM'];for(const k of required)if(!envString(env,k))errors.push(`${k} não configurado`);const jwt=envString(env,'JWT_SECRET'),refresh=envString(env,'JWT_REFRESH_SECRET');if(jwt&&jwt.length<32)errors.push('JWT_SECRET deve possuir pelo menos 32 caracteres');if(refresh&&refresh.length<32)errors.push('JWT_REFRESH_SECRET deve possuir pelo menos 32 caracteres');if(jwt&&refresh&&jwt===refresh)errors.push('JWT_SECRET e JWT_REFRESH_SECRET devem ser diferentes');const app=envString(env,'APP_WEB_URL');if(app&&!isHttps(app))errors.push('APP_WEB_URL deve utilizar HTTPS em produção');const origins=envString(env,'CORS_ORIGINS').split(',').map(v=>v.trim()).filter(Boolean);if(origins.some(v=>v==='*'))errors.push('CORS_ORIGINS não pode utilizar curinga em produção');if(origins.some(v=>!isHttps(v)))errors.push('CORS_ORIGINS deve conter somente origens HTTPS em produção');if(app&&origins.length&&!origins.includes(app))errors.push('CORS_ORIGINS deve incluir APP_WEB_URL');const wh=envString(env,'MERCADO_PAGO_WEBHOOK_URL');if(wh&&!isHttps(wh))errors.push('MERCADO_PAGO_WEBHOOK_URL deve utilizar HTTPS');if(envString(env,'MERCADO_PAGO_WEBHOOK_SECRET')&&envString(env,'MERCADO_PAGO_WEBHOOK_SECRET').length<16)errors.push('MERCADO_PAGO_WEBHOOK_SECRET deve possuir pelo menos 16 caracteres');for(const [k,msg] of [['MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS','Webhooks sem assinatura não podem ser habilitados em produção'],['MERCADO_PAGO_USE_SANDBOX','MERCADO_PAGO_USE_SANDBOX deve estar desabilitado em produção'],['ALLOW_DIRECT_PLAN_CHANGE','ALLOW_DIRECT_PLAN_CHANGE deve estar desabilitado em produção']] as const){try{if(envBoolean(env,k,false))errors.push(msg)}catch(e){errors.push((e as Error).message)}}const redisUrl=envString(env,'REDIS_URL'),redisPassword=envString(env,'REDIS_PASSWORD');if(!redisUrl&&!redisPassword)errors.push('Configure REDIS_URL ou REDIS_PASSWORD para autenticar o Redis em produção');if(redisUrl&&!/^rediss?:\/\//i.test(redisUrl))errors.push('REDIS_URL deve utilizar redis:// ou rediss://');for(const [k,d,min,max] of [['SMTP_PORT',587,1,65535],['TRUST_PROXY_HOPS',0,0,100],['REDIS_CONNECT_TIMEOUT_MS',5000,100,60000],['AUTH_SESSION_CLEANUP_INTERVAL_MS',86400000,3600000,604800000],['AUTH_SESSION_RETENTION_DAYS',30,1,365],['BILLING_RECONCILIATION_INTERVAL_MS',300000,60000,86400000],['BILLING_RECONCILIATION_BATCH_SIZE',25,1,100],['BILLING_RECONCILIATION_OLDER_THAN_MINUTES',5,1,1440],['HTTP_MAX_REQUEST_BYTES',1048576,1024,10485760],['AUDIT_RETENTION_DAYS',365,30,3650],['WEBHOOK_RETENTION_DAYS',90,7,3650],['PAYMENT_RETENTION_DAYS',1825,365,3650]] as const){try{envInt(env,k,d,{min,max})}catch(e){errors.push((e as Error).message)}}if(errors.length)throw new Error(`Configuração de produção inválida:\n- ${errors.join('\n- ')}`);}
+import {envBoolean,envInt,envString} from './config/env';
+
+const isHttps=(s:string)=>/^https:\/\//i.test(s);
+const isStaging=(env:NodeJS.ProcessEnv)=>envString(env,'APP_ENV').toLowerCase()==='staging';
+
+export function validateRuntimeConfig(env:NodeJS.ProcessEnv=process.env){
+  if(env.NODE_ENV!=='production')return;
+  const staging=isStaging(env);
+  const errors:string[]=[];
+  const required=['DATABASE_URL','JWT_SECRET','JWT_REFRESH_SECRET','CORS_ORIGINS','APP_WEB_URL','MERCADO_PAGO_ACCESS_TOKEN','MERCADO_PAGO_WEBHOOK_URL','MERCADO_PAGO_WEBHOOK_SECRET'];
+  if(!staging)required.push('SMTP_HOST','SMTP_FROM');
+  for(const k of required)if(!envString(env,k))errors.push(`${k} não configurado`);
+
+  const jwt=envString(env,'JWT_SECRET'),refresh=envString(env,'JWT_REFRESH_SECRET');
+  if(jwt&&jwt.length<32)errors.push('JWT_SECRET deve possuir pelo menos 32 caracteres');
+  if(refresh&&refresh.length<32)errors.push('JWT_REFRESH_SECRET deve possuir pelo menos 32 caracteres');
+  if(jwt&&refresh&&jwt===refresh)errors.push('JWT_SECRET e JWT_REFRESH_SECRET devem ser diferentes');
+
+  const app=envString(env,'APP_WEB_URL');
+  if(app&&!isHttps(app))errors.push('APP_WEB_URL deve utilizar HTTPS em produção');
+  const origins=envString(env,'CORS_ORIGINS').split(',').map(v=>v.trim()).filter(Boolean);
+  if(origins.some(v=>v==='*'))errors.push('CORS_ORIGINS não pode utilizar curinga em produção');
+  if(origins.some(v=>!isHttps(v)))errors.push('CORS_ORIGINS deve conter somente origens HTTPS em produção');
+  if(app&&origins.length&&!origins.includes(app))errors.push('CORS_ORIGINS deve incluir APP_WEB_URL');
+
+  const wh=envString(env,'MERCADO_PAGO_WEBHOOK_URL');
+  if(wh&&!isHttps(wh))errors.push('MERCADO_PAGO_WEBHOOK_URL deve utilizar HTTPS');
+  if(envString(env,'MERCADO_PAGO_WEBHOOK_SECRET')&&envString(env,'MERCADO_PAGO_WEBHOOK_SECRET').length<16)errors.push('MERCADO_PAGO_WEBHOOK_SECRET deve possuir pelo menos 16 caracteres');
+
+  for(const [k,msg,allowedInStaging] of [
+    ['MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS','Webhooks sem assinatura não podem ser habilitados em produção',false],
+    ['MERCADO_PAGO_USE_SANDBOX','MERCADO_PAGO_USE_SANDBOX deve estar desabilitado em produção',true],
+    ['ALLOW_DIRECT_PLAN_CHANGE','ALLOW_DIRECT_PLAN_CHANGE deve estar desabilitado em produção',false],
+  ] as const){
+    try{
+      if(envBoolean(env,k,false)&&!(staging&&allowedInStaging))errors.push(msg);
+    }catch(e){
+      errors.push((e as Error).message);
+    }
+  }
+
+  const redisUrl=envString(env,'REDIS_URL'),redisPassword=envString(env,'REDIS_PASSWORD');
+  if(!redisUrl&&!redisPassword)errors.push('Configure REDIS_URL ou REDIS_PASSWORD para autenticar o Redis em produção');
+  if(redisUrl&&!/^rediss?:\/\//i.test(redisUrl))errors.push('REDIS_URL deve utilizar redis:// ou rediss://');
+
+  for(const [k,d,min,max] of [
+    ['SMTP_PORT',587,1,65535],
+    ['TRUST_PROXY_HOPS',0,0,100],
+    ['REDIS_CONNECT_TIMEOUT_MS',5000,100,60000],
+    ['AUTH_SESSION_CLEANUP_INTERVAL_MS',86400000,3600000,604800000],
+    ['AUTH_SESSION_RETENTION_DAYS',30,1,365],
+    ['BILLING_RECONCILIATION_INTERVAL_MS',300000,60000,86400000],
+    ['BILLING_RECONCILIATION_BATCH_SIZE',25,1,100],
+    ['BILLING_RECONCILIATION_OLDER_THAN_MINUTES',5,1,1440],
+    ['HTTP_MAX_REQUEST_BYTES',1048576,1024,10485760],
+    ['AUDIT_RETENTION_DAYS',365,30,3650],
+    ['WEBHOOK_RETENTION_DAYS',90,7,3650],
+    ['PAYMENT_RETENTION_DAYS',1825,365,3650],
+  ] as const){
+    try{envInt(env,k,d,{min,max})}catch(e){errors.push((e as Error).message)}
+  }
+
+  if(errors.length)throw new Error(`Configuração de produção inválida:\n- ${errors.join('\n- ')}`);
+}
