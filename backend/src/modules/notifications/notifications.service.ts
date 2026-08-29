@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { NotificationPreferencesDto } from './dto/notifications.dto';
 import { notificationRoutes } from './types/notification-routes';
@@ -7,7 +7,12 @@ import { notificationRoutes } from './types/notification-routes';
 export class NotificationsService {
   constructor(private readonly db: PrismaService) {}
 
+  private requireContext(tenantId: string, userId: string) {
+    if (!tenantId || !userId) throw new BadRequestException('Contexto da empresa ou usuário ausente');
+  }
+
   private async preferences(tenantId: string, userId: string) {
+    this.requireContext(tenantId, userId);
     return this.db.notificationPreference.upsert({
       where: { userId },
       update: {},
@@ -80,12 +85,14 @@ export class NotificationsService {
   }
 
   async read(tenantId: string, userId: string, id: string) {
+    this.requireContext(tenantId, userId);
     const result = await this.db.userNotification.updateMany({ where: { id, tenantId, userId }, data: { readAt: new Date() } });
     if (!result.count) throw new NotFoundException('Notificação não encontrada');
     return { ok: true };
   }
 
   async readAll(tenantId: string, userId: string) {
+    this.requireContext(tenantId, userId);
     await this.db.userNotification.updateMany({ where: { tenantId, userId, readAt: null }, data: { readAt: new Date() } });
     return { ok: true };
   }
@@ -95,6 +102,7 @@ export class NotificationsService {
   }
 
   updatePreferences(tenantId: string, userId: string, data: NotificationPreferencesDto) {
+    this.requireContext(tenantId, userId);
     return this.db.notificationPreference.upsert({ where: { userId }, update: data, create: { tenantId, userId, ...data } });
   }
 }

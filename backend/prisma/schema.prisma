@@ -57,6 +57,10 @@ model Tenant {
 }
 model PlanLimit {
   plan String @id
+  name String
+  description String?
+  active Boolean @default(true)
+  sortOrder Int @default(0)
   maxClients Int
   maxQuotesPerMonth Int
   maxUsers Int
@@ -74,6 +78,8 @@ model PlanLimit {
   quarterlyPriceCents Int
   semiannualPriceCents Int
   annualPriceCents Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 model Subscription {
   id String @id @default(cuid())

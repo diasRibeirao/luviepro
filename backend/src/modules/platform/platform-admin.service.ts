@@ -3,9 +3,9 @@ import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma.service';
 import { MailService } from '../../mail.service';
 import { AuthService } from '../auth/auth.service';
-import { isPlanCode, periodEnd, periodPrice, planRank } from '../../plan-policy';
+import { periodEnd, periodPrice } from '../../plan-policy';
 import { pagination } from '../../http/pagination';
-import { PlatformCreateTenantDto, PlatformListQueryDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
+import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformListQueryDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
 
 @Injectable()
 export class PlatformAdminService {
@@ -56,13 +56,15 @@ export class PlatformAdminService {
   async subscriptions(query?:PlatformListQueryDto){const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);const q=query?.q?.trim();const where:any={...(query?.status&&query.status!=='all'&&{status:query.status}),...(query?.plan&&query.plan!=='all'&&{plan:query.plan}),...(query?.tenantId&&query.tenantId!=='all'&&{tenantId:query.tenantId}),...(q&&{OR:[{tenant:{name:{contains:q,mode:'insensitive'}}},{plan:{contains:q,mode:'insensitive'}}]})};const args:any={where,select:{id:true,plan:true,period:true,amountCents:true,status:true,startsAt:true,expiresAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},...(paged?{skip:p.skip,take:p.take}:{take:200})};const[items,total]=await Promise.all([this.db.subscription.findMany(args),paged?this.db.subscription.count({where}):Promise.resolve(0)]);return paged?this.pageResult(items,total,p.page,p.pageSize):items;}
   async payments(query?:PlatformListQueryDto){const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);const q=query?.q?.trim();const where:any={...(query?.status&&query.status!=='all'&&{status:query.status}),...(query?.plan&&query.plan!=='all'&&{plan:query.plan}),...(query?.tenantId&&query.tenantId!=='all'&&{tenantId:query.tenantId}),...(q&&{OR:[{tenant:{name:{contains:q,mode:'insensitive'}}},{providerPaymentId:{contains:q,mode:'insensitive'}},{paymentMethod:{contains:q,mode:'insensitive'}}]})};const args:any={where,select:{id:true,provider:true,providerPaymentId:true,plan:true,period:true,amountCents:true,status:true,paymentMethod:true,paidAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},...(paged?{skip:p.skip,take:p.take}:{take:300})};const[items,total]=await Promise.all([this.db.payment.findMany(args),paged?this.db.payment.count({where}):Promise.resolve(0)]);return paged?this.pageResult(items,total,p.page,p.pageSize):items;}
   async users(query?:PlatformListQueryDto){const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);const q=query?.q?.trim();const where:any={...(query?.status&&query.status!=='all'&&{active:query.status==='active'}),...(query?.plan&&query.plan!=='all'&&{tenant:{plan:query.plan}}),...(query?.tenantId&&query.tenantId!=='all'&&{tenantId:query.tenantId}),...(q&&{OR:[{name:{contains:q,mode:'insensitive'}},{email:{contains:q,mode:'insensitive'}},{tenant:{name:{contains:q,mode:'insensitive'}}}]})};const args:any={where,select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}},orderBy:{createdAt:'desc'},...(paged?{skip:p.skip,take:p.take}:{take:500})};const[items,total]=await Promise.all([this.db.user.findMany(args),paged?this.db.user.count({where}):Promise.resolve(0)]);return paged?this.pageResult(items,total,p.page,p.pageSize):items;}
-  plans(){return this.db.planLimit.findMany({orderBy:{monthlyPriceCents:'asc'}});}
+  plans(){return this.db.planLimit.findMany({orderBy:[{sortOrder:'asc'},{monthlyPriceCents:'asc'}]});}
 
   async changeTenant(id:string,data:PlatformTenantDto){
     const tenant=await this.db.tenant.findUnique({where:{id}});
     if(!tenant)throw new NotFoundException('Empresa não encontrada');
     const plan=data.plan??tenant.plan,period=data.planPeriod??tenant.planPeriod??'monthly';
-    if(data.plan&&planRank(plan)<planRank(tenant.plan)&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt.getTime()>Date.now()){
+    const [targetPlan,currentPlan]=await Promise.all([this.db.planLimit.findUnique({where:{plan}}),this.db.planLimit.findUnique({where:{plan:tenant.plan}})]);
+    if(!targetPlan||(!targetPlan.active&&plan!==tenant.plan))throw new BadRequestException('Plano indisponível');
+    if(data.plan&&targetPlan.sortOrder<(currentPlan?.sortOrder??0)&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt.getTime()>Date.now()){
       const existing=await this.db.subscription.findFirst({where:{tenantId:id,status:'scheduled'}});
       if(existing)throw new ConflictException('Já existe uma alteração de plano agendada para esta empresa');
       const limit=await this.db.planLimit.findUnique({where:{plan}});if(!limit)throw new BadRequestException('Plano indisponível');
@@ -86,7 +88,7 @@ export class PlatformAdminService {
     if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já possui acesso ao LuviePro');
     const pending=await this.db.userInvitation.findFirst({where:{email,status:'pending',expiresAt:{gt:new Date()}}});
     if(pending)throw new ConflictException('Já existe um convite pendente para este e-mail');
-    const limit=await this.db.planLimit.findUnique({where:{plan:data.plan}});if(!limit)throw new BadRequestException('Plano indisponível');
+    const limit=await this.db.planLimit.findUnique({where:{plan:data.plan}});if(!limit?.active)throw new BadRequestException('Plano indisponível');
     const amountCents=periodPrice(limit,data.period);
     const now=new Date(),trialEnd=new Date(now);trialEnd.setDate(trialEnd.getDate()+14);
     const slug=`${company.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'empresa'}-${Date.now().toString(36)}`;
@@ -106,7 +108,7 @@ export class PlatformAdminService {
   async updateTenant(id:string,data:PlatformTenantDto){
     const tenant=await this.db.tenant.findUnique({where:{id}});if(!tenant)throw new NotFoundException('Empresa não encontrada');
     const plan=data.plan??tenant.plan,period=data.planPeriod??tenant.planPeriod??'monthly';
-    const limit=await this.db.planLimit.findUnique({where:{plan}});if(!limit)throw new BadRequestException('Plano indisponível');
+    const limit=await this.db.planLimit.findUnique({where:{plan}});if(!limit||(!limit.active&&plan!==tenant.plan))throw new BadRequestException('Plano indisponível');
     const amountCents=periodPrice(limit,period);
     const updated=await this.db.$transaction(async tx=>{
       const result=await tx.tenant.update({where:{id},data:{...(data.status!==undefined&&{status:data.status}),...(data.plan!==undefined&&{plan:data.plan}),...(data.planPeriod!==undefined&&{planPeriod:data.planPeriod})}});
@@ -139,8 +141,15 @@ export class PlatformAdminService {
   }
 
   async updatePlan(plan:string,data:PlatformPlanDto){
-    if(!isPlanCode(plan))throw new BadRequestException('Plano inválido');
     const current=await this.db.planLimit.findUnique({where:{plan}});if(!current)throw new NotFoundException('Plano não encontrado');
+    if(data.active===false){const scheduled=await this.db.subscription.count({where:{plan,status:'scheduled'}});if(scheduled)throw new ConflictException('Cancele as alterações agendadas deste plano antes de inativá-lo');}
     return this.db.planLimit.update({where:{plan},data});
+  }
+
+  async createPlan(data:PlatformCreatePlanDto){
+    const plan=data.plan.trim().toLowerCase();
+    if(await this.db.planLimit.findUnique({where:{plan}}))throw new ConflictException('Já existe um plano com este código');
+    const maxOrder=await this.db.planLimit.aggregate({_max:{sortOrder:true}});
+    return this.db.planLimit.create({data:{...data,plan,name:data.name.trim(),description:data.description?.trim()||null,active:data.active??true,sortOrder:data.sortOrder??(maxOrder._max.sortOrder??0)+10}});
   }
 }

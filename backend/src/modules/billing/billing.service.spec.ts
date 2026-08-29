@@ -9,7 +9,7 @@ describe('BillingService',()=>{
   it('reutiliza checkout recente e não duplica cobrança',async()=>{
     process.env.MERCADO_PAGO_ACCESS_TOKEN='test-token';
     const checkout={id:'pay-1',providerPreferenceId:'pref-1',checkoutUrl:'https://checkout.test/1',billingAction:'renewal'};
-    const db:any={planLimit:{findUnique:jest.fn().mockResolvedValue({monthlyPriceCents:9990})},user:{findFirst:jest.fn().mockResolvedValue({id:'u1',email:'owner@test.local'})},payment:{findFirst:jest.fn().mockResolvedValue(checkout),create:jest.fn(),updateMany:jest.fn()},auditLog:{create:jest.fn().mockResolvedValue({})}};
+    const db:any={planLimit:{findUnique:jest.fn().mockResolvedValue({plan:'pro',active:true,sortOrder:20,monthlyPriceCents:9990})},user:{findFirst:jest.fn().mockResolvedValue({id:'u1',email:'owner@test.local'})},payment:{findFirst:jest.fn().mockResolvedValue(checkout),create:jest.fn(),updateMany:jest.fn()},auditLog:{create:jest.fn().mockResolvedValue({})}};
     const subscriptions:any={activateScheduledIfDue:jest.fn().mockResolvedValue({id:'t1',plan:'pro',subscriptionExpiresAt:new Date(Date.now()+86400000)})};
     const service=new BillingService(db,subscriptions);
     const result=await service.createCheckout('t1','u1','pro','monthly');
@@ -20,7 +20,7 @@ describe('BillingService',()=>{
   it('impede novo downgrade quando já existe alteração de plano agendada',async()=>{
     process.env.MERCADO_PAGO_ACCESS_TOKEN='test-token';
     const db:any={
-      planLimit:{findUnique:jest.fn().mockResolvedValue({monthlyPriceCents:9990})},
+      planLimit:{findUnique:jest.fn().mockImplementation(({where}:any)=>Promise.resolve(where.plan==='pro'?{plan:'pro',active:true,sortOrder:20,monthlyPriceCents:9990}:{plan:'business',active:true,sortOrder:30,monthlyPriceCents:19990}))},
       user:{findFirst:jest.fn().mockResolvedValue({id:'u1',email:'owner@test.local'})},
       subscription:{findFirst:jest.fn().mockResolvedValue({id:'scheduled-1',status:'scheduled'})},
       auditLog:{create:jest.fn().mockResolvedValue({})},

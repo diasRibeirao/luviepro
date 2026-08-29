@@ -77,8 +77,11 @@ export class BillingService {
     this.token();
     const [tenant,limit,user]=await Promise.all([this.subscriptions.activateScheduledIfDue(tenantId),this.db.planLimit.findUnique({where:{plan}}),this.db.user.findFirst({where:{id:actorUserId,tenantId}})]);
     if(!tenant||!limit||!user)throw new NotFoundException('Conta, usuário ou plano não encontrado');
+    const currentLimit=tenant.plan===plan?limit:await this.db.planLimit.findUnique({where:{plan:tenant.plan}});
+    if(!currentLimit)throw new NotFoundException('Plano atual da conta não encontrado');
+    if(!limit.active&&tenant.plan!==plan)throw new BadRequestException('Este plano está inativo para novas contratações');
     const amountCents=periodPrice(limit,period);if(amountCents<=0)throw new BadRequestException('Este plano não possui preço configurado para o período selecionado');
-    const action=billingAction(tenant.plan,plan,tenant.subscriptionExpiresAt);const effectiveAt=action==='downgrade'&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>new Date()?tenant.subscriptionExpiresAt:new Date();
+    const action=billingAction(tenant.plan,plan,tenant.subscriptionExpiresAt,new Date(),currentLimit.sortOrder,limit.sortOrder);const effectiveAt=action==='downgrade'&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>new Date()?tenant.subscriptionExpiresAt:new Date();
     if(action==='downgrade'){
       const scheduled=await this.db.subscription.findFirst({where:{tenantId,status:'scheduled'},orderBy:{startsAt:'asc'}});
       if(scheduled)throw new ConflictException('Já existe uma alteração de plano agendada para esta conta. Aguarde a ativação ou cancele a alteração atual antes de contratar outro downgrade.');
@@ -128,7 +131,13 @@ export class BillingService {
     const now=new Date();const common:Prisma.PaymentUncheckedUpdateInput={providerPaymentId:paymentId,status:mapped,providerStatus:String(remote.status||mapped),providerStatusDetail:remote.status_detail?String(remote.status_detail):null,paymentMethod:remote.payment_type_id||remote.payment_method_id||null,currency:remoteCurrency,payerEmail:remote.payer?.email||local.payerEmail||null,raw:toJsonValue(remote as unknown as Record<string,string|number|boolean|null|undefined>) as Prisma.InputJsonValue};
     if(mapped==='approved'&&local.status!=='approved'){
       common.paidAt=remote.date_approved?new Date(remote.date_approved):now;const tenant=await this.subscriptions.activateScheduledIfDue(local.tenantId);if(!tenant)throw new NotFoundException('Conta da cobrança não encontrada');
-      const action=local.billingAction||billingAction(tenant.plan,local.plan,tenant.subscriptionExpiresAt);let start=now;if((action==='renewal'||action==='downgrade')&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>now)start=tenant.subscriptionExpiresAt;const expiresAt=periodEnd(start,local.period);const scheduled=start.getTime()>now.getTime()+1000;
+      let action=local.billingAction;
+      if(!action){
+        const [currentLimit,targetLimit]=await Promise.all([this.db.planLimit.findUnique({where:{plan:tenant.plan}}),this.db.planLimit.findUnique({where:{plan:local.plan}})]);
+        if(!currentLimit||!targetLimit)throw new NotFoundException('Plano da cobrança não encontrado');
+        action=billingAction(tenant.plan,local.plan,tenant.subscriptionExpiresAt,now,currentLimit.sortOrder,targetLimit.sortOrder);
+      }
+      let start=now;if((action==='renewal'||action==='downgrade')&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt>now)start=tenant.subscriptionExpiresAt;const expiresAt=periodEnd(start,local.period);const scheduled=start.getTime()>now.getTime()+1000;
       const applied=await this.db.$transaction(async tx=>{const claimed=await tx.payment.updateMany({where:{id:local.id,status:{not:'approved'}},data:common});if(!claimed.count)return false;if(!scheduled)await tx.subscription.updateMany({where:{tenantId:local.tenantId,status:{in:['active','trial']}},data:{status:'replaced'}});const subscription=await tx.subscription.create({data:{tenantId:local.tenantId,plan:local.plan,period:local.period,amountCents:local.amountCents,status:scheduled?'scheduled':'active',startsAt:start,expiresAt}});if(action==='renewal'||!scheduled)await tx.tenant.update({where:{id:local.tenantId},data:{plan:local.plan,planPeriod:local.period,subscriptionExpiresAt:expiresAt,status:'active'}});await tx.payment.update({where:{id:local.id},data:{subscriptionId:subscription.id}});return true;});
       if(!applied){await this.audit(local.tenantId,undefined,'payment_approval_duplicate_ignored','payment',local.id,{providerPaymentId:paymentId});return {ok:true,status:'approved',paymentId:local.id,ignored:true};}
       await this.audit(local.tenantId,undefined,'payment_approved','payment',local.id,{providerPaymentId:paymentId,plan:local.plan,period:local.period,billingAction:action,effectiveAt:start,expiresAt});

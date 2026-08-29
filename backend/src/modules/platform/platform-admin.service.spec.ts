@@ -55,7 +55,7 @@ describe('PlatformAdminService',()=>{
     const future=new Date(Date.now()+86400000);
     db.tenant.findUnique.mockResolvedValue({id:'t1',plan:'business',planPeriod:'monthly',subscriptionExpiresAt:future});
     db.subscription.findFirst.mockResolvedValue(null);
-    db.planLimit.findUnique.mockResolvedValue({monthlyPriceCents:9990,quarterlyPriceCents:26973,semiannualPriceCents:50949,annualPriceCents:95904});
+    db.planLimit.findUnique.mockImplementation(({where}:any)=>Promise.resolve(where.plan==='pro'?{plan:'pro',active:true,sortOrder:20,monthlyPriceCents:9990,quarterlyPriceCents:26973,semiannualPriceCents:50949,annualPriceCents:95904}:{plan:'business',active:true,sortOrder:30,monthlyPriceCents:19990,quarterlyPriceCents:53973,semiannualPriceCents:101949,annualPriceCents:191904}));
     db.subscription.create.mockResolvedValue({id:'scheduled',plan:'pro',period:'monthly'});
     const result:any=await service.changeTenant('t1',{plan:'pro'});
     expect(result.scheduledSubscription.id).toBe('scheduled');
@@ -64,13 +64,14 @@ describe('PlatformAdminService',()=>{
 
   it('rejects a second scheduled downgrade',async()=>{
     db.tenant.findUnique.mockResolvedValue({id:'t1',plan:'business',planPeriod:'monthly',subscriptionExpiresAt:new Date(Date.now()+86400000)});
+    db.planLimit.findUnique.mockImplementation(({where}:any)=>Promise.resolve(where.plan==='pro'?{plan:'pro',active:true,sortOrder:20,monthlyPriceCents:9990,quarterlyPriceCents:26973,semiannualPriceCents:50949,annualPriceCents:95904}:{plan:'business',active:true,sortOrder:30,monthlyPriceCents:19990,quarterlyPriceCents:53973,semiannualPriceCents:101949,annualPriceCents:191904}));
     db.subscription.findFirst.mockResolvedValue({id:'already'});
     await expect(service.changeTenant('t1',{plan:'pro'})).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('creates a tenant with trial subscription and owner invitation',async()=>{
     db.user.findUnique.mockResolvedValue(null);db.userInvitation.findFirst.mockResolvedValue(null);
-    db.planLimit.findUnique.mockResolvedValue({monthlyPriceCents:4990,quarterlyPriceCents:13473,semiannualPriceCents:25449,annualPriceCents:47904});
+    db.planLimit.findUnique.mockResolvedValue({plan:'starter',active:true,sortOrder:10,monthlyPriceCents:4990,quarterlyPriceCents:13473,semiannualPriceCents:25449,annualPriceCents:47904});
     tx.tenant.create.mockResolvedValue({id:'t1',name:'Empresa'});tx.subscription.create.mockResolvedValue({id:'sub'});
     tx.userInvitation.create.mockResolvedValue({id:'inv',email:'owner@example.com',name:'Owner',expiresAt:new Date()});
     mail.sendUserInvitation.mockResolvedValue({sent:true});
@@ -102,6 +103,7 @@ describe('PlatformAdminService',()=>{
   it('rejects an unknown tenant and invalid plan',async()=>{
     db.tenant.findUnique.mockResolvedValue(null);
     await expect(service.changeTenant('missing',{})).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.updatePlan('enterprise',{})).rejects.toBeInstanceOf(BadRequestException);
+    db.planLimit.findUnique.mockResolvedValue(null);
+    await expect(service.updatePlan('enterprise',{})).rejects.toBeInstanceOf(NotFoundException);
   });
 });

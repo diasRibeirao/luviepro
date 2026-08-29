@@ -46,6 +46,17 @@ test('usuário autenticado no login ou cadastro segue para /home',()=>{
   assert.equal(authGuardRedirect(true,'/account'),undefined);
 });
 
+test('sessão da plataforma permanece isolada das rotas de tenant',()=>{
+  assert.equal(authGuardRedirect(true,'/',true),'/platform');
+  assert.equal(authGuardRedirect(true,'/home',true),'/platform');
+  assert.equal(authGuardRedirect(true,'/account',true),'/platform');
+  assert.equal(authGuardRedirect(true,'/platform',true),undefined);
+});
+
+test('sessão de tenant não acessa o painel da plataforma',()=>{
+  assert.equal(authGuardRedirect(true,'/platform',false),'/home');
+});
+
 test('logout confirmado encerra sessão antes de voltar ao login',async()=>{
   const calls=[];
   const result=await runLogout(async()=>{calls.push('confirm');return true},async()=>{calls.push('logout')},route=>calls.push(`replace:${route}`));

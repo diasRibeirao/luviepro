@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/c
 import { Roles } from '../../roles.guard';
 import { PlatformRequest } from '../../request-user';
 import { PlatformAdminService } from './platform-admin.service';
-import { PlatformCreateTenantDto, PlatformListQueryDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
+import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformListQueryDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
 
 @Roles('platform_admin')
 @Controller('platform')
@@ -14,6 +14,7 @@ export class PlatformController {
   @Get('payments') payments(@Query() query:PlatformListQueryDto){return this.platform.payments(query)}
   @Get('users') users(@Query() query:PlatformListQueryDto){return this.platform.users(query)}
   @Get('plans') plans(){return this.platform.plans()}
+  @Post('plans') createPlan(@Body() body:PlatformCreatePlanDto){return this.platform.createPlan(body)}
   @Post('tenants') create(@Req() request:PlatformRequest,@Body() body:PlatformCreateTenantDto){return this.platform.createTenant(body,request.user.sub)}
   @Patch('tenants/:id') update(@Param('id') id:string,@Body() body:PlatformTenantDto){return this.platform.changeTenant(id,body)}
   @Post('tenants/:id/cancel-scheduled-change') cancel(@Param('id') id:string){return this.platform.cancelScheduledChange(id)}

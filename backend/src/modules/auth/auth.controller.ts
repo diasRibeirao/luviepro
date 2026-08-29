@@ -1,7 +1,8 @@
 import { Body,Controller,Delete,Get,Param,Post,Req,Res,UnauthorizedException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { Public } from '../../public.decorator';
-import { TenantRequest } from '../../request-user';
+import { Roles } from '../../roles.guard';
+import { PlatformRequest, TenantRequest } from '../../request-user';
 import { PlatformAdminLoginDto } from '../platform/dto/platform.dto';
 import { ForgotPasswordDto,LoginDto,RefreshDto,RegisterDto,ResetPasswordDto } from './dto/auth.dto';
 import { AuthService } from './auth.service';
@@ -37,9 +38,14 @@ export class AuthController {
     }catch(error){if(web)clearRefreshCookie(res);throw error;}
   }
 
+  @Roles('platform_admin','owner','admin','commercial','operational','finance')
   @Post('logout')
-  async logout(@Req() r:TenantRequest,@Res({passthrough:true}) res:Response){
+  async logout(@Req() r:TenantRequest|PlatformRequest,@Res({passthrough:true}) res:Response){
     clearRefreshCookie(res);
+    if(r.user.role==='platform_admin'){
+      await this.sessions.revokePlatform(r.user.sub,r.user.sid);
+      return {ok:true};
+    }
     return this.auth.logout(r.user.sub,r.user.tenantId,r.user.sid);
   }
 

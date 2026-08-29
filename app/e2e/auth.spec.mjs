@@ -116,3 +116,23 @@ test('links de recuperação e cadastro navegam para as rotas públicas',async({
   await page.getByText(/Criar conta grátis/).click();
   await expect(page).toHaveURL(/\/register$/);
 });
+
+test('menu mobile oferece navegação completa e logout',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.route(/\/api\/auth\/login\/?$/,route=>route.fulfill({
+    status:200,
+    contentType:'application/json',
+    body:JSON.stringify(loginResponse),
+  }));
+  await page.goto('/',{waitUntil:'domcontentloaded'});
+  await waitForLogin(page);
+  await page.getByPlaceholder('seu@email.com').fill('maria@example.com');
+  await page.getByPlaceholder('Sua senha').fill('senha-valida');
+  await page.getByText('Entrar',{exact:true}).click();
+  await expect(page).toHaveURL(/\/home$/);
+
+  await page.getByLabel('Mais opções').click();
+  await expect(page.getByText('Navegação e preferências')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Minha conta',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Sair da conta',exact:true})).toBeVisible();
+});

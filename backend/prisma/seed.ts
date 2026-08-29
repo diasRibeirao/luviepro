@@ -3,13 +3,14 @@ import { hash } from 'bcryptjs';
 const db = new PrismaClient();
 async function main() {
   const plans=[
-    {plan:'starter',maxClients:30,maxQuotesPerMonth:10,maxUsers:1,customPdf:false,logoPdf:true,premiumTemplates:false,projectManagement:'basic',advancedReports:false,exportData:false,standardRoles:false,customRoles:false,granularPermissions:false,auditAccess:false,monthlyPriceCents:4990,quarterlyPriceCents:13473,semiannualPriceCents:25449,annualPriceCents:47904},
-    {plan:'pro',maxClients:150,maxQuotesPerMonth:50,maxUsers:3,customPdf:true,logoPdf:true,premiumTemplates:false,projectManagement:'complete',advancedReports:true,exportData:false,standardRoles:true,customRoles:false,granularPermissions:false,auditAccess:false,monthlyPriceCents:9990,quarterlyPriceCents:26973,semiannualPriceCents:50949,annualPriceCents:95904},
-    {plan:'business',maxClients:-1,maxQuotesPerMonth:-1,maxUsers:10,customPdf:true,logoPdf:true,premiumTemplates:true,projectManagement:'kanban',advancedReports:true,exportData:true,standardRoles:true,customRoles:true,granularPermissions:true,auditAccess:true,monthlyPriceCents:17990,quarterlyPriceCents:48573,semiannualPriceCents:91749,annualPriceCents:172704},
+    {plan:'starter',name:'Starter',description:'Para quem está começando',active:true,sortOrder:10,maxClients:30,maxQuotesPerMonth:10,maxUsers:1,customPdf:false,logoPdf:true,premiumTemplates:false,projectManagement:'basic',advancedReports:false,exportData:false,standardRoles:false,customRoles:false,granularPermissions:false,auditAccess:false,monthlyPriceCents:4990,quarterlyPriceCents:13473,semiannualPriceCents:25449,annualPriceCents:47904},
+    {plan:'pro',name:'Pro',description:'Para quem quer crescer',active:true,sortOrder:20,maxClients:150,maxQuotesPerMonth:50,maxUsers:3,customPdf:true,logoPdf:true,premiumTemplates:false,projectManagement:'complete',advancedReports:true,exportData:false,standardRoles:true,customRoles:false,granularPermissions:false,auditAccess:false,monthlyPriceCents:9990,quarterlyPriceCents:26973,semiannualPriceCents:50949,annualPriceCents:95904},
+    {plan:'business',name:'Business',description:'Para equipes e estúdios',active:true,sortOrder:30,maxClients:-1,maxQuotesPerMonth:-1,maxUsers:10,customPdf:true,logoPdf:true,premiumTemplates:true,projectManagement:'kanban',advancedReports:true,exportData:true,standardRoles:true,customRoles:true,granularPermissions:true,auditAccess:true,monthlyPriceCents:17990,quarterlyPriceCents:48573,semiannualPriceCents:91749,annualPriceCents:172704},
   ];
   for(const plan of plans) await db.planLimit.upsert({where:{plan:plan.plan},update:plan,create:plan});
   const platformEmail=process.env.PLATFORM_ADMIN_EMAIL||'master@luviepro.local';
-  const platformPassword=process.env.PLATFORM_ADMIN_PASSWORD||'LuvieMaster123!';
+  const platformPassword=process.env.PLATFORM_ADMIN_PASSWORD??(process.env.NODE_ENV==='production'?undefined:'LuvieMaster123!');
+  if(!platformPassword)throw new Error('PLATFORM_ADMIN_PASSWORD não configurada');
   await (db as any).platformAdmin.upsert({where:{email:platformEmail},update:{name:'LuviePro Master',active:true},create:{name:'LuviePro Master',email:platformEmail,passwordHash:await hash(platformPassword,12),role:'platform_admin'}});
   const brand={name:'Luvie Organiza',responsibleName:'Luana Oliveira',phone:'(18) 99163-1532',contactEmail:'luvieorganiza@gmail.com',siteUrl:'www.luvieorganiza.com.br',instagram:'@luvieorganiza',primaryColor:'#2F4538',secondaryColor:'#C9A84C',proposalText:'Organização que transforma. Gestão que cresce.',plan:'pro',planPeriod:'annual'};
   const tenant = await db.tenant.upsert({ where:{slug:'luvie-organiza'}, update:brand, create:{...brand,slug:'luvie-organiza'} });

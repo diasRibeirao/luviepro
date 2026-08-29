@@ -9,6 +9,6 @@ export type ReplaceRoute=(route:AuthRoute)=>void;
 
 export function postLoginRoute(session:Pick<AuthSessionResponse,'platform'>):AuthRoute;
 export function isPublicAuthRoute(path:string):boolean;
-export function authGuardRedirect(authenticated:boolean,path:string):AuthRoute|undefined;
+export function authGuardRedirect(authenticated:boolean,path:string,platform?:boolean):AuthRoute|undefined;
 export function runLogin(email:string,password:string,request:LoginRequest,establish:EstablishSession):Promise<AuthRoute>;
 export function runLogout(confirmLogout:ConfirmLogout,logout:LogoutSession,replace:ReplaceRoute):Promise<boolean>;
