@@ -15,4 +15,10 @@ export const servicesApi = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
+
+  reorder: (id: string, direction: 'up'|'down') =>
+    api<ServiceRecord[]>(`/services/${id}/order`, {
+      method: 'PATCH',
+      body: JSON.stringify({direction}),
+    }),
 };

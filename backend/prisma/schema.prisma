@@ -307,9 +307,11 @@ model Service {
   variableCostMode String @default("per_day")
   marginBase String @default("daily")
   active Boolean @default(true)
+  sortOrder Int @default(0)
   team ServiceTeamMember[]
   costs ServiceCost[]
   stages ServiceStage[]
+  @@index([tenantId, sortOrder])
   @@index([tenantId, name])
   @@unique([tenantId, code])
 }

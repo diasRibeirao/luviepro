@@ -18,7 +18,8 @@ export type EditQuoteItem={serviceId:string;days:string;people:string;dailyRateC
 
 export type ServiceTeamMember={role:string;dailyRateCents:number;included?:boolean};
 export type ServiceCost={description:string;amountCents:number;type:'variable'|'fixed'|string};
-export type QuoteServiceOption={id:string;name:string;code?:string|null;description?:string|null;active?:boolean;defaultDays?:number|null;people?:number|null;dailyRateCents:number;variableCostCents?:number;fixedCostCents?:number;safetyMarginBps?:number;team?:ServiceTeamMember[];costs?:ServiceCost[]};
+export type QuoteServiceStage={description?:string;duration?:string|null};
+export type QuoteServiceOption={id:string;name:string;code?:string|null;description?:string|null;active?:boolean;defaultDays?:number|null;people?:number|null;dailyRateCents:number;variableCostCents?:number;fixedCostCents?:number;safetyMarginBps?:number;team?:ServiceTeamMember[];costs?:ServiceCost[];stages?:QuoteServiceStage[]};
 export type QuoteClientOption={id:string;name:string;city?:string|null;phone?:string|null;email?:string|null};
 
 export type PricingRequest={dailyRateCents:number;days:number;people:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number};

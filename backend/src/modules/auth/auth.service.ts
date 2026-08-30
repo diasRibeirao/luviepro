@@ -109,7 +109,7 @@ export class AuthService {
     const plan: PlanCode = isPlanCode(planCandidate) ? planCandidate : 'starter';
     const period: BillingPeriod = isBillingPeriod(periodCandidate) ? periodCandidate : 'monthly';
     const limit = await this.db.planLimit.findUnique({ where: { plan } });
-    if (!limit) throw new BadRequestException('Plano indisponível');
+    if (!limit?.active) throw new BadRequestException('Plano indisponível');
     const amountCents = period === 'annual' ? limit.annualPriceCents : period === 'semiannual' ? limit.semiannualPriceCents : period === 'quarterly' ? limit.quarterlyPriceCents : limit.monthlyPriceCents;
     const now = new Date(); const trialEnd = new Date(now); trialEnd.setDate(trialEnd.getDate() + 14);
     const slug = `${company.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'empresa'}-${Date.now().toString(36)}`;

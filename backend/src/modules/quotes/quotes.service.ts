@@ -25,8 +25,25 @@ export class QuotesService {
     const mode=x.variableCostMode??'per_day';
     const variableCents=mode==='fixed'?x.variableCostCents:mode==='per_person'?x.variableCostCents*x.people:mode==='per_person_day'?x.variableCostCents*x.people*x.days:x.variableCostCents*x.days;
     const subtotal=laborCents+variableCents+x.fixedCostCents;
-    const marginCents=Math.round(x.dailyRateCents*x.safetyMarginBps/10000);
+    const marginBaseCents=laborCents+variableCents;
+    const marginCents=Math.round(marginBaseCents*x.safetyMarginBps/10000);
     return {laborCents,variableCents,fixedCents:x.fixedCostCents,marginCents,totalCents:subtotal+marginCents};
+  }
+
+  private async ensureProjectFromQuote(tx:Prisma.TransactionClient,quote:{id:string;tenantId:string;clientId:string;number:string;client:{name:string}}){
+    const project=await tx.project.upsert({where:{quoteId:quote.id},update:{},create:{tenantId:quote.tenantId,clientId:quote.clientId,quoteId:quote.id,name:`${quote.number} — ${quote.client.name}`}});
+    const items=await tx.quoteItem.findMany({where:{tenantId:quote.tenantId,quoteId:quote.id},include:{stages:{where:{tenantId:quote.tenantId},orderBy:{sequence:'asc'}}},orderBy:{id:'asc'}});
+    const existing=await tx.projectTask.findMany({where:{tenantId:quote.tenantId,projectId:project.id},select:{title:true}});
+    const titles=new Set(existing.map(task=>task.title));
+    const tasks=items.flatMap(item=>item.stages.map(stage=>({
+      tenantId:quote.tenantId,
+      projectId:project.id,
+      title:`${item.serviceName} — ${stage.description}`,
+      description:`Etapa importada automaticamente do serviço ${item.serviceName}${stage.duration?` · Duração prevista: ${stage.duration}`:''}`,
+      priority:'medium',
+    }))).filter(task=>!titles.has(task.title));
+    if(tasks.length)await tx.projectTask.createMany({data:tasks});
+    return project;
   }
 
   private async assertQuoteLimit(tenantId:string){
@@ -86,7 +103,7 @@ export class QuotesService {
     if(decision==='approved'){
       await this.db.$transaction(async tx=>{
         await tx.quote.update({where:{id:quote.id},data:{status:'approved',approvedAt:now,clientDecision:'approved',clientDecisionAt:now,clientDecisionName:name.trim()}});
-        await tx.project.upsert({where:{quoteId:quote.id},update:{},create:{tenantId:quote.tenantId,clientId:quote.clientId,quoteId:quote.id,name:`${quote.number} — ${quote.client.name}`}});
+        await this.ensureProjectFromQuote(tx,quote);
       });
     }else{
       await this.db.quote.update({where:{id:quote.id},data:{status:'rejected',clientDecision:'rejected',clientDecisionAt:now,clientDecisionName:name.trim()}});
@@ -192,7 +209,7 @@ export class QuotesService {
     const quote=await this.db.quote.findFirst({where:{id,tenantId},include:{client:true}});
     if(!quote)throw new NotFoundException('Orçamento não encontrado');
     if(!['draft','sent','approved'].includes(quote.status))throw new BadRequestException('Transição de status inválida');
-    const q=await this.db.$transaction(async tx=>{const updated=await tx.quote.update({where:{id},data:{status:'approved',approvedAt:quote.approvedAt??new Date()}});await tx.project.upsert({where:{quoteId:id},update:{},create:{tenantId,clientId:quote.clientId,quoteId:id,name:`${quote.number} — ${quote.client.name}`}});return updated;});
+    const q=await this.db.$transaction(async tx=>{const updated=await tx.quote.update({where:{id},data:{status:'approved',approvedAt:quote.approvedAt??new Date()}});await this.ensureProjectFromQuote(tx,quote);return updated;});
     await this.audit(tenantId,actorUserId,'approve','quote',id,{number:quote.number});
     return q;
   }

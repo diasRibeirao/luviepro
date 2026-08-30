@@ -1,10 +1,14 @@
-export type PlanCode='starter'|'pro'|'business';
+export type PlanCode=string;
 export type BillingPeriod='monthly'|'quarterly'|'semiannual'|'annual';
 export type BillingAction='new_subscription'|'renewal'|'upgrade'|'downgrade';
 export type PaymentStatus='pending'|'approved'|'rejected'|'cancelled'|'refunded'|'charged_back'|'error';
 
 export interface PlanLimit {
   plan:PlanCode;
+  name:string;
+  description?:string|null;
+  active:boolean;
+  sortOrder:number;
   maxClients:number;
   maxQuotesPerMonth:number;
   maxUsers:number;
@@ -42,5 +46,5 @@ export interface BillingPayment {
 }
 export interface CheckoutResponse {paymentId:string;preferenceId?:string|null;checkoutUrl:string;webhookConfigured:boolean;sandbox:boolean;billingAction:BillingAction;effectiveAt?:string;reused?:boolean;}
 export interface ReconcileResponse {ok?:boolean;status:PaymentStatus;paymentId:string;ignored?:boolean;}
-export function isPlanCode(value:string):value is PlanCode{return value==='starter'||value==='pro'||value==='business';}
+export function isPlanCode(value:string):value is PlanCode{return /^[a-z][a-z0-9-]{1,30}$/.test(value);}
 export function planRank(value:string){return ({starter:1,pro:2,business:3} as Record<string,number>)[value]??0;}

@@ -32,7 +32,10 @@ export type PlatformUser = {
 
 export type PlatformPlan = {
   plan: string;
-  name?: string;
+  name: string;
+  description?: string | null;
+  active: boolean;
+  sortOrder: number;
   maxClients: number;
   maxQuotesPerMonth: number;
   maxUsers: number;

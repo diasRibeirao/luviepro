@@ -3,13 +3,30 @@ import { useEffect, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { api, money } from '../../api';
-import type { PlatformEditableItem, PlatformTenantCreateResult } from './contracts';
+import type { PlatformEditableItem, PlatformPlan, PlatformTenantCreateResult } from './contracts';
 import { feedbackAlert as Alert } from '../../components/Feedback';
 import { Text } from '../../i18n';
 import { theme } from '../../theme';
 
 type ChangeHandler=(id:string,body:Record<string,unknown>)=>void|Promise<void>;
 type Option=readonly [string,string];
+
+export function NewPlatformPlanModal({visible,onClose,onCreated}:{visible:boolean;onClose:()=>void;onCreated:()=>void|Promise<void>}){
+ const initial={plan:'',name:'',description:'',maxClients:'30',maxQuotesPerMonth:'10',maxUsers:'1',monthlyPriceCents:0,quarterlyPriceCents:0,semiannualPriceCents:0,annualPriceCents:0,sortOrder:'40'};
+ const[form,setForm]=useState(initial),[busy,setBusy]=useState(false);const set=(key:keyof typeof initial,value:string|number)=>setForm(current=>({...current,[key]:value}));
+ async function save(){if(!/^[a-z][a-z0-9-]{1,30}$/.test(form.plan)||form.name.trim().length<2)return Alert.alert('Revise os dados','Informe nome e um código com letras minúsculas, números ou hífen.');try{setBusy(true);await api('/platform/plans',{method:'POST',body:JSON.stringify({...form,maxClients:Number(form.maxClients),maxQuotesPerMonth:Number(form.maxQuotesPerMonth),maxUsers:Number(form.maxUsers),sortOrder:Number(form.sortOrder)})});setForm(initial);await onCreated()}catch(e:unknown){Alert.alert('Não foi possível criar o plano',e instanceof Error?e.message:'Erro inesperado')}finally{setBusy(false)}}
+ const price=(key:'monthlyPriceCents'|'quarterlyPriceCents'|'semiannualPriceCents'|'annualPriceCents',value:string)=>set(key,Number(value.replace(/\D/g,'')));
+ return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><ModalShell onClose={onClose}><ScrollView keyboardShouldPersistTaps="handled"><ModalHeader title="Novo plano" subtitle="Cadastre um produto comercial disponível para contratação." onClose={onClose}/><View style={styles.formGrid}><Field label="NOME" value={form.name} onChangeText={v=>set('name',v)}/><Field label="CÓDIGO" value={form.plan} onChangeText={v=>set('plan',v.toLowerCase().replace(/[^a-z0-9-]/g,''))} autoCapitalize="none"/><Field label="DESCRIÇÃO" value={form.description} onChangeText={v=>set('description',v)}/><Field label="ORDEM" value={form.sortOrder} onChangeText={v=>set('sortOrder',v.replace(/\D/g,''))} keyboardType="numeric"/>{[['maxClients','LIMITE DE CLIENTES'],['maxQuotesPerMonth','ORÇAMENTOS/MÊS'],['maxUsers','USUÁRIOS']].map(([key,label])=><Field key={key} label={label} value={String(form[key as keyof typeof form])} onChangeText={v=>set(key as keyof typeof initial,v.replace(/[^\d-]/g,''))} keyboardType="numeric"/>)}{(['monthlyPriceCents','quarterlyPriceCents','semiannualPriceCents','annualPriceCents'] as const).map(key=><Field key={key} label={({monthlyPriceCents:'MENSAL',quarterlyPriceCents:'TRIMESTRAL',semiannualPriceCents:'SEMESTRAL',annualPriceCents:'ANUAL'})[key]} value={money(Number(form[key]))} onChangeText={v=>price(key,v)} keyboardType="numeric"/>)}</View><Text style={styles.notice}>Valores em reais. Use -1 para limites ilimitados. O código é permanente.</Text><Save busy={busy} label={busy?'Criando...':'Criar plano'} onPress={save}/></ScrollView></ModalShell></Modal>;
+}
+
+export function PlatformPlanEditModal({item,onClose,onSave}:{item?:PlatformPlan;onClose:()=>void;onSave:(id:string,body:Record<string,unknown>)=>void|Promise<void>}){
+ const[form,setForm]=useState<Record<string,string|number|boolean>>({});
+ useEffect(()=>{if(item)setForm({...item,description:item.description??''})},[item]);if(!item)return null;
+ const set=(key:string,value:string|number|boolean)=>setForm(current=>({...current,[key]:value}));
+ const limits=[['maxClients','Limite de clientes'],['maxQuotesPerMonth','Orçamentos por mês'],['maxUsers','Usuários'],['sortOrder','Ordem de exibição']] as const;
+ const prices=[['monthlyPriceCents','Preço mensal'],['quarterlyPriceCents','Preço trimestral'],['semiannualPriceCents','Preço semestral'],['annualPriceCents','Preço anual']] as const;
+ return <Modal visible transparent animationType="fade" onRequestClose={onClose}><ModalShell onClose={onClose}><ScrollView keyboardShouldPersistTaps="handled"><ModalHeader title="Configurar plano" subtitle={`${item.name} · ${item.plan}`} onClose={onClose}/><View style={styles.formGrid}><Field label="NOME" value={String(form.name??'')} onChangeText={v=>set('name',v)}/><Field label="DESCRIÇÃO" value={String(form.description??'')} onChangeText={v=>set('description',v)}/>{limits.map(([key,label])=><Field key={key} label={label.toUpperCase()} value={String(form[key]??'')} keyboardType="numeric" onChangeText={v=>set(key,Number(v.replace(/[^\d-]/g,'')))}/>)}{prices.map(([key,label])=><Field key={key} label={label.toUpperCase()} value={money(Number(form[key]??0))} keyboardType="numeric" onChangeText={v=>set(key,Number(v.replace(/\D/g,'')))}/>)}</View><Label text="DISPONIBILIDADE"/><Chips value={form.active?'active':'inactive'} values={[['active','Ativo'],['inactive','Inativo']]} onChange={v=>set('active',v==='active')}/><Text style={styles.notice}>Planos inativos deixam de aparecer para novas contas e contratações. Empresas que já possuem o plano não perdem o acesso atual.</Text><Save label="Salvar alterações" onPress={()=>onSave(item.plan,{name:form.name,description:form.description,active:form.active,sortOrder:form.sortOrder,maxClients:form.maxClients,maxQuotesPerMonth:form.maxQuotesPerMonth,maxUsers:form.maxUsers,monthlyPriceCents:form.monthlyPriceCents,quarterlyPriceCents:form.quarterlyPriceCents,semiannualPriceCents:form.semiannualPriceCents,annualPriceCents:form.annualPriceCents})}/></ScrollView></ModalShell></Modal>;
+}
 
 export function NewPlatformTenantModal({visible,onClose,onCreated}:{visible:boolean;onClose:()=>void;onCreated:(result:PlatformTenantCreateResult)=>void|Promise<void>}) {
  const initial={company:'',ownerName:'',ownerEmail:'',phone:'',plan:'pro',period:'monthly'};

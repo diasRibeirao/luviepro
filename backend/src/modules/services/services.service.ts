@@ -18,7 +18,7 @@ export class ServicesService {
         costs:{where:{tenantId},orderBy:{description:'asc'}},
         stages:{where:{tenantId},orderBy:{sequence:'asc'}},
       },
-      orderBy:[{active:'desc'},{name:'asc'}],
+      orderBy:[{active:'desc'},{sortOrder:'asc'},{name:'asc'}],
     });
   }
 
@@ -47,7 +47,7 @@ export class ServicesService {
       description:String(val('description','')??'').trim()||null,
       category:String(val('category','')??'').trim()||null,
       billingUnit:val('billingUnit','daily'),
-      dailyRateCents:team.length?teamDaily:Number(val('dailyRateCents',0)),
+      dailyRateCents:Number(val('dailyRateCents',teamDaily)),
       defaultDays:Number(val('defaultDays',1)),
       people:Number(val('people',1)),
       variableCostCents:costs.length?variable:Number(val('variableCostCents',0)),
@@ -56,18 +56,20 @@ export class ServicesService {
       variableCostMode:val('variableCostMode','per_day'),
       marginBase:val('marginBase','daily'),
       active:val('active',true)!==false,
+      sortOrder:Number(val('sortOrder',current?.sortOrder??0)),
       team,costs,stages,
     };
   }
 
   async create(tenantId:string,data:CreateServiceDto,actorUserId?:string){
     const n=this.normalize(tenantId,data);
+    if(!n.sortOrder){const max=await this.db.service.aggregate({where:{tenantId},_max:{sortOrder:true}});n.sortOrder=(max._max.sortOrder??0)+10;}
     const service=await this.db.service.create({
       data:{
         tenantId,name:n.name,code:n.code,description:n.description,category:n.category,billingUnit:n.billingUnit,
         dailyRateCents:n.dailyRateCents,defaultDays:n.defaultDays,people:n.people,variableCostCents:n.variableCostCents,
         fixedCostCents:n.fixedCostCents,safetyMarginBps:n.safetyMarginBps,variableCostMode:n.variableCostMode,
-        marginBase:n.marginBase,active:n.active,team:{create:n.team},costs:{create:n.costs},stages:{create:n.stages},
+        marginBase:n.marginBase,active:n.active,sortOrder:n.sortOrder,team:{create:n.team},costs:{create:n.costs},stages:{create:n.stages},
       },
       include:{team:true,costs:true,stages:{orderBy:{sequence:'asc'}}},
     });
@@ -94,7 +96,7 @@ export class ServicesService {
           name:n.name,code:n.code,description:n.description,category:n.category,billingUnit:n.billingUnit,
           dailyRateCents:n.dailyRateCents,defaultDays:n.defaultDays,people:n.people,variableCostCents:n.variableCostCents,
           fixedCostCents:n.fixedCostCents,safetyMarginBps:n.safetyMarginBps,variableCostMode:n.variableCostMode,
-          marginBase:n.marginBase,active:n.active,team:{create:n.team},costs:{create:n.costs},stages:{create:n.stages},
+          marginBase:n.marginBase,active:n.active,sortOrder:n.sortOrder,team:{create:n.team},costs:{create:n.costs},stages:{create:n.stages},
         },
         include:{team:true,costs:true,stages:{orderBy:{sequence:'asc'}}},
       });
@@ -102,4 +104,20 @@ export class ServicesService {
     await this.audit(tenantId,actorUserId,'update',id,{name:service.name,active:service.active});
     return service;
   }
+  async reorder(tenantId:string,id:string,direction:'up'|'down',actorUserId?:string){
+    const current=await this.db.service.findFirst({where:{id,tenantId}});
+    if(!current)throw new NotFoundException('Serviço não encontrado');
+    const neighbor=await this.db.service.findFirst({
+      where:{tenantId,id:{not:id},active:current.active,sortOrder:direction==='up'?{lt:current.sortOrder}:{gt:current.sortOrder}},
+      orderBy:{sortOrder:direction==='up'?'desc':'asc'},
+    });
+    if(!neighbor)return this.list(tenantId);
+    await this.db.$transaction([
+      this.db.service.update({where:{id:current.id},data:{sortOrder:neighbor.sortOrder}}),
+      this.db.service.update({where:{id:neighbor.id},data:{sortOrder:current.sortOrder}}),
+    ]);
+    await this.audit(tenantId,actorUserId,'reorder',id,{direction});
+    return this.list(tenantId);
+  }
+
 }

@@ -19,11 +19,12 @@ const items=[
   {href:'/quotes',key:'quotes',icon:'document-text-outline',group:'comercial'},
   {href:'/projects',key:'projects',icon:'briefcase-outline',group:'operacao'},
   {href:'/calculator',key:'calculator',icon:'calculator-outline',group:'operacao'},
+  {href:'/users',key:'users',icon:'people-circle-outline',group:'administracao'},
   {href:'/settings',key:'settings',icon:'settings-outline',group:'administracao'},
   {href:'/project-statuses',key:'projectStatuses',icon:'options-outline',group:'administracao'},
 ] as const;
 const groupLabels={principal:'Principal',comercial:'Comercial',operacao:'Operação',administracao:'Administração'} as const;
-const itemPermissions:Record<string,string|undefined>={dashboard:'dashboard.read',calendar:'calendar.read',notifications:undefined,clients:'clients.read',services:'services.read',quotes:'quotes.read',projects:'projects.read',calculator:'quotes.write',settings:'settings.manage',projectStatuses:'settings.manage'};
+const itemPermissions:Record<string,string|undefined>={dashboard:'dashboard.read',calendar:'calendar.read',notifications:undefined,clients:'clients.read',services:'services.read',quotes:'quotes.read',projects:'projects.read',calculator:'quotes.write',users:'settings.manage',settings:'settings.manage',projectStatuses:'settings.manage'};
 type AccountSummary={tenant?:{plan?:string};usage?:{clients?:number};limit?:{maxClients?:number}};
 type UnreadCount={count?:number};
 type IoniconName=ComponentProps<typeof Ionicons>['name'];

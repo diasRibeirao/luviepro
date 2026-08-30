@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { PrismaService } from '../../prisma.service';
 import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
 import { clampInteger, nullableTrimmed } from '../../validation/patch';
+import { parseDateOrThrow } from '../../validation/dates';
 import { CreateProjectStatusDto, CreateProjectTaskDto, UpdateProjectDto, UpdateProjectStatusDto, UpdateProjectTaskDto } from './dto/projects.dto';
 
 @Injectable()
@@ -91,7 +92,7 @@ export class ProjectsService {
       where: { id, tenantId },
       include: {
         client: true,
-        quote: true,
+        quote: { include: { items: { where: { tenantId }, include: { stages: { where: { tenantId }, orderBy: { sequence: 'asc' } } }, orderBy: { id: 'asc' } } } },
         tasks: { where: { tenantId }, orderBy: [{ status: 'asc' }, { priority: 'desc' }, { dueDate: 'asc' }, { createdAt: 'asc' }] },
         activityNotes: { where: { tenantId }, orderBy: { createdAt: 'desc' }, take: 30 },
       },
@@ -112,13 +113,34 @@ export class ProjectsService {
         status,
         progress: normalizedProgress,
         notes: data.notes === undefined ? project.notes : nullableTrimmed(data.notes),
-        startDate: data.startDate ? new Date(data.startDate) : project.startDate,
-        endDate: data.endDate ? new Date(data.endDate) : project.endDate,
+        startDate: data.startDate ? parseDateOrThrow(data.startDate,'Data inicial') : project.startDate,
+        endDate: data.endDate ? parseDateOrThrow(data.endDate,'Data final') : project.endDate,
       },
       include: { client: true, quote: true, tasks: { where: { tenantId }, orderBy: { createdAt: 'asc' } } },
     });
     await this.audit(tenantId, actorUserId, 'update', 'project', id, { status: updated.status, progress: updated.progress });
     return updated;
+  }
+
+  async importQuoteStages(tenantId: string, projectId: string, actorUserId?: string) {
+    const project = await this.db.project.findFirst({
+      where: { id: projectId, tenantId },
+      include: { quote: { include: { items: { where: { tenantId }, include: { stages: { where: { tenantId }, orderBy: { sequence: 'asc' } } }, orderBy: { id: 'asc' } } } } },
+    });
+    if (!project) throw new NotFoundException('Projeto não encontrado');
+    if (!project.quote) throw new BadRequestException('Este projeto não possui orçamento vinculado');
+    const existing = await this.db.projectTask.findMany({ where: { tenantId, projectId }, select: { title: true } });
+    const titles = new Set(existing.map(task => task.title));
+    const tasks = project.quote.items.flatMap(item => item.stages.map(stage => ({
+      tenantId,
+      projectId,
+      title: `${item.serviceName} — ${stage.description}`,
+      description: `Etapa importada automaticamente do serviço ${item.serviceName}${stage.duration ? ` · Duração prevista: ${stage.duration}` : ''}`,
+      priority: 'medium',
+    }))).filter(task => !titles.has(task.title));
+    if (tasks.length) await this.db.projectTask.createMany({ data: tasks });
+    await this.audit(tenantId, actorUserId, 'import_quote_stages', 'project', projectId, { imported: tasks.length, quoteId: project.quote.id });
+    return { ok: true, imported: tasks.length };
   }
 
   async createProjectNote(tenantId: string, projectId: string, content: string, actorUserId?: string) {
@@ -140,7 +162,7 @@ export class ProjectsService {
         title: data.title.trim(),
         description: data.description,
         priority: data.priority ?? 'medium',
-        dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+        dueDate: data.dueDate ? parseDateOrThrow(data.dueDate,'Prazo') : undefined,
       },
     });
     await this.audit(tenantId, actorUserId, 'create', 'project_task', task.id, { projectId, title: task.title });
@@ -158,7 +180,7 @@ export class ProjectsService {
         description: data.description ?? task.description,
         status,
         priority: data.priority ?? task.priority,
-        dueDate: data.dueDate ? new Date(data.dueDate) : task.dueDate,
+        dueDate: data.dueDate ? parseDateOrThrow(data.dueDate,'Prazo') : task.dueDate,
         completedAt: status === 'completed' ? (task.completedAt ?? new Date()) : null,
       },
     });

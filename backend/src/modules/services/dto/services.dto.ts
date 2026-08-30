@@ -28,10 +28,11 @@ export class CreateServiceDto {
   @IsInt() @Min(1) people!: number;
   @IsInt() @Min(0) variableCostCents!: number;
   @IsInt() @Min(0) fixedCostCents!: number;
-  @IsInt() @Min(0) @Max(10000) safetyMarginBps!: number;
+  @IsInt() @Min(0) @Max(99999) safetyMarginBps!: number;
   @IsOptional() @IsIn(['per_day','per_person','per_person_day','fixed']) variableCostMode?: string;
   @IsOptional() @IsIn(['daily','subtotal']) marginBase?: string;
   @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
   @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>ServiceTeamMemberDto) team?: ServiceTeamMemberDto[];
   @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>ServiceCostDto) costs?: ServiceCostDto[];
   @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>ServiceStageDto) stages?: ServiceStageDto[];
@@ -48,13 +49,18 @@ export class UpdateServiceDto {
   @IsOptional() @IsInt() @Min(1) people?: number;
   @IsOptional() @IsInt() @Min(0) variableCostCents?: number;
   @IsOptional() @IsInt() @Min(0) fixedCostCents?: number;
-  @IsOptional() @IsInt() @Min(0) @Max(10000) safetyMarginBps?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(99999) safetyMarginBps?: number;
   @IsOptional() @IsIn(['per_day','per_person','per_person_day','fixed']) variableCostMode?: string;
   @IsOptional() @IsIn(['daily','subtotal']) marginBase?: string;
   @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
   @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>ServiceTeamMemberDto) team?: ServiceTeamMemberDto[];
   @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>ServiceCostDto) costs?: ServiceCostDto[];
   @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>ServiceStageDto) stages?: ServiceStageDto[];
+}
+
+export class ReorderServiceDto {
+  @IsIn(['up','down']) direction!: 'up'|'down';
 }
 
 // Compatibilidade temporária com imports anteriores.

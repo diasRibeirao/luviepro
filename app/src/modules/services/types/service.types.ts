@@ -20,6 +20,7 @@ export type ServiceRecord = {
   safetyMarginBps?: number | null;
   dailyRateCents: number;
   active: boolean;
+  sortOrder?: number;
   team?: ServiceTeam[];
   costs?: ServiceCost[];
   stages?: ServiceStage[];
@@ -37,6 +38,7 @@ export type ServiceForm = {
   margin: string;
   baseDaily: string;
   active: boolean;
+  sortOrder?: number;
   team: TeamForm[];
   costs: CostForm[];
   stages: StageForm[];
@@ -55,6 +57,7 @@ export type SaveServicePayload = {
   fixedCostCents: number;
   safetyMarginBps: number;
   active: boolean;
+  sortOrder?: number;
   team: Array<{ role: string; dailyRateCents: number; included: boolean }>;
   costs: Array<{ type: 'variable' | 'fixed'; description: string; amountCents: number }>;
   stages: Array<{ sequence: number; description: string; duration?: string }>;

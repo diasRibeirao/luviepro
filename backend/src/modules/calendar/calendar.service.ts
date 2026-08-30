@@ -12,12 +12,36 @@ export class CalendarService {
     return this.db.auditLog.create({ data: { tenantId, actorUserId, action, entity, entityId, metadata: auditMetadata(metadata) } });
   }
 
-  list(tenantId: string) {
+  async list(tenantId: string) {
     const from = new Date();
     from.setMonth(from.getMonth() - 1);
     const to = new Date();
     to.setMonth(to.getMonth() + 6);
-    return this.db.calendarEvent.findMany({ where: { tenantId, startAt: { gte: from, lte: to } }, orderBy: { startAt: 'asc' } });
+    const [events,projects]=await Promise.all([
+      this.db.calendarEvent.findMany({ where: { tenantId, status:'active', startAt: { gte: from, lte: to } }, orderBy: { startAt: 'asc' } }),
+      this.db.project.findMany({where:{tenantId,startDate:{gte:from,lte:to},status:{not:'cancelled'}},select:{id:true,name:true,startDate:true,endDate:true,notes:true,clientId:true}}),
+    ]);
+    const linked=new Set(events.filter(event=>event.projectId).map(event=>event.projectId));
+    const projectEvents=projects.filter(project=>project.startDate&&!linked.has(project.id)).map(project=>({
+      id:`project:${project.id}`,
+      tenantId,
+      createdById:null,
+      clientId:project.clientId,
+      projectId:project.id,
+      title:project.name,
+      description:project.notes||'Início de projeto aprovado',
+      type:'project',
+      startAt:project.startDate!,
+      endAt:project.endDate,
+      allDay:true,
+      location:null,
+      recurrence:'none',
+      status:'active',
+      reminderMinutes:60,
+      createdAt:project.startDate!,
+      updatedAt:project.startDate!,
+    }));
+    return [...events,...projectEvents].sort((a,b)=>a.startAt.getTime()-b.startAt.getTime());
   }
 
   async create(tenantId: string, userId: string, data: CalendarEventDto) {

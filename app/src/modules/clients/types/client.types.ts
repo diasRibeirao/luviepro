@@ -21,6 +21,7 @@ export type ClientRecord={
   state?:string|null;
   notes?:string|null;
   createdAt?:string|null;
+  active?:boolean;
 };
 
 export type ClientForm={

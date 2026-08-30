@@ -8,6 +8,7 @@ import { theme } from '../../../theme';
 
 import {quotesApi} from '../api/quotes.api';
 import type {AccountData,ProposalData} from '../types/quote.types';
+import {standardPaymentPlan} from '../paymentPlan';
 const errorMessage=(error:unknown)=>{if(error instanceof ApiError)return error.message;if(error instanceof Error)return error.message;return 'Não foi possível carregar a proposta'};
 
 const printCss = `
@@ -76,6 +77,8 @@ export default function QuoteProposalScreen(){
   if(!data||!account)return <View style={s.statePage}>{webPrintStyle}<AsyncState loading/></View>;
 
   const tenant=account.tenant??account;
+  const proposalTotal=data.finalTotalCents||data.totalCents;
+  const payment=standardPaymentPlan(proposalTotal);
 
   return <View nativeID="proposal-screen" style={s.screen}>
     {webPrintStyle}
@@ -121,7 +124,17 @@ export default function QuoteProposalScreen(){
           {tenant.proposalPaymentTerms?<Text style={s.meta}>Pagamento: {tenant.proposalPaymentTerms}</Text>:null}
           {tenant.pixKey?<Text style={s.meta}>PIX: {tenant.pixKey}</Text>:null}
           </View>
-          <Text style={s.total}>{money(data.finalTotalCents||data.totalCents)}</Text>
+          <Text style={s.total}>{money(proposalTotal)}</Text>
+        </View>
+
+
+        <View style={s.paymentPlan}>
+          <Text style={s.paymentTitle}>Plano de pagamento</Text>
+          <Text style={s.paymentLine}><Text style={s.paymentStrong}>{money(payment.depositCents)}</Text> no ato para reserva da data</Text>
+          <Text style={s.paymentLine}>{payment.installmentCents===payment.lastInstallmentCents?`${payment.installments} parcelas de ${money(payment.installmentCents)}`:`${payment.installments-1} parcelas de ${money(payment.installmentCents)} + última de ${money(payment.lastInstallmentCents)}`}</Text>
+          <Text style={s.paymentLine}>PIX à vista: <Text style={s.paymentStrong}>{money(payment.cashCents)}</Text></Text>
+          {tenant.proposalPaymentTerms?<Text style={s.paymentNote}>{tenant.proposalPaymentTerms}</Text>:null}
+          {tenant.pixKey?<Text style={s.paymentNote}>Chave PIX: {tenant.pixKey}</Text>:null}
         </View>
 
         {data.discountBps>0&&<Text style={s.discount}>Desconto aplicado: {(data.discountBps/100).toLocaleString('pt-BR')}%</Text>}
@@ -171,7 +184,7 @@ const s=StyleSheet.create({
   totalLabel:{fontSize:12,color:'rgba(255,255,255,.7)'},
   validity:{fontSize:11,color:'rgba(255,255,255,.5)',marginTop:5},
   total:{fontFamily:'serif',fontSize:26,fontWeight:'800',color:theme.goldLight},
-  discount:{fontSize:11,color:theme.muted,textAlign:'right',marginTop:7},
+  discount:{fontSize:11,color:theme.muted,textAlign:'right',marginTop:7},paymentPlan:{marginTop:18,borderWidth:1,borderColor:theme.border,borderRadius:10,padding:16,backgroundColor:'#FAF7EE'},paymentTitle:{fontFamily:'serif',fontSize:18,fontWeight:'800',color:theme.gold,marginBottom:8},paymentLine:{fontSize:13,lineHeight:20,color:theme.ink,marginTop:3},paymentStrong:{fontWeight:'900',color:theme.ink},paymentNote:{fontSize:11,lineHeight:16,color:theme.muted,marginTop:7},
   body:{fontSize:13,lineHeight:18,color:theme.muted},
   footer:{marginTop:42,paddingTop:20,borderTopWidth:1,borderTopColor:theme.border},
   footerStrong:{fontWeight:'800',color:theme.ink}
