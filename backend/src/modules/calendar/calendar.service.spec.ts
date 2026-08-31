@@ -4,7 +4,7 @@ import { CalendarService } from './calendar.service';
 describe('CalendarService', () => {
   const db: any = {
     client: { findFirst: jest.fn() },
-    project: { findFirst: jest.fn() },
+    project: { findFirst: jest.fn(), findMany: jest.fn() },
     calendarEvent: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
     auditLog: { create: jest.fn() },
   };
@@ -13,6 +13,7 @@ describe('CalendarService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     db.auditLog.create.mockResolvedValue({});
+    db.project.findMany.mockResolvedValue([]);
     service = new CalendarService(db);
   });
 

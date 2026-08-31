@@ -9,7 +9,7 @@ describe('ServicesService',()=>{
     service:{update:jest.fn()},
   };
   const db:any={
-    service:{findMany:jest.fn(),findFirst:jest.fn(),create:jest.fn()},
+    service:{findMany:jest.fn(),findFirst:jest.fn(),create:jest.fn(),aggregate:jest.fn()},
     auditLog:{create:jest.fn()},
     $transaction:jest.fn(),
   };
@@ -18,6 +18,7 @@ describe('ServicesService',()=>{
   beforeEach(()=>{
     jest.clearAllMocks();
     db.auditLog.create.mockResolvedValue({});
+    db.service.aggregate.mockResolvedValue({_max:{sortOrder:null}});
     tx.serviceTeamMember.deleteMany.mockResolvedValue({});
     tx.serviceCost.deleteMany.mockResolvedValue({});
     tx.serviceStage.deleteMany.mockResolvedValue({});

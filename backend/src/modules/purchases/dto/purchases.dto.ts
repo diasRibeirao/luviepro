@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Min, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 
 export class CreateSupplierDto {
   @IsString() @MinLength(2) name!: string;
@@ -43,7 +43,7 @@ export class ReceivePurchaseDto {
 
 export class CreatePurchasePaymentDto {
   @IsInt() @Min(1) amountCents!: number;
-  @IsOptional() @IsIn(['pix','cash','bank_transfer','card','boleto','other']) method?: string;
+  @IsOptional() @IsString() @MaxLength(40) method?: string;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsDateString() paidAt?: string;
 }

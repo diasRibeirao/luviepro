@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
-import { CreateFinancialCategoryDto, CreateFinancialEntryDto, PayFinancialEntryDto } from './dto/finance.dto';
+import { CreateFinancialCategoryDto, CreateFinancialEntryDto, CreateFinancialPaymentMethodDto, PayFinancialEntryDto, UpdateFinancialCategoryDto, UpdateFinancialPaymentMethodDto } from './dto/finance.dto';
 
 @Injectable()
 export class FinanceService {
@@ -103,6 +103,10 @@ export class FinanceService {
   }
 
   categories(tenantId:string){return this.db.financialCategory.findMany({where:{tenantId,active:true},orderBy:[{type:'asc'},{sortOrder:'asc'},{name:'asc'}]})}
+  async manageCategories(tenantId:string){
+    const rows=await this.db.financialCategory.findMany({where:{tenantId},include:{_count:{select:{entries:true}}},orderBy:[{type:'asc'},{active:'desc'},{sortOrder:'asc'},{name:'asc'}]});
+    return rows.map(({_count,...row})=>({...row,usageCount:_count.entries}));
+  }
   async createCategory(tenantId:string,b:CreateFinancialCategoryDto){
     const name=b.name.trim();
     const exists=await this.db.financialCategory.findFirst({where:{tenantId,type:b.type,name:{equals:name,mode:'insensitive'}}});
@@ -110,7 +114,52 @@ export class FinanceService {
     const max=await this.db.financialCategory.aggregate({where:{tenantId,type:b.type},_max:{sortOrder:true}});
     return this.db.financialCategory.create({data:{tenantId,name,type:b.type,sortOrder:(max._max.sortOrder??0)+10}});
   }
+  async updateCategory(tenantId:string,id:string,b:UpdateFinancialCategoryDto){
+    const current=await this.db.financialCategory.findFirst({where:{id,tenantId}});if(!current)throw new NotFoundException('Categoria financeira não encontrada');
+    const name=(b.name??current.name).trim(),type=b.type??current.type;
+    const duplicate=await this.db.financialCategory.findFirst({where:{tenantId,type,name:{equals:name,mode:'insensitive'},id:{not:id}}});if(duplicate)throw new BadRequestException('Já existe uma categoria financeira com este nome e tipo');
+    return this.db.financialCategory.update({where:{id},data:{name,type,active:b.active??current.active}});
+  }
+  async paymentMethods(tenantId:string){
+    return this.db.financialPaymentMethod.findMany({where:{tenantId,active:true},orderBy:[{sortOrder:'asc'},{name:'asc'}]});
+  }
+  async managePaymentMethods(tenantId:string){
+    const [rows,orderUsed,purchaseUsed,manualUsed]=await Promise.all([
+      this.db.financialPaymentMethod.findMany({where:{tenantId},orderBy:[{active:'desc'},{sortOrder:'asc'},{name:'asc'}]}),
+      this.db.orderPayment.groupBy({by:['method'],where:{tenantId,method:{not:null}},_count:{_all:true}}),
+      this.db.purchasePayment.groupBy({by:['method'],where:{tenantId,method:{not:null}},_count:{_all:true}}),
+      this.db.financialEntry.groupBy({by:['method'],where:{tenantId,method:{not:null}},_count:{_all:true}}),
+    ]);
+    const counts=new Map<string,number>();
+    for(const list of [orderUsed,purchaseUsed,manualUsed])for(const row of list){const key=(row.method||'').trim().toLowerCase();if(key)counts.set(key,(counts.get(key)||0)+row._count._all)}
+    return rows.map(row=>({...row,usageCount:counts.get(row.code.trim().toLowerCase())||0}));
+  }
+  async createPaymentMethod(tenantId:string,b:CreateFinancialPaymentMethodDto){
+    const name=b.name.trim();
+    const base=(b.code||name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')).slice(0,40);
+    if(!base)throw new BadRequestException('Informe um nome válido para a forma de pagamento');
+    const duplicateCode=await this.db.financialPaymentMethod.findFirst({where:{tenantId,code:base}});
+    if(duplicateCode)throw new BadRequestException('Já existe uma forma de pagamento com este código');
+    const duplicateName=await this.db.financialPaymentMethod.findFirst({where:{tenantId,name:{equals:name,mode:'insensitive'}}});
+    if(duplicateName)throw new BadRequestException('Já existe uma forma de pagamento com este nome');
+    const max=await this.db.financialPaymentMethod.aggregate({where:{tenantId},_max:{sortOrder:true}});
+    return this.db.financialPaymentMethod.create({data:{tenantId,code:base,name,sortOrder:(max._max.sortOrder??0)+10}});
+  }
+  async updatePaymentMethod(tenantId:string,id:string,b:UpdateFinancialPaymentMethodDto){
+    const current=await this.db.financialPaymentMethod.findFirst({where:{id,tenantId}});if(!current)throw new NotFoundException('Forma de pagamento não encontrada');
+    const name=(b.name??current.name).trim();
+    const duplicate=await this.db.financialPaymentMethod.findFirst({where:{tenantId,name:{equals:name,mode:'insensitive'},id:{not:id}}});if(duplicate)throw new BadRequestException('Já existe uma forma de pagamento com este nome');
+    if(current.active&&b.active===false){const activeCount=await this.db.financialPaymentMethod.count({where:{tenantId,active:true}});if(activeCount<=1)throw new BadRequestException('Mantenha ao menos uma forma de pagamento ativa')}
+    return this.db.financialPaymentMethod.update({where:{id},data:{name,active:b.active??current.active}});
+  }
+  private async validatePaymentMethod(tenantId:string,method?:string){
+    if(!method)return;
+    const code=method.trim().toLowerCase();
+    const found=await this.db.financialPaymentMethod.findFirst({where:{tenantId,code,active:true}});
+    if(!found)throw new BadRequestException('Forma de pagamento inválida ou inativa');
+  }
   async createEntry(tenantId:string,b:CreateFinancialEntryDto,actorUserId?:string){
+    if((b.status??'pending')==='paid')await this.validatePaymentMethod(tenantId,b.method);
     if(b.categoryId){const category=await this.db.financialCategory.findFirst({where:{id:b.categoryId,tenantId,active:true}});if(!category)throw new BadRequestException('Categoria financeira não encontrada');if(category.type!==b.type)throw new BadRequestException('A categoria não corresponde ao tipo do lançamento')}
     const status=b.status??'pending';
     const paidAt=status==='paid'?(b.paidAt?new Date(b.paidAt):new Date()):null;
@@ -119,6 +168,7 @@ export class FinanceService {
     return entry;
   }
   async payEntry(tenantId:string,id:string,b:PayFinancialEntryDto,actorUserId?:string){
+    await this.validatePaymentMethod(tenantId,b.method);
     const current=await this.db.financialEntry.findFirst({where:{id,tenantId}});if(!current)throw new NotFoundException('Lançamento financeiro não encontrado');if(current.status==='canceled')throw new BadRequestException('Lançamento cancelado não pode ser pago');if(current.status==='paid')return current;
     const entry=await this.db.financialEntry.update({where:{id},data:{status:'paid',paidAt:b.paidAt?new Date(b.paidAt):new Date(),method:b.method||null,notes:b.notes?.trim()||current.notes}});
     await this.db.auditLog.create({data:{tenantId,actorUserId:actorUserId??null,action:'payment',entity:'financial_entry',entityId:id,metadata:{amountCents:entry.amountCents,type:entry.type}}}).catch(()=>undefined);return entry;

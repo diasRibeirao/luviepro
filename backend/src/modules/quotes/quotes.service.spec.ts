@@ -8,10 +8,12 @@ describe('QuotesService',()=>{
     quote:{findMany:jest.fn(),findFirst:jest.fn(),findUnique:jest.fn(),count:jest.fn(),create:jest.fn(),update:jest.fn()},
     quoteSequence:{upsert:jest.fn()},
     quoteVersion:{findMany:jest.fn(),create:jest.fn()},
-    quoteItem:{deleteMany:jest.fn()},
+    quoteItem:{deleteMany:jest.fn(),findMany:jest.fn()},
+    quoteProductItem:{findMany:jest.fn(),deleteMany:jest.fn()},
     service:{findFirst:jest.fn()},
     client:{findFirst:jest.fn()},
     project:{upsert:jest.fn()},
+    projectTask:{findMany:jest.fn(),createMany:jest.fn()},
     product:{findFirst:jest.fn()},
     stockReservation:{findMany:jest.fn()},
     order:{create:jest.fn()},
@@ -23,6 +25,10 @@ describe('QuotesService',()=>{
   beforeEach(()=>{
     jest.clearAllMocks();
     db.auditLog.create.mockResolvedValue({});
+    db.quoteProductItem.findMany.mockResolvedValue([]);
+    db.quoteItem.findMany.mockResolvedValue([]);
+    db.projectTask.findMany.mockResolvedValue([]);
+    db.projectTask.createMany.mockResolvedValue({count:0});
     db.$transaction.mockImplementation(async(fn:any)=>fn(db));
     service=new QuotesService(db);
   });
@@ -49,7 +55,8 @@ describe('QuotesService',()=>{
   it('creates project transactionally when public proposal is approved',async()=>{
     db.quote.findUnique.mockResolvedValue({id:'q1',tenantId:'t1',clientId:'c1',number:'ORC-1',status:'sent',clientDecision:null,validUntil:new Date(Date.now()+60000),client:{name:'Cliente'}});
     db.quote.update.mockResolvedValue({});
-    db.project.upsert.mockResolvedValue({});
+    db.quoteItem.findMany.mockResolvedValue([{id:'qi1',serviceName:'Organização',stages:[]}]);
+    db.project.upsert.mockResolvedValue({id:'p1'});
     await expect(service.decidePublicProposal('token','approved',' Maria ')).resolves.toEqual({ok:true,status:'approved'});
     expect(db.project.upsert).toHaveBeenCalledWith({where:{quoteId:'q1'},update:{},create:{tenantId:'t1',clientId:'c1',quoteId:'q1',name:'ORC-1 — Cliente'}});
     expect(db.quote.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:'q1'},data:expect.objectContaining({clientDecision:'approved',clientDecisionName:'Maria'})}));

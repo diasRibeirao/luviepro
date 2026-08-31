@@ -8,7 +8,8 @@ describe('ApiService workflows',()=>{
     const quote={id:'q1',tenantId:'t1',status:'draft',validityDays:30,sentAt:null,validUntil:null};
     const db:any={
       quote:{findFirst:jest.fn().mockResolvedValue(quote),update:jest.fn().mockImplementation(({data}:any)=>Promise.resolve({...quote,...data}))},
-      auditLog:{create:jest.fn().mockResolvedValue({})}
+      auditLog:{create:jest.fn().mockResolvedValue({})},
+      $transaction:jest.fn().mockImplementation(async(fn:any)=>fn(db)),
     };
     const service=new ApiService(db,jwt,mail);
     const result=await service.updateQuoteStatus('t1','q1','sent','u1');

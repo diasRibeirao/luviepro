@@ -1,12 +1,20 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
-import { CreateServiceDto, UpdateServiceDto } from './dto/services.dto';
+import { CreateServiceDto, ServiceCostDto, ServiceStageDto, ServiceTeamMemberDto, UpdateServiceDto } from './dto/services.dto';
+import type { Prisma } from '../../../../generated-prisma';
+
+
+type CurrentServiceState = Partial<Record<Exclude<keyof CreateServiceDto,'team'|'costs'|'stages'>, unknown>> & {
+  team?: Array<{role:string;dailyRateCents:number;included:boolean}>;
+  costs?: Array<{type:string;description:string;amountCents:number}>;
+  stages?: Array<{sequence:number;description:string;duration:string|null}>;
+};
 
 @Injectable()
 export class ServicesService {
   constructor(private readonly db:PrismaService){}
 
-  private async audit(tenantId:string,actorUserId:string|undefined,action:string,entityId:string,metadata?:any){
+  private async audit(tenantId:string,actorUserId:string|undefined,action:string,entityId:string,metadata?:Prisma.InputJsonObject){
     await this.db.auditLog.create({data:{tenantId,actorUserId,action,entity:'service',entityId,metadata}}).catch(()=>undefined);
   }
 
@@ -22,15 +30,15 @@ export class ServicesService {
     });
   }
 
-  private normalize(tenantId:string,data:CreateServiceDto|UpdateServiceDto,current?:any){
-    const teamSource:any[]=data.team===undefined&&current?.team
-      ? current.team.map((x:any)=>({role:x.role,dailyRateCents:x.dailyRateCents,included:x.included}))
+  private normalize(tenantId:string,data:CreateServiceDto|UpdateServiceDto,current?:CurrentServiceState){
+    const teamSource:ServiceTeamMemberDto[]=data.team===undefined&&current?.team
+      ? current.team.map(x=>({role:x.role,dailyRateCents:x.dailyRateCents,included:x.included}))
       : (data.team??[]);
-    const costsSource:any[]=data.costs===undefined&&current?.costs
-      ? current.costs.map((x:any)=>({type:x.type,description:x.description,amountCents:x.amountCents}))
+    const costsSource:ServiceCostDto[]=data.costs===undefined&&current?.costs
+      ? current.costs.map(x=>({type:x.type,description:x.description,amountCents:x.amountCents}))
       : (data.costs??[]);
-    const stagesSource:any[]=data.stages===undefined&&current?.stages
-      ? current.stages.map((x:any)=>({sequence:x.sequence,description:x.description,duration:x.duration}))
+    const stagesSource:ServiceStageDto[]=data.stages===undefined&&current?.stages
+      ? current.stages.map(x=>({sequence:x.sequence,description:x.description,duration:x.duration??undefined}))
       : (data.stages??[]);
 
     const team=teamSource.map(x=>({tenantId,role:String(x.role).trim(),dailyRateCents:Number(x.dailyRateCents),included:x.included!==false}));
@@ -39,22 +47,22 @@ export class ServicesService {
     const teamDaily=team.filter(x=>x.included).reduce((sum,x)=>sum+x.dailyRateCents,0);
     const variable=costs.filter(x=>x.type==='variable').reduce((sum,x)=>sum+x.amountCents,0);
     const fixed=costs.filter(x=>x.type==='fixed').reduce((sum,x)=>sum+x.amountCents,0);
-    const val=(key:keyof CreateServiceDto,fallback:any)=>((data as any)[key]===undefined?(current?.[key]??fallback):(data as any)[key]);
+    const val=(key:keyof CreateServiceDto,fallback:unknown):unknown=>data[key]===undefined?(current?.[key]??fallback):data[key];
 
     return {
       name:String(val('name','')).trim(),
       code:String(val('code','')??'').trim()||null,
       description:String(val('description','')??'').trim()||null,
       category:String(val('category','')??'').trim()||null,
-      billingUnit:val('billingUnit','daily'),
-      dailyRateCents:Number(val('dailyRateCents',teamDaily)),
+      billingUnit:String(val('billingUnit','daily')),
+      dailyRateCents:team.length?teamDaily:Number(val('dailyRateCents',0)),
       defaultDays:Number(val('defaultDays',1)),
       people:Number(val('people',1)),
       variableCostCents:costs.length?variable:Number(val('variableCostCents',0)),
       fixedCostCents:costs.length?fixed:Number(val('fixedCostCents',0)),
       safetyMarginBps:Number(val('safetyMarginBps',2000)),
-      variableCostMode:val('variableCostMode','per_day'),
-      marginBase:val('marginBase','daily'),
+      variableCostMode:String(val('variableCostMode','per_day')),
+      marginBase:String(val('marginBase','daily')),
       active:val('active',true)!==false,
       sortOrder:Number(val('sortOrder',current?.sortOrder??0)),
       team,costs,stages,

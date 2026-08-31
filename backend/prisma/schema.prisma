@@ -57,6 +57,7 @@ model Tenant {
   purchaseOrders PurchaseOrder[]
   purchasePayments PurchasePayment[]
   financialCategories FinancialCategory[]
+  financialPaymentMethods FinancialPaymentMethod[]
   financialEntries FinancialEntry[]
   quotes Quote[]
   projects Project[]
@@ -686,6 +687,21 @@ model FinancialCategory {
   updatedAt DateTime @updatedAt
   @@unique([tenantId, type, name])
   @@index([tenantId, type, active, sortOrder])
+}
+
+
+model FinancialPaymentMethod {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code String
+  name String
+  active Boolean @default(true)
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([tenantId, code])
+  @@index([tenantId, active, sortOrder, name])
 }
 
 model FinancialEntry {

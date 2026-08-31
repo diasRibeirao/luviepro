@@ -96,6 +96,7 @@ export class PurchasesService {
 
   async addPayment(tenantId:string,id:string,b:CreatePurchasePaymentDto,actor?:string){
     const current=await this.detail(tenantId,id);
+    if(b.method){const method=await this.db.financialPaymentMethod.findFirst({where:{tenantId,code:b.method.trim().toLowerCase(),active:true}});if(!method)throw new BadRequestException('Forma de pagamento inválida ou inativa')}
     if(current.status==='canceled')throw new BadRequestException('Não é possível pagar uma compra cancelada');
     const remaining=Math.max(0,current.totalCents-current.amountPaidCents);
     if(remaining<=0)throw new BadRequestException('Esta compra já está totalmente paga');

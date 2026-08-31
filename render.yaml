@@ -1,4 +1,19 @@
 services:
+  - type: web
+    runtime: static
+    name: luviepro-hml
+    buildCommand: cd app && npm ci && npm run export:web
+    staticPublishPath: app/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: EXPO_PUBLIC_API_URL
+        value: https://luviepro-api-hml.onrender.com/api
+      - key: EXPO_PUBLIC_API_TIMEOUT_MS
+        value: "90000"
+
   - type: keyvalue
     name: luviepro-redis-hml
     plan: free
@@ -13,7 +28,7 @@ services:
     region: virginia
     buildCommand: cd backend && npm ci --include=dev && npm run build
     startCommand: cd backend && npm run render:start
-    healthCheckPath: /api/health/live
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
         value: 22.20.0
@@ -39,9 +54,9 @@ services:
       - key: REDIS_KEY_PREFIX
         value: "luviepro:hml:"
       - key: CORS_ORIGINS
-        value: https://luviepro-api-hml.onrender.com
+        value: https://luviepro-hml.onrender.com
       - key: APP_WEB_URL
-        value: https://luviepro-api-hml.onrender.com
+        value: https://luviepro-hml.onrender.com
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET

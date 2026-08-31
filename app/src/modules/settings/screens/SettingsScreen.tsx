@@ -10,6 +10,7 @@ import { theme } from '../../../theme';
 import type { AccountData } from '../settings.types';
 import { errorMessage } from '../settings.utils';
 import { ProductCategory,ProductUnit,productsApi } from '../../products/api/products.api';
+import { FinanceCategory,FinancePaymentMethod,financeApi } from '../../finance/api/finance.api';
 
 type IoniconName=ComponentProps<typeof Ionicons>['name'];
 type Card={title:string;subtitle:string;icon:IoniconName;href:string;visible?:boolean;count?:number;countLabel?:string};
@@ -17,16 +18,17 @@ type Group={title:string;subtitle:string;cards:Card[]};
 
 export default function Settings(){
   const session=getSession();
-  const[data,setData]=useState<AccountData>(),[categories,setCategories]=useState<ProductCategory[]>([]),[units,setUnits]=useState<ProductUnit[]>([]),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState('');
+  const[data,setData]=useState<AccountData>(),[categories,setCategories]=useState<ProductCategory[]>([]),[units,setUnits]=useState<ProductUnit[]>([]),[financeCategories,setFinanceCategories]=useState<FinanceCategory[]>([]),[paymentMethods,setPaymentMethods]=useState<FinancePaymentMethod[]>([]),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState('');
   const width=useWindowDimensions().width;
   const compact=width<760;
   const role=data?.currentUser?.role??session?.role;
   const canManage=role==='owner';
   const canAudit=role==='owner'||role==='admin';
+  const canFinance=role==='owner'||role==='admin'||role==='finance';
   const load=()=>{
     setLoading(true);setLoadError('');
-    Promise.all([api<AccountData>('/account'),productsApi.categories().catch(()=>[] as ProductCategory[]),productsApi.units().catch(()=>[] as ProductUnit[])])
-      .then(([account,cats,productUnits])=>{setData(account);setCategories(cats);setUnits(productUnits)})
+    Promise.all([api<AccountData>('/account'),productsApi.categories().catch(()=>[] as ProductCategory[]),productsApi.units().catch(()=>[] as ProductUnit[]),financeApi.manageCategories().catch(()=>[] as FinanceCategory[]),financeApi.managePaymentMethods().catch(()=>[] as FinancePaymentMethod[])])
+      .then(([account,cats,productUnits,financialCats,methods])=>{setData(account);setCategories(cats);setUnits(productUnits);setFinanceCategories(financialCats);setPaymentMethods(methods)})
       .catch((e:unknown)=>setLoadError(errorMessage(e))).finally(()=>setLoading(false));
   };
   useEffect(load,[]);
@@ -35,6 +37,10 @@ export default function Settings(){
       {title:'Categorias de produtos',subtitle:'Classifique os produtos e controle quais categorias podem ser usadas em novos cadastros.',icon:'pricetags-outline',href:'/settings/product-categories',count:categories.length,countLabel:'categorias'},
       {title:'Unidades de produtos',subtitle:'Mantenha as unidades disponíveis no cadastro de produtos, como un, cx, kit, pct, m ou kg.',icon:'cube-outline',href:'/settings/product-units',count:units.length,countLabel:'unidades'},
     ]},
+    {title:'Financeiro',subtitle:'Cadastros auxiliares usados em receitas, despesas e relatórios.',cards:[
+      {title:'Categorias financeiras',subtitle:'Organize receitas e despesas e controle quais categorias podem ser usadas em novos lançamentos.',icon:'wallet-outline',href:'/settings/financial-categories',visible:canFinance,count:financeCategories.length,countLabel:'categorias'},
+      {title:'Formas de pagamento',subtitle:'Defina as formas disponíveis em recebimentos, pagamentos e baixas financeiras.',icon:'card-outline',href:'/settings/payment-methods',visible:canFinance,count:paymentMethods.length,countLabel:'formas'},
+    ]},
     {title:'Acesso',subtitle:'Usuários e regras de acesso à empresa.',cards:[
       {title:'Usuários',subtitle:'Gerencie usuários, convites e acessos da empresa.',icon:'people-outline',href:'/settings/users',visible:canManage,count:data?.usage?.users??0,countLabel:'usuários'},
       {title:'Perfis e permissões',subtitle:'Defina perfis personalizados e permissões de acesso.',icon:'key-outline',href:'/settings/access-profiles',visible:canManage&&!!data?.features?.customRoles},
@@ -42,7 +48,7 @@ export default function Settings(){
     {title:'Controle',subtitle:'Rastreabilidade das alterações realizadas no sistema.',cards:[
       {title:'Auditoria',subtitle:'Consulte o histórico de ações realizadas no sistema.',icon:'time-outline',href:'/settings/audit',visible:canAudit&&!!data?.features?.auditAccess},
     ]},
-  ],[categories.length,units.length,canManage,canAudit,data?.features?.customRoles,data?.features?.auditAccess,data?.usage?.users]);
+  ],[categories.length,units.length,financeCategories.length,paymentMethods.length,canFinance,canManage,canAudit,data?.features?.customRoles,data?.features?.auditAccess,data?.usage?.users]);
   if(loading||loadError)return <AppShell title="Configurações"><AsyncState loading={loading} error={loadError} onRetry={load}/></AppShell>;
   if(!data)return <AppShell title="Configurações"><AsyncState loading={loading} onRetry={load}/></AppShell>;
   return <AppShell title="Configurações" subtitle="Cadastros, acessos e parametrizações usados na operação do LuviePro.">
