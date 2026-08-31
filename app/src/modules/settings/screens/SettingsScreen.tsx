@@ -1,50 +1,64 @@
-import { type ComponentProps,useCallback,useEffect,useState } from 'react';
+import { type ComponentProps,useEffect,useMemo,useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable,ScrollView,useWindowDimensions,View } from 'react-native';
-import { router } from 'expo-router';
-import { Text,TextInput } from '../../../i18n';
+import { Pressable,StyleSheet,useWindowDimensions,View } from 'react-native';
+import { router,type Href } from 'expo-router';
 import { api,getSession } from '../../../api';
-import { AsyncButton } from '../../../components/AsyncButton';
 import { AppShell } from '../../../components/AppShell';
 import { AsyncState } from '../../../components/AsyncState';
-import { feedbackAlert as Alert } from '../../../components/Feedback';
+import { Text } from '../../../i18n';
 import { theme } from '../../../theme';
-import { formatCep,formatCpfCnpj,formatPhone,formatUf,integerInput } from '../../../inputFormatters';
-import { lookupCep } from '../../../cep';
-import { cepMessage,isValidEmail } from '../../../formValidation';
-import type { AccountData,TenantSettings } from '../settings.types';
-import { baseTabs } from '../settings.constants';
+import type { AccountData } from '../settings.types';
 import { errorMessage } from '../settings.utils';
-import { s } from '../settings.styles';
-import { Section,Field,Usage } from '../components/SettingsPrimitives';
-import { LogoUpload } from '../components/LogoUpload';
-import { SecurityPanel } from '../panels/SecurityPanel';
-import { UsersPanel } from '../panels/UsersPanel';
-import { AccessProfilesPanel } from '../panels/AccessProfilesPanel';
-import { AuditPanel } from '../panels/AuditPanel';
+import { ProductCategory,ProductUnit,productsApi } from '../../products/api/products.api';
 
 type IoniconName=ComponentProps<typeof Ionicons>['name'];
+type Card={title:string;subtitle:string;icon:IoniconName;href:string;visible?:boolean;count?:number;countLabel?:string};
+type Group={title:string;subtitle:string;cards:Card[]};
 
 export default function Settings(){
   const session=getSession();
-  const[data,setData]=useState<AccountData>(),[tab,setTab]=useState(0),[form,setForm]=useState<TenantSettings>({}),[saving,setSaving]=useState(false),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState(''),[formErrors,setFormErrors]=useState<Record<string,string>>({}),[cepBusy,setCepBusy]=useState(false);
-  const role=data?.currentUser?.role??session?.role; const canManage=role==='owner'; const canAudit=role==='owner'||role==='admin';
-  const tabs=[...baseTabs,...(canManage?['Usuários e acessos']:[]),...(canManage&&data?.features?.customRoles?['Perfis e permissões']:[]),...(canAudit&&data?.features?.auditAccess?['Auditoria']:[])];
-  const compact=useWindowDimensions().width<760;
-  const load=useCallback(()=>{setLoading(true);setLoadError('');api<AccountData>('/account').then(value=>{setData(value);setForm(value.tenant)}).catch((e:unknown)=>setLoadError(errorMessage(e))).finally(()=>setLoading(false))},[]);
-  useEffect(load,[]); const change=(key:string,value:string)=>{setForm(current=>({...current,[key]:value}));setFormErrors(current=>({...current,[key]:''}))};
-  async function fillCompanyCep(){const message=cepMessage(form.zipCode??'');if(message){setFormErrors(e=>({...e,zipCode:message}));return}if(!form.zipCode)return;try{setCepBusy(true);const address=await lookupCep(form.zipCode);setForm(current=>({...current,...address}));setFormErrors(e=>({...e,zipCode:''}))}catch(e:unknown){setFormErrors(current=>({...current,zipCode:errorMessage(e)||'CEP não encontrado.'}))}finally{setCepBusy(false)}}
-  async function save(){if(!data)return;const next:Record<string,string>={};if(form.contactEmail&&!isValidEmail(form.contactEmail))next.contactEmail='Informe um e-mail válido.';const cep=cepMessage(form.zipCode??'');if(cep)next.zipCode=cep;setFormErrors(next);if(Object.keys(next).length)return Alert.alert('Revise os campos destacados','Existem informações inválidas nas configurações.');try{setSaving(true);const payload:TenantSettings={name:form.name,responsibleName:form.responsibleName,phone:form.phone,contactEmail:form.contactEmail,siteUrl:form.siteUrl,instagram:form.instagram,legalName:form.legalName,document:form.document,stateRegistration:form.stateRegistration,municipalRegistration:form.municipalRegistration,zipCode:form.zipCode,addressLine:form.addressLine,addressNumber:form.addressNumber,addressComplement:form.addressComplement,neighborhood:form.neighborhood,city:form.city,state:form.state,proposalValidityDays:Number(form.proposalValidityDays)||30,proposalPaymentTerms:form.proposalPaymentTerms,proposalFooter:form.proposalFooter,pixKey:form.pixKey};if(data.features.customPdf)Object.assign(payload,{primaryColor:form.primaryColor,secondaryColor:form.secondaryColor,proposalText:form.proposalText});const tenant=await api<TenantSettings>('/account/settings',{method:'PATCH',body:JSON.stringify(payload)});setForm(tenant);Alert.alert('Configurações salvas')}catch(error:unknown){Alert.alert('Não foi possível salvar',errorMessage(error))}finally{setSaving(false)}}
+  const[data,setData]=useState<AccountData>(),[categories,setCategories]=useState<ProductCategory[]>([]),[units,setUnits]=useState<ProductUnit[]>([]),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState('');
+  const width=useWindowDimensions().width;
+  const compact=width<760;
+  const role=data?.currentUser?.role??session?.role;
+  const canManage=role==='owner';
+  const canAudit=role==='owner'||role==='admin';
+  const load=()=>{
+    setLoading(true);setLoadError('');
+    Promise.all([api<AccountData>('/account'),productsApi.categories().catch(()=>[] as ProductCategory[]),productsApi.units().catch(()=>[] as ProductUnit[])])
+      .then(([account,cats,productUnits])=>{setData(account);setCategories(cats);setUnits(productUnits)})
+      .catch((e:unknown)=>setLoadError(errorMessage(e))).finally(()=>setLoading(false));
+  };
+  useEffect(load,[]);
+  const groups=useMemo<Group[]>(()=>[
+    {title:'Produtos',subtitle:'Cadastros auxiliares usados no catálogo e no estoque.',cards:[
+      {title:'Categorias de produtos',subtitle:'Classifique os produtos e controle quais categorias podem ser usadas em novos cadastros.',icon:'pricetags-outline',href:'/settings/product-categories',count:categories.length,countLabel:'categorias'},
+      {title:'Unidades de produtos',subtitle:'Mantenha as unidades disponíveis no cadastro de produtos, como un, cx, kit, pct, m ou kg.',icon:'cube-outline',href:'/settings/product-units',count:units.length,countLabel:'unidades'},
+    ]},
+    {title:'Acesso',subtitle:'Usuários e regras de acesso à empresa.',cards:[
+      {title:'Usuários',subtitle:'Gerencie usuários, convites e acessos da empresa.',icon:'people-outline',href:'/settings/users',visible:canManage,count:data?.usage?.users??0,countLabel:'usuários'},
+      {title:'Perfis e permissões',subtitle:'Defina perfis personalizados e permissões de acesso.',icon:'key-outline',href:'/settings/access-profiles',visible:canManage&&!!data?.features?.customRoles},
+    ]},
+    {title:'Controle',subtitle:'Rastreabilidade das alterações realizadas no sistema.',cards:[
+      {title:'Auditoria',subtitle:'Consulte o histórico de ações realizadas no sistema.',icon:'time-outline',href:'/settings/audit',visible:canAudit&&!!data?.features?.auditAccess},
+    ]},
+  ],[categories.length,units.length,canManage,canAudit,data?.features?.customRoles,data?.features?.auditAccess,data?.usage?.users]);
   if(loading||loadError)return <AppShell title="Configurações"><AsyncState loading={loading} error={loadError} onRetry={load}/></AppShell>;
   if(!data)return <AppShell title="Configurações"><AsyncState loading={loading} onRetry={load}/></AppShell>;
-  const locked=!data.features.customPdf; const current=tabs[tab]; const editableTabs=['Minha empresa','Fiscal e endereço','Modelo de proposta','Identidade visual'];
-  return <AppShell title="Configurações" subtitle="Administre empresa, proposta, identidade, assinatura e acesso." action={editableTabs.includes(current)?<AsyncButton busy={saving} onPress={save} label="Salvar alterações" tone="header"/>:undefined}>
-    <View style={[s.layout,compact&&s.layoutCompact]}><ScrollView horizontal={compact} style={[s.tabs,compact&&s.tabsCompact]} contentContainerStyle={compact?s.tabsRow:undefined}>{tabs.map((label,index)=><Pressable key={label} onPress={()=>setTab(index)} style={[s.tab,current===label&&s.tabOn]}><Ionicons name={(label==='Minha empresa'?'business-outline':label==='Fiscal e endereço'?'location-outline':label==='Modelo de proposta'?'document-text-outline':label==='Segurança'?'shield-checkmark-outline':label==='Identidade visual'?'color-palette-outline':label==='Assinatura'?'card-outline':label==='Usuários e acessos'?'people-outline':label==='Perfis e permissões'?'key-outline':'time-outline') as IoniconName} size={17} color={current===label?theme.green2:theme.muted}/><Text style={[s.tabText,current===label&&s.tabTextOn]}>{label}</Text></Pressable>)}</ScrollView>
-      <View style={s.content}>{current==='Minha empresa'&&<Section title="Dados da empresa" subtitle="Informações usadas na conta e nas propostas."><View style={s.grid}><Field label="Nome da empresa" value={form.name} change={v=>change('name',v)}/><Field label="Nome da responsável" value={form.responsibleName} change={v=>change('responsibleName',v)}/><Field label="Telefone / WhatsApp" value={form.phone} change={v=>change('phone',formatPhone(v))} keyboardType="phone-pad"/><Field label="E-mail" error={formErrors.contactEmail} value={form.contactEmail} change={v=>change('contactEmail',v)}/><Field label="Site" value={form.siteUrl} change={v=>change('siteUrl',v)}/><Field label="Instagram" value={form.instagram} change={v=>change('instagram',v)}/></View></Section>}
-      {current==='Fiscal e endereço'&&<Section title="Dados fiscais e endereço" subtitle="Dados cadastrais que podem ser usados em propostas, contratos e documentos."><View style={s.grid}><Field label="Razão social" value={form.legalName} change={v=>change('legalName',v)}/><Field label="CPF / CNPJ" value={form.document} change={v=>change('document',formatCpfCnpj(v))} keyboardType="number-pad"/><Field label="Inscrição estadual" value={form.stateRegistration} change={v=>change('stateRegistration',v)}/><Field label="Inscrição municipal" value={form.municipalRegistration} change={v=>change('municipalRegistration',v)}/><Field label="CEP" value={form.zipCode} error={formErrors.zipCode} helper={cepBusy?'Consultando CEP...':'O endereço é preenchido automaticamente ao sair do campo.'} change={v=>change('zipCode',formatCep(v))} onBlur={fillCompanyCep} keyboardType="number-pad"/><Field label="Endereço" value={form.addressLine} change={v=>change('addressLine',v)}/><Field label="Número" value={form.addressNumber} change={v=>change('addressNumber',v)}/><Field label="Complemento" value={form.addressComplement} change={v=>change('addressComplement',v)}/><Field label="Bairro" value={form.neighborhood} change={v=>change('neighborhood',v)}/><Field label="Cidade" value={form.city} change={v=>change('city',v)}/><Field label="UF" value={form.state} change={v=>change('state',formatUf(v))} autoCapitalize="characters"/></View></Section>}
-      {current==='Modelo de proposta'&&<Section title="Padrões comerciais" subtitle="Valores padrão usados ao criar novas propostas. Podem ser ajustados em cada orçamento."><View style={s.grid}><Field label="Validade padrão (dias)" value={String(form.proposalValidityDays??30)} change={v=>change('proposalValidityDays',integerInput(v,3))} keyboardType="number-pad"/><Field label="Chave PIX" value={form.pixKey} change={v=>change('pixKey',v)}/><View style={s.full}><Text style={s.label}>CONDIÇÕES DE PAGAMENTO</Text><TextInput multiline value={form.proposalPaymentTerms??''} onChangeText={(v:string)=>change('proposalPaymentTerms',v)} style={[s.input,s.textarea]}/></View><View style={s.full}><Text style={s.label}>RODAPÉ / OBSERVAÇÕES PADRÃO</Text><TextInput multiline value={form.proposalFooter??''} onChangeText={(v:string)=>change('proposalFooter',v)} style={[s.input,s.textarea]}/></View></View></Section>}
-      {current==='Identidade visual'&&<Section title="Identidade visual" subtitle="Logo está disponível em todos os planos; cores e texto personalizado a partir do Pro.">{locked&&<View style={s.lock}><Ionicons name="lock-closed" size={18} color={theme.gold}/><View style={{flex:1}}><Text style={s.lockTitle}>Cores e mensagem personalizadas: Pro e Business</Text><Text style={s.lockText}>No Starter você ainda pode usar o logo da empresa na proposta.</Text></View><Pressable onPress={()=>router.push('/plans')}><Text style={s.upgrade}>Ver planos</Text></Pressable></View>}<View style={s.visual}><View style={s.full}><LogoUpload value={form.logoUrl} enabled={data.features.logoPdf} onChanged={logoUrl=>change('logoUrl',logoUrl??'')}/></View><Field label="Cor primária" value={form.primaryColor} change={v=>change('primaryColor',v)} disabled={locked}/><Field label="Cor de destaque" value={form.secondaryColor} change={v=>change('secondaryColor',v)} disabled={locked}/><View style={s.full}><Text style={s.label}>TEXTO DE BOAS-VINDAS DA PROPOSTA</Text><TextInput editable={!locked} multiline value={form.proposalText??''} onChangeText={(v:string)=>change('proposalText',v)} style={[s.input,s.textarea,locked&&s.inputDisabled]}/></View></View></Section>}
-      {current==='Assinatura'&&<Section title={`Plano ${data.tenant.plan}`} subtitle="Consumo atual e recursos da assinatura."><Usage label="Clientes" value={data.usage.clients} max={data.limit.maxClients}/><Usage label="Orçamentos neste mês" value={data.usage.quotes} max={data.limit.maxQuotesPerMonth}/><Usage label="Usuários" value={data.usage.users} max={data.limit.maxUsers}/><Pressable onPress={()=>router.push('/plans')} style={s.planButton}><Text style={s.planButtonText}>Comparar e alterar plano</Text><Ionicons name="arrow-forward" size={16} color={theme.g900}/></Pressable></Section>}
-      {current==='Usuários e acessos'&&<UsersPanel limit={data.limit.maxUsers} plan={data.tenant.plan}/>} {current==='Perfis e permissões'&&<AccessProfilesPanel/>} {current==='Segurança'&&<SecurityPanel/>} {current==='Auditoria'&&<AuditPanel/>}</View></View>
-  </AppShell>
+  return <AppShell title="Configurações" subtitle="Cadastros, acessos e parametrizações usados na operação do LuviePro.">
+    <View style={s.notice}><Ionicons name="information-circle-outline" size={19} color={theme.green2}/><Text style={s.noticeText}>Informações institucionais, fiscais e identidade visual ficam em <Text style={s.noticeStrong}>Empresa</Text>. Aqui ficam somente cadastros e configurações operacionais.</Text></View>
+    {groups.map(group=>{
+      const visible=group.cards.filter(c=>c.visible!==false);if(!visible.length)return null;
+      return <View key={group.title} style={s.group}>
+        <View style={s.groupHead}><Text style={s.groupTitle}>{group.title}</Text><Text style={s.groupSubtitle}>{group.subtitle}</Text></View>
+        <View style={[s.grid,compact&&s.gridCompact]}>{visible.map(card=><Pressable key={card.href} onPress={()=>router.push(card.href as Href)} style={({pressed})=>[s.card,compact&&s.cardCompact,pressed&&s.pressed]}>
+          <View style={s.icon}><Ionicons name={card.icon} size={21} color={theme.green2}/></View>
+          <View style={s.cardText}><View style={s.titleRow}><Text style={s.title}>{card.title}</Text>{typeof card.count==='number'&&<View style={s.countBadge}><Text style={s.countText}>{card.count} {card.countLabel}</Text></View>}</View><Text style={s.subtitle}>{card.subtitle}</Text></View>
+          <Ionicons name="chevron-forward" size={19} color={theme.muted}/>
+        </Pressable>)}</View>
+      </View>;
+    })}
+  </AppShell>;
 }
+
+const s=StyleSheet.create({notice:{backgroundColor:theme.green50,borderWidth:1,borderColor:theme.border,borderRadius:13,paddingHorizontal:14,paddingVertical:12,flexDirection:'row',alignItems:'flex-start',gap:9,marginBottom:20},noticeText:{flex:1,fontSize:12,lineHeight:18,color:theme.muted},noticeStrong:{fontWeight:'900',color:theme.ink},group:{marginBottom:24},groupHead:{marginBottom:10},groupTitle:{fontFamily:'serif',fontSize:18,fontWeight:'900',color:theme.ink},groupSubtitle:{fontSize:12,color:theme.muted,marginTop:3},grid:{flexDirection:'row',flexWrap:'wrap',gap:14,alignItems:'stretch'},gridCompact:{flexDirection:'column'},card:{width:'48%',minWidth:320,minHeight:112,backgroundColor:theme.white,borderWidth:1,borderColor:theme.border,borderRadius:15,padding:18,flexDirection:'row',alignItems:'center',gap:14,shadowColor:theme.shadow,shadowOpacity:.025,shadowRadius:10,shadowOffset:{width:0,height:3}},cardCompact:{width:'100%',minWidth:0},pressed:{opacity:.72},icon:{width:44,height:44,borderRadius:12,backgroundColor:theme.green50,alignItems:'center',justifyContent:'center'},cardText:{flex:1,minWidth:0},titleRow:{flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},title:{fontFamily:'serif',fontSize:17,fontWeight:'800',color:theme.ink},countBadge:{backgroundColor:theme.cream,borderRadius:999,paddingHorizontal:8,paddingVertical:4},countText:{fontSize:9,fontWeight:'900',color:theme.muted,textTransform:'uppercase'},subtitle:{fontSize:12,color:theme.muted,lineHeight:17,marginTop:5}});

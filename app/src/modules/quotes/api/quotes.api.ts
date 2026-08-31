@@ -1,5 +1,5 @@
 import {api} from '../../../api';
-import type {AccountData,CreateQuotePayload,DuplicateQuoteResponse,PricingRequest,PricingResult,ProposalData,QuoteClientOption,QuoteDetailData,QuoteRecord,QuoteServiceOption,QuoteStatusChange,QuoteVersion,ShareResponse,TimelineEvent,UpdateQuotePayload,QuoteWizardAccount} from '../types/quote.types';
+import type {AccountData,CreateQuotePayload,DuplicateQuoteResponse,PricingRequest,PricingResult,ProposalData,QuoteClientOption,QuoteDetailData,QuoteProductOption,QuoteRecord,QuoteServiceOption,QuoteStatusChange,QuoteVersion,ShareResponse,TimelineEvent,UpdateQuotePayload,QuoteWizardAccount} from '../types/quote.types';
 
 export const quotesApi={
   list:()=>api<QuoteRecord[]>('/quotes'),
@@ -15,8 +15,10 @@ export const quotesApi={
   revokeShare:(id:string)=>api(`/quotes/${id}/share/revoke`,{method:'POST'}),
   clients:()=>api<QuoteClientOption[]>('/clients'),
   services:()=>api<QuoteServiceOption[]>('/services'),
+  products:()=>api<QuoteProductOption[]>('/products'),
   wizardAccount:()=>api<QuoteWizardAccount>('/account'),
   proposalAccount:()=>api<AccountData>('/account'),
   proposal:(id:string)=>api<ProposalData>(`/quotes/${id}`),
   calculate:(payload:PricingRequest)=>api<PricingResult>('/pricing/calculate',{method:'POST',body:JSON.stringify(payload)}),
+  confirmSale:(id:string)=>api<{id:string;number:string;status:string;totalCents:number}>(`/quotes/${id}/confirm-sale`,{method:'POST'}),
 };

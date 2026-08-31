@@ -79,6 +79,8 @@ export default function QuoteProposalScreen(){
   const tenant=account.tenant??account;
   const proposalTotal=data.finalTotalCents||data.totalCents;
   const payment=standardPaymentPlan(proposalTotal);
+  const hasServices=data.items.length>0;
+  const documentTitle=hasServices?'ORDEM DE SERVIÇO PARA ORGANIZAÇÃO':'ORDEM DE REVENDA DE PRODUTO';
 
   return <View nativeID="proposal-screen" style={s.screen}>
     {webPrintStyle}
@@ -103,12 +105,12 @@ export default function QuoteProposalScreen(){
           </View>
         </View>
 
-        <Text style={s.kicker}>PROPOSTA COMERCIAL</Text>
+        <Text style={s.kicker}>{documentTitle}</Text>
         <Text style={s.title}>Olá, {data.client.name}</Text>
         {(data.client.document||data.client.city||data.client.addressLine)&&<Text style={s.clientMeta}>{[data.client.document,[data.client.addressLine,data.client.addressNumber,data.client.neighborhood].filter(Boolean).join(', '),data.client.city&&data.client.state?`${data.client.city}/${data.client.state}`:data.client.city].filter(Boolean).join(' · ')}</Text>}
         <Text style={s.intro}>{tenant.proposalText||'Preparamos esta proposta com os serviços, condições e investimento para a realização do seu projeto.'}</Text>
 
-        <Text style={s.section}>Serviços</Text>
+        {data.items.length>0&&<Text style={s.section}>Serviços</Text>}
         {data.items.map(item=><View key={item.id} style={s.row}>
           <View style={s.itemContent}>
             <Text style={s.item}>{item.serviceName}</Text>
@@ -116,6 +118,11 @@ export default function QuoteProposalScreen(){
           </View>
           <Text style={s.value}>{money(item.totalCents)}</Text>
         </View>)}
+
+        {!!data.productItems?.length&&<>
+          <Text style={s.section}>Produtos</Text>
+          {data.productItems.map((item,index)=><View key={item.id??`${item.productId??item.sku}-${index}`} style={s.row}><View style={s.itemContent}><Text style={s.item}>{item.productName}</Text><Text style={s.meta}>{item.sku} · {item.quantity} {item.unit} × {money(item.unitPriceCents)}</Text></View><Text style={s.value}>{money(item.totalCents)}</Text></View>)}
+        </>}
 
         <View style={s.totalBox}>
           <View>
@@ -130,9 +137,8 @@ export default function QuoteProposalScreen(){
 
         <View style={s.paymentPlan}>
           <Text style={s.paymentTitle}>Plano de pagamento</Text>
-          <Text style={s.paymentLine}><Text style={s.paymentStrong}>{money(payment.depositCents)}</Text> no ato para reserva da data</Text>
-          <Text style={s.paymentLine}>{payment.installmentCents===payment.lastInstallmentCents?`${payment.installments} parcelas de ${money(payment.installmentCents)}`:`${payment.installments-1} parcelas de ${money(payment.installmentCents)} + última de ${money(payment.lastInstallmentCents)}`}</Text>
-          <Text style={s.paymentLine}>PIX à vista: <Text style={s.paymentStrong}>{money(payment.cashCents)}</Text></Text>
+          <Text style={s.paymentLine}>À vista: <Text style={s.paymentStrong}>{money(payment.cashCents)}</Text></Text>
+          <Text style={s.paymentLine}>Parcelado sem entrada: {payment.installmentCents===payment.lastInstallmentCents?`${payment.installments} parcelas de ${money(payment.installmentCents)}`:`${payment.installments-1} parcelas de ${money(payment.installmentCents)} + última de ${money(payment.lastInstallmentCents)}`}</Text>
           {tenant.proposalPaymentTerms?<Text style={s.paymentNote}>{tenant.proposalPaymentTerms}</Text>:null}
           {tenant.pixKey?<Text style={s.paymentNote}>Chave PIX: {tenant.pixKey}</Text>:null}
         </View>

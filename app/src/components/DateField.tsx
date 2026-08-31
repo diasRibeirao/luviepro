@@ -12,12 +12,15 @@ type Props={
   minDate?:string;
   maxDate?:string;
   disabled?:boolean;
+  error?:string;
+  helper?:string;
+  required?:boolean;
 };
 
 const week=['SEG','TER','QUA','QUI','SEX','SÁB','DOM'];
 const months=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-export function DateField({value='',onChange,label,placeholder='DD/MM/AAAA',minDate,maxDate,disabled=false}:Props){
+export function DateField({value='',onChange,label,placeholder='DD/MM/AAAA',minDate,maxDate,disabled=false,error,helper,required=false}:Props){
   const[display,setDisplay]=useState(formatDateBR(value));
   const[open,setOpen]=useState(false);
   const[viewDate,setViewDate]=useState(()=>dateFromIso(value)||new Date());
@@ -42,12 +45,13 @@ export function DateField({value='',onChange,label,placeholder='DD/MM/AAAA',minD
   }
   const selected=value?String(value).slice(0,10):'';
   return <View style={s.wrap}>
-    {label?<Text style={s.label}>{label}</Text>:null}
-    <View style={[s.field,disabled&&s.disabled]}>
+    {label?<Text style={[s.label,error&&s.labelError]}>{label}{required?<Text style={s.required}> *</Text>:null}</Text>:null}
+    <View style={[s.field,error&&s.fieldError,disabled&&s.disabled]}>
       <TextInput value={display} onChangeText={changeText} onBlur={blur} editable={!disabled} placeholder={placeholder} placeholderTextColor={theme.muted} keyboardType="number-pad" maxLength={10} style={s.input}/>
       {display&&!disabled?<Pressable accessibilityLabel="Limpar data" onPress={()=>{setDisplay('');onChange('')}} style={s.iconBtn}><Ionicons name="close-circle" size={17} color={theme.muted}/></Pressable>:null}
       <Pressable accessibilityLabel="Abrir calendário" disabled={disabled} onPress={()=>setOpen(true)} style={s.iconBtn}><Ionicons name="calendar-outline" size={18} color={disabled?theme.muted:theme.green2}/></Pressable>
     </View>
+    {error?<Text style={s.error}>{error}</Text>:helper?<Text style={s.helper}>{helper}</Text>:null}
     <Modal visible={open} transparent animationType="fade" onRequestClose={()=>setOpen(false)}>
       <Pressable style={s.backdrop} onPress={()=>setOpen(false)}>
         <Pressable style={s.calendar} onPress={()=>{}}>
@@ -86,4 +90,4 @@ function todayIso(){const d=new Date();return toIso(d.getFullYear(),d.getMonth()
 function withinRange(iso:string,min?:string,max?:string){return (!min||iso>=String(min).slice(0,10))&&(!max||iso<=String(max).slice(0,10))}
 function calendarCells(year:number,month:number){const first=new Date(year,month,1).getDay();const offset=(first+6)%7;const count=new Date(year,month+1,0).getDate();return [...Array(offset).fill(0),...Array.from({length:count},(_,i)=>i+1)]}
 
-const s=StyleSheet.create({wrap:{gap:6},label:{fontSize:11,fontWeight:'800',color:theme.muted,letterSpacing:.15},field:{height:44,borderWidth:1,borderColor:theme.border,borderRadius:10,backgroundColor:theme.white,flexDirection:'row',alignItems:'center',paddingLeft:11},disabled:{opacity:.55},input:{flex:1,height:42,color:theme.ink,fontSize:12,paddingVertical:0},iconBtn:{width:36,height:42,alignItems:'center',justifyContent:'center'},backdrop:{flex:1,backgroundColor:'rgba(15,28,22,.34)',alignItems:'center',justifyContent:'center',padding:18},calendar:{width:'100%',maxWidth:360,backgroundColor:theme.white,borderRadius:18,padding:16,borderWidth:1,borderColor:theme.border,shadowColor:'#000',shadowOpacity:.15,shadowRadius:26,shadowOffset:{width:0,height:12},elevation:12},calHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:14},nav:{width:38,height:38,borderRadius:10,borderWidth:1,borderColor:theme.border,alignItems:'center',justifyContent:'center'},monthWrap:{alignItems:'center'},month:{fontSize:14,fontWeight:'900',color:theme.ink},year:{fontSize:11,color:theme.muted,marginTop:2},week:{flexDirection:'row',marginBottom:6},weekText:{width:'14.2857%',textAlign:'center',fontSize:11,fontWeight:'900',color:theme.muted},days:{flexDirection:'row',flexWrap:'wrap'},day:{width:'14.2857%',aspectRatio:1,alignItems:'center',justifyContent:'center',borderRadius:10},daySelected:{backgroundColor:theme.green2},dayToday:{borderWidth:1,borderColor:theme.gold},dayText:{fontSize:12,fontWeight:'700',color:theme.ink},dayTextSelected:{color:theme.white,fontWeight:'900'},dayTextDisabled:{color:'#C9CECB'},calFooter:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',borderTopWidth:1,borderTopColor:theme.border,marginTop:10,paddingTop:12},today:{paddingVertical:8,paddingHorizontal:10},todayText:{fontSize:11,fontWeight:'900',color:theme.green2},cancel:{paddingVertical:8,paddingHorizontal:12,borderRadius:9,backgroundColor:theme.green50},cancelText:{fontSize:11,fontWeight:'800',color:theme.muted}});
+const s=StyleSheet.create({wrap:{gap:6},label:{fontSize:11,fontWeight:'800',color:theme.muted,letterSpacing:.15},labelError:{color:theme.danger},required:{color:theme.danger},field:{height:44,borderWidth:1,borderColor:theme.border,borderRadius:10,backgroundColor:theme.white,flexDirection:'row',alignItems:'center',paddingLeft:11},fieldError:{borderColor:theme.danger,backgroundColor:'#FFF8F7'},error:{fontSize:11,lineHeight:14,color:theme.danger,fontWeight:'600'},helper:{fontSize:11,lineHeight:14,color:theme.muted},disabled:{opacity:.55},input:{flex:1,height:42,color:theme.ink,fontSize:12,paddingVertical:0},iconBtn:{width:36,height:42,alignItems:'center',justifyContent:'center'},backdrop:{flex:1,backgroundColor:'rgba(15,28,22,.34)',alignItems:'center',justifyContent:'center',padding:18},calendar:{width:'100%',maxWidth:360,backgroundColor:theme.white,borderRadius:18,padding:16,borderWidth:1,borderColor:theme.border,shadowColor:'#000',shadowOpacity:.15,shadowRadius:26,shadowOffset:{width:0,height:12},elevation:12},calHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:14},nav:{width:38,height:38,borderRadius:10,borderWidth:1,borderColor:theme.border,alignItems:'center',justifyContent:'center'},monthWrap:{alignItems:'center'},month:{fontSize:14,fontWeight:'900',color:theme.ink},year:{fontSize:11,color:theme.muted,marginTop:2},week:{flexDirection:'row',marginBottom:6},weekText:{width:'14.2857%',textAlign:'center',fontSize:11,fontWeight:'900',color:theme.muted},days:{flexDirection:'row',flexWrap:'wrap'},day:{width:'14.2857%',aspectRatio:1,alignItems:'center',justifyContent:'center',borderRadius:10},daySelected:{backgroundColor:theme.green2},dayToday:{borderWidth:1,borderColor:theme.gold},dayText:{fontSize:12,fontWeight:'700',color:theme.ink},dayTextSelected:{color:theme.white,fontWeight:'900'},dayTextDisabled:{color:'#C9CECB'},calFooter:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',borderTopWidth:1,borderTopColor:theme.border,marginTop:10,paddingTop:12},today:{paddingVertical:8,paddingHorizontal:10},todayText:{fontSize:11,fontWeight:'900',color:theme.green2},cancel:{paddingVertical:8,paddingHorizontal:12,borderRadius:9,backgroundColor:theme.green50},cancelText:{fontSize:11,fontWeight:'800',color:theme.muted}});

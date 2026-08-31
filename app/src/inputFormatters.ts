@@ -50,3 +50,14 @@ export function decimalInput(value:string,decimals=2,max?:number){
 }
 
 export const integerInput=(value:string,maxLength=6)=>digits(value,maxLength);
+
+export function formatCurrencyInput(value:string){
+  const d=digits(value,15);
+  if(!d)return '0,00';
+  const cents=Number(d);
+  return (cents/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+export function currencyFromCents(value:number){
+  return (Math.max(0,Number(value)||0)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
