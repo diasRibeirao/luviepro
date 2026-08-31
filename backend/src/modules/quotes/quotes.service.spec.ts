@@ -12,6 +12,9 @@ describe('QuotesService',()=>{
     service:{findFirst:jest.fn()},
     client:{findFirst:jest.fn()},
     project:{upsert:jest.fn()},
+    product:{findFirst:jest.fn()},
+    stockReservation:{findMany:jest.fn()},
+    order:{create:jest.fn()},
     auditLog:{create:jest.fn(),findMany:jest.fn()},
     $transaction:jest.fn(),
   };
@@ -59,4 +62,18 @@ describe('QuotesService',()=>{
     await expect(service.shareQuote('t1','q1','u1')).resolves.toEqual({token:'existing-token',path:'/p/existing-token',validUntil});
     expect(db.quote.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:'q1'},data:expect.objectContaining({publicToken:'existing-token'})}));
   });
+
+  it('creates an order for an approved service-only quote',async()=>{
+    db.quote.findFirst.mockResolvedValue({id:'q1',tenantId:'t1',number:'ORC-2026-001',status:'approved',finalTotalCents:350000,productItems:[],order:null});
+    db.stockReservation.findMany.mockResolvedValue([]);
+    db.order.create.mockResolvedValue({id:'o1',number:'PED-2026-001',totalCents:350000,items:[]});
+    await expect(service.confirmSale('t1','q1','u1')).resolves.toEqual(expect.objectContaining({number:'PED-2026-001',totalCents:350000}));
+    expect(db.order.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({totalCents:350000,items:{create:[]}})}));
+  });
+
+  it('rejects duplicated products before creating an inconsistent reservation',async()=>{
+    db.product.findFirst.mockResolvedValue({id:'p1',name:'Caixa',sku:'CX1',unit:'un',costCents:1000,salePriceCents:2000,active:true});
+    await expect((service as any).buildProductItems('t1',[{productId:'p1',quantity:1},{productId:'p1',quantity:2}])).rejects.toBeInstanceOf(BadRequestException);
+  });
+
 });

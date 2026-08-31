@@ -1,2 +1,5 @@
 import { DashboardController } from './dashboard.controller';
-import { Module } from '@nestjs/common'; import { DashboardService } from './dashboard.service'; @Module({controllers:[DashboardController],providers:[DashboardService],exports:[DashboardService]}) export class DashboardModule {}
+import { Module } from '@nestjs/common';
+import { DashboardService } from './dashboard.service';
+import { FinanceModule } from '../finance/finance.module';
+@Module({imports:[FinanceModule],controllers:[DashboardController],providers:[DashboardService],exports:[DashboardService]}) export class DashboardModule {}

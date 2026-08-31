@@ -18,6 +18,7 @@ import { CalendarModule } from './modules/calendar/calendar.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { ServicesModule } from './modules/services/services.module';
+import { ProductsModule } from './modules/products/products.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
@@ -26,6 +27,9 @@ import { AccountModule } from './modules/account/account.module';
 import {ObservabilityModule} from './observability/observability.module';
 import {MetricsController} from './observability/metrics.controller';
 
+import { OrdersModule } from './modules/orders/orders.module';
+import { PurchasesModule } from './modules/purchases/purchases.module';
+import { FinanceModule } from './modules/finance/finance.module';
 @Module({
   imports:[
     CoreModule,
@@ -40,6 +44,7 @@ import {MetricsController} from './observability/metrics.controller';
     QuotesModule,
     ClientsModule,
     ServicesModule,
+    ProductsModule,OrdersModule,PurchasesModule,FinanceModule,
     PlatformModule,
     AccountModule,
     AuditModule,

@@ -13,6 +13,53 @@ export class ProjectsService {
     return this.db.auditLog.create({ data: { tenantId, actorUserId, action, entity, entityId, metadata: auditMetadata(metadata) } });
   }
 
+
+  private durationDays(value?: string | null) {
+    if (!value) return 0;
+    const normalized = String(value).trim().replace(',', '.');
+    const match = normalized.match(/\d+(?:\.\d+)?/);
+    if (!match) return 0;
+    const amount = Number(match[0]);
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    if (/hora|horas|\bh\b/i.test(normalized)) return amount / 8;
+    return amount;
+  }
+
+  private addCalendarDays(date: Date, days: number) {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  private async quotePlanning(tenantId: string, quoteId: string) {
+    const items = await this.db.quoteItem.findMany({
+      where: { tenantId, quoteId },
+      include: { stages: { where: { tenantId }, orderBy: { sequence: 'asc' } } },
+      orderBy: { id: 'asc' },
+    });
+    const totalDays = items.reduce((sum, item) => sum + Math.max(1, item.days || 1), 0);
+    return { items, totalDays: Math.max(1, totalDays) };
+  }
+
+  private async rescheduleImportedStages(tenantId: string, projectId: string, quoteId: string, startDate: Date) {
+    const { items } = await this.quotePlanning(tenantId, quoteId);
+    let elapsed = 0;
+    for (const item of items) {
+      for (const stage of item.stages) {
+        const rawDays = this.durationDays(stage.duration);
+        const stageDays = Math.max(1, Math.ceil(rawDays || 1));
+        const dueDate = this.addCalendarDays(startDate, elapsed + stageDays - 1);
+        const title = `${item.serviceName} — ${stage.description}`;
+        await this.db.projectTask.updateMany({
+          where: { tenantId, projectId, title },
+          data: { dueDate },
+        });
+        elapsed += stageDays;
+      }
+      if (!item.stages.length) elapsed += Math.max(1, item.days || 1);
+    }
+  }
+
   async projectStatuses(tenantId: string) {
     const store = this.db.projectStatus;
     const count = await store.count({ where: { tenantId } });
@@ -107,19 +154,28 @@ export class ProjectsService {
     const progress = data.progress === undefined ? project.progress : clampInteger(data.progress, 0, 100);
     const status = data.status ?? project.status;
     const normalizedProgress = status === 'completed' ? 100 : progress;
+    const nextStartDate = data.startDate ? parseDateOrThrow(data.startDate,'Data inicial') : project.startDate;
+    let nextEndDate = data.endDate ? parseDateOrThrow(data.endDate,'Data final') : project.endDate;
+    if (data.startDate && data.endDate === undefined && project.quoteId && nextStartDate) {
+      const planning = await this.quotePlanning(tenantId, project.quoteId);
+      nextEndDate = this.addCalendarDays(nextStartDate, planning.totalDays - 1);
+    }
     const updated = await this.db.project.update({
       where: { id },
       data: {
         status,
         progress: normalizedProgress,
         notes: data.notes === undefined ? project.notes : nullableTrimmed(data.notes),
-        startDate: data.startDate ? parseDateOrThrow(data.startDate,'Data inicial') : project.startDate,
-        endDate: data.endDate ? parseDateOrThrow(data.endDate,'Data final') : project.endDate,
+        startDate: nextStartDate,
+        endDate: nextEndDate,
       },
       include: { client: true, quote: true, tasks: { where: { tenantId }, orderBy: { createdAt: 'asc' } } },
     });
-    await this.audit(tenantId, actorUserId, 'update', 'project', id, { status: updated.status, progress: updated.progress });
-    return updated;
+    if (data.startDate && project.quoteId && nextStartDate) {
+      await this.rescheduleImportedStages(tenantId, id, project.quoteId, nextStartDate);
+    }
+    await this.audit(tenantId, actorUserId, 'update', 'project', id, { status: updated.status, progress: updated.progress, startDate: updated.startDate, endDate: updated.endDate });
+    return this.project(tenantId, id);
   }
 
   async importQuoteStages(tenantId: string, projectId: string, actorUserId?: string) {
@@ -139,6 +195,7 @@ export class ProjectsService {
       priority: 'medium',
     }))).filter(task => !titles.has(task.title));
     if (tasks.length) await this.db.projectTask.createMany({ data: tasks });
+    if (project.startDate) await this.rescheduleImportedStages(tenantId, projectId, project.quote.id, project.startDate);
     await this.audit(tenantId, actorUserId, 'import_quote_stages', 'project', projectId, { imported: tasks.length, quoteId: project.quote.id });
     return { ok: true, imported: tasks.length };
   }

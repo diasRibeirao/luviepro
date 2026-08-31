@@ -45,6 +45,19 @@ model Tenant {
   users User[]
   clients Client[]
   services Service[]
+  products Product[]
+  productCategories ProductCategory[]
+  productUnits ProductUnit[]
+  stockMovements StockMovement[]
+  stockReservations StockReservation[]
+  quoteProductItems QuoteProductItem[]
+  orders Order[]
+  orderPayments OrderPayment[]
+  suppliers Supplier[]
+  purchaseOrders PurchaseOrder[]
+  purchasePayments PurchasePayment[]
+  financialCategories FinancialCategory[]
+  financialEntries FinancialEntry[]
   quotes Quote[]
   projects Project[]
   projectStatuses ProjectStatus[]
@@ -289,6 +302,89 @@ model Client {
   @@index([tenantId, name])
   @@index([tenantId, document])
 }
+model ProductCategory {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name String
+  active Boolean @default(true)
+  products Product[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([tenantId, name])
+  @@index([tenantId, active])
+}
+
+
+model ProductUnit {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code String
+  name String
+  active Boolean @default(true)
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([tenantId, code])
+  @@index([tenantId, active, sortOrder])
+}
+
+model Product {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  name String
+  sku String
+  description String?
+  unit String @default("un")
+  barcode String?
+  supplierName String?
+  costCents Int @default(0)
+  salePriceCents Int @default(0)
+  stockQuantity Int @default(0)
+  reservedQuantity Int @default(0)
+  minimumStock Int @default(0)
+  imageUrl String?
+  weightGrams Int?
+  widthCm Decimal? @db.Decimal(10,2)
+  heightCm Decimal? @db.Decimal(10,2)
+  lengthCm Decimal? @db.Decimal(10,2)
+  active Boolean @default(true)
+  movements StockMovement[]
+  reservations StockReservation[]
+  quoteItems QuoteProductItem[]
+  orderItems OrderItem[]
+  purchaseItems PurchaseOrderItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([tenantId, sku])
+  @@index([tenantId, name])
+  @@index([tenantId, active])
+  @@index([tenantId, categoryId])
+}
+
+model StockMovement {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type String
+  quantity Int
+  balanceAfter Int
+  unitCostCents Int?
+  reason String?
+  referenceType String?
+  referenceId String?
+  actorUserId String?
+  createdAt DateTime @default(now())
+  @@index([tenantId, productId, createdAt])
+  @@index([tenantId, type, createdAt])
+}
+
 model Service {
   id String @id @default(cuid())
   tenantId String
@@ -359,6 +455,7 @@ model Quote {
   finalTotalCents Int @default(0)
   validityDays Int @default(30)
   notes String?
+  paymentLinkUrl String?
   sentAt DateTime?
   approvedAt DateTime?
   validUntil DateTime?
@@ -371,6 +468,9 @@ model Quote {
   updatedAt DateTime @updatedAt
   version Int @default(1)
   items QuoteItem[]
+  productItems QuoteProductItem[]
+  reservations StockReservation[]
+  order Order?
   versions QuoteVersion[]
   project Project?
   @@unique([tenantId, number])
@@ -393,6 +493,224 @@ model QuoteItem {
   stages QuoteStage[]
   @@index([tenantId, quoteId])
 }
+
+model QuoteProductItem {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quoteId String
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName String
+  sku String
+  unit String @default("un")
+  quantity Int
+  unitPriceCents Int
+  unitCostCents Int @default(0)
+  discountBps Int @default(0)
+  totalCents Int
+  createdAt DateTime @default(now())
+  @@index([tenantId, quoteId])
+  @@index([tenantId, productId])
+}
+
+model StockReservation {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quoteId String
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quantity Int
+  status String @default("active")
+  createdAt DateTime @default(now())
+  releasedAt DateTime?
+  @@unique([quoteId, productId])
+  @@index([tenantId, productId, status])
+  @@index([tenantId, quoteId, status])
+}
+
+model Order {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quoteId String @unique
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  number String
+  status String @default("confirmed")
+  paymentStatus String @default("pending")
+  deliveryMethod String @default("delivery")
+  notes String?
+  totalCents Int
+  amountPaidCents Int @default(0)
+  paymentDueAt DateTime?
+  confirmedAt DateTime @default(now())
+  paidAt DateTime?
+  deliveredAt DateTime?
+  canceledAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items OrderItem[]
+  payments OrderPayment[]
+  @@unique([tenantId, number])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, paymentStatus, createdAt])
+  @@index([tenantId, paymentStatus, paymentDueAt])
+}
+
+model OrderPayment {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amountCents Int
+  method String?
+  notes String?
+  actorUserId String?
+  paidAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  @@index([tenantId, paidAt])
+  @@index([orderId, paidAt])
+}
+
+model OrderItem {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName String
+  sku String
+  unit String
+  quantity Int
+  unitPriceCents Int
+  unitCostCents Int
+  totalCents Int
+  @@index([orderId])
+  @@index([productId])
+}
+
+
+model Supplier {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name String
+  document String?
+  email String?
+  phone String?
+  contactName String?
+  notes String?
+  active Boolean @default(true)
+  purchaseOrders PurchaseOrder[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([tenantId, active, name])
+}
+
+model PurchaseOrder {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplierId String
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  number String
+  status String @default("ordered")
+  notes String?
+  expectedAt DateTime?
+  paymentDueAt DateTime?
+  paymentStatus String @default("pending")
+  amountPaidCents Int @default(0)
+  paidAt DateTime?
+  totalCents Int
+  orderedAt DateTime @default(now())
+  receivedAt DateTime?
+  canceledAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items PurchaseOrderItem[]
+  payments PurchasePayment[]
+  @@unique([tenantId, number])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, supplierId, createdAt])
+  @@index([tenantId, paymentStatus, paymentDueAt])
+}
+
+
+model PurchasePayment {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrderId String
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  amountCents Int
+  method String?
+  notes String?
+  actorUserId String?
+  paidAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  @@index([tenantId, paidAt])
+  @@index([purchaseOrderId, paidAt])
+}
+
+model PurchaseOrderItem {
+  id String @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName String
+  sku String
+  unit String
+  quantity Int
+  receivedQuantity Int @default(0)
+  unitCostCents Int
+  totalCents Int
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
+model FinancialCategory {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name String
+  type String
+  active Boolean @default(true)
+  sortOrder Int @default(0)
+  entries FinancialEntry[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([tenantId, type, name])
+  @@index([tenantId, type, active, sortOrder])
+}
+
+model FinancialEntry {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category FinancialCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  type String
+  status String @default("pending")
+  description String
+  counterparty String?
+  amountCents Int
+  dueAt DateTime?
+  paidAt DateTime?
+  method String?
+  notes String?
+  actorUserId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([tenantId, type, status, dueAt])
+  @@index([tenantId, paidAt])
+  @@index([tenantId, categoryId])
+}
+
 model QuoteStage {
   id String @id @default(cuid())
   tenantId String
