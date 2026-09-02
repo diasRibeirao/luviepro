@@ -1,7 +1,11 @@
+export type ProjectAssignee={id:string;name:string;email?:string|null};
+
 export type ProjectTask={
   status:string;
   priority?:string|null;
   dueDate?:string|null;
+  assigneeUserId?:string|null;
+  assignee?:ProjectAssignee|null;
 };
 
 export type ProjectStatus={
@@ -17,7 +21,11 @@ export type ProjectRecord={
   status:string;
   progress:number;
   startDate?:string|null;
-  client?:{name?:string|null}|null;
+  endDate?:string|null;
+  assigneeUserId?:string|null;
+  assignee?:ProjectAssignee|null;
+  clientId?:string;
+  client?:{id?:string;name?:string|null}|null;
   quote?:{number:string;finalTotalCents?:number|null;totalCents:number}|null;
   tasks?:ProjectTask[];
 };
