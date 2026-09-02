@@ -8,7 +8,8 @@ export type Purchase={id:string;number:string;status:PurchaseStatus;paymentStatu
 export type PurchaseSummary={total:number;open:number;received:number;pendingUnits:number;orderedValueCents:number;payableCents:number;paidCents:number;overduePayableCents:number};
 export const purchasesApi={
  list:()=>api<Purchase[]>('/purchases'), summary:()=>api<PurchaseSummary>('/purchases/summary'), suppliers:()=>api<Supplier[]>('/purchases/suppliers'),
- createSupplier:(p:{name:string;document?:string;email?:string;phone?:string;contactName?:string;notes?:string})=>api<Supplier>('/purchases/suppliers',{method:'POST',body:JSON.stringify(p)}),
+ createSupplier:(p:{name:string;document?:string;email?:string;phone?:string;contactName?:string;notes?:string;active?:boolean})=>api<Supplier>('/purchases/suppliers',{method:'POST',body:JSON.stringify(p)}),
+ updateSupplier:(id:string,p:Partial<Pick<Supplier,'name'|'document'|'email'|'phone'|'contactName'|'notes'|'active'>>)=>api<Supplier>(`/purchases/suppliers/${id}`,{method:'PATCH',body:JSON.stringify(p)}),
  create:(p:{supplierId:string;expectedAt?:string;paymentDueAt?:string;notes?:string;items:{productId:string;quantity:number;unitCostCents:number}[]})=>api<Purchase>('/purchases',{method:'POST',body:JSON.stringify(p)}),
  update:(id:string,p:{status?:PurchaseStatus;expectedAt?:string;paymentDueAt?:string;notes?:string})=>api<Purchase>(`/purchases/${id}`,{method:'PATCH',body:JSON.stringify(p)}),
  receive:(id:string,items:{itemId:string;quantity:number}[])=>api<Purchase>(`/purchases/${id}/receive`,{method:'POST',body:JSON.stringify({items})}),

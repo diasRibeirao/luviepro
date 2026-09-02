@@ -11,6 +11,16 @@ export class CreateSupplierDto {
   @IsOptional() @IsBoolean() active?: boolean;
 }
 
+export class UpdateSupplierDto {
+  @IsOptional() @IsString() @MinLength(2) name?: string;
+  @IsOptional() @IsString() document?: string;
+  @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() contactName?: string;
+  @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsBoolean() active?: boolean;
+}
+
 export class PurchaseItemDto {
   @IsString() productId!: string;
   @IsInt() @Min(1) quantity!: number;

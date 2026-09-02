@@ -25,9 +25,11 @@ export class ProjectsService {
     return amount;
   }
 
-  private addCalendarDays(date: Date, days: number) {
+  private addBusinessDays(date: Date, days: number) {
     const next = new Date(date);
-    next.setDate(next.getDate() + days);
+    while(next.getDay()===0||next.getDay()===6)next.setDate(next.getDate()+1);
+    let remaining=Math.max(0,days);
+    while(remaining>0){next.setDate(next.getDate()+1);if(next.getDay()!==0&&next.getDay()!==6)remaining--}
     return next;
   }
 
@@ -48,7 +50,7 @@ export class ProjectsService {
       for (const stage of item.stages) {
         const rawDays = this.durationDays(stage.duration);
         const stageDays = Math.max(1, Math.ceil(rawDays || 1));
-        const dueDate = this.addCalendarDays(startDate, elapsed + stageDays - 1);
+        const dueDate = this.addBusinessDays(startDate, elapsed + stageDays - 1);
         const title = `${item.serviceName} — ${stage.description}`;
         await this.db.projectTask.updateMany({
           where: { tenantId, projectId, title },
@@ -154,11 +156,11 @@ export class ProjectsService {
     const progress = data.progress === undefined ? project.progress : clampInteger(data.progress, 0, 100);
     const status = data.status ?? project.status;
     const normalizedProgress = status === 'completed' ? 100 : progress;
-    const nextStartDate = data.startDate ? parseDateOrThrow(data.startDate,'Data inicial') : project.startDate;
+    const nextStartDate = data.startDate ? this.addBusinessDays(parseDateOrThrow(data.startDate,'Data inicial'),0) : project.startDate;
     let nextEndDate = data.endDate ? parseDateOrThrow(data.endDate,'Data final') : project.endDate;
     if (data.startDate && data.endDate === undefined && project.quoteId && nextStartDate) {
       const planning = await this.quotePlanning(tenantId, project.quoteId);
-      nextEndDate = this.addCalendarDays(nextStartDate, planning.totalDays - 1);
+      nextEndDate = this.addBusinessDays(nextStartDate, planning.totalDays - 1);
     }
     const updated = await this.db.project.update({
       where: { id },
@@ -173,6 +175,9 @@ export class ProjectsService {
     });
     if (data.startDate && project.quoteId && nextStartDate) {
       await this.rescheduleImportedStages(tenantId, id, project.quoteId, nextStartDate);
+    }
+    if((data.startDate!==undefined||data.endDate!==undefined)&&updated.startDate){
+      await this.db.calendarEvent.updateMany({where:{tenantId,projectId:id,status:'active'},data:{startAt:updated.startDate,endAt:updated.endDate}});
     }
     await this.audit(tenantId, actorUserId, 'update', 'project', id, { status: updated.status, progress: updated.progress, startDate: updated.startDate, endDate: updated.endDate });
     return this.project(tenantId, id);

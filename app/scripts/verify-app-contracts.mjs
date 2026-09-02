@@ -72,6 +72,22 @@ for (const [wrapper, expectedTarget] of contracts) {
   }
 }
 
+const behaviorContracts = [
+  ['src/modules/purchases/screens/PurchasesScreen.tsx', 'Remover produto'],
+  ['src/modules/purchases/screens/PurchasesScreen.tsx', 'Gerenciar fornecedores'],
+  ['src/modules/purchases/components/SuppliersManager.tsx', 'updateSupplier'],
+  ['src/modules/purchases/components/SuppliersManager.tsx', 'Buscar por nome, documento ou contato'],
+  ['src/modules/quotes/paymentPlan.ts', 'depositBps=3000'],
+  ['src/modules/quotes/screens/QuoteProposalScreen.tsx', 'Entrada via PIX (30%)'],
+  ['src/modules/quotes/screens/QuoteProposalScreen.tsx', 'Saldo no cartão (70%)'],
+  ['src/modules/quotes/screens/PublicProposalScreen.tsx', 'Entrada via PIX (30%)'],
+  ['src/modules/quotes/screens/PublicProposalScreen.tsx', 'Saldo no cartão (70%)'],
+];
+for(const [file,expected] of behaviorContracts){
+  const content=fs.readFileSync(path.join(root,file),'utf8');
+  if(!content.includes(expected))errors.push(`${file}: contrato funcional ausente (${expected})`);
+}
+
 console.log(`Contratos de tela verificados: ${contracts.length}`);
 if (errors.length) {
   console.error('\nFalhas nos contratos das rotas críticas:');
