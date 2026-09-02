@@ -4,7 +4,7 @@ export type QuoteStatusChange=Exclude<QuoteStatus,'approved'>;
 export type QuoteClientSummary={name:string};
 export type QuoteRecord={id:string;number:string;status:QuoteStatus;createdAt:string;validUntil?:string|null;totalCents:number;finalTotalCents?:number|null;client:QuoteClientSummary;items?:QuoteItem[];productItems?:QuoteProductItem[]};
 
-export type QuoteStage={description:string};
+export type QuoteStage={description:string;duration?:string|null};
 export type QuoteItemConfiguration={serviceId?:string;dailyRateCents?:number;variableCostCents?:number;fixedCostCents?:number;safetyMarginBps?:number};
 export type QuoteItem={id:string;serviceName:string;days:number;people:number;totalCents:number;stages?:QuoteStage[];configurationJson?:QuoteItemConfiguration|null};
 export type QuoteProductItem={id:string;productId:string;productName:string;sku:string;unit:string;quantity:number;unitPriceCents:number;unitCostCents?:number;discountBps?:number;totalCents:number};
@@ -15,7 +15,7 @@ export type TimelineEvent={type:string;at:string;title:string;detail?:string|nul
 export type ShareInfo={token?:string;path:string;url:string;validUntil?:string|null};
 export type DuplicateQuoteResponse={id:string;number:string};
 export type ShareResponse={token?:string;path:string;validUntil?:string|null};
-export type EditQuoteItem={serviceId:string;days:string;people:string;dailyRateCents?:number;variableCostCents?:number;fixedCostCents?:number;safetyMarginBps?:number};
+export type EditQuoteItem={serviceId:string;days:string;people:string;dailyRateCents?:number;variableCostCents?:number;fixedCostCents?:number;safetyMarginBps?:number;stages?:QuoteServiceStage[]};
 
 export type ServiceTeamMember={role:string;dailyRateCents:number;included?:boolean};
 export type ServiceCost={description:string;amountCents:number;type:'variable'|'fixed'|string};
@@ -30,10 +30,10 @@ export type PricingResult={totalCents:number;[key:string]:unknown};
 export type QuoteAccountTenant={proposalValidityDays?:number|null};
 export type QuoteWizardAccount={tenant?:QuoteAccountTenant|null};
 
-export type CreateQuoteItemPayload={serviceId:string;days:number;people:number;dailyRateCents:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number};
+export type CreateQuoteItemPayload={serviceId:string;days:number;people:number;dailyRateCents:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number;stages?:QuoteServiceStage[]};
 export type CreateQuoteProductPayload={productId:string;quantity:number;unitPriceCents?:number;discountBps?:number};
 export type CreateQuotePayload={clientId:string;discountBps:number;validityDays:number;notes:string;paymentLinkUrl?:string;items:CreateQuoteItemPayload[];productItems?:CreateQuoteProductPayload[]};
-export type UpdateQuotePayload={discountBps?:number;validityDays?:number;notes?:string;paymentLinkUrl?:string;items?:Array<{serviceId:string;days:number;people:number;dailyRateCents?:number;variableCostCents?:number;fixedCostCents?:number;safetyMarginBps?:number}>;productItems?:CreateQuoteProductPayload[]};
+export type UpdateQuotePayload={discountBps?:number;validityDays?:number;notes?:string;paymentLinkUrl?:string;items?:Array<{serviceId:string;days:number;people:number;dailyRateCents?:number;variableCostCents?:number;fixedCostCents?:number;safetyMarginBps?:number;stages?:QuoteServiceStage[]}>;productItems?:CreateQuoteProductPayload[]};
 
 export type ProposalItem={id:string;serviceName:string;days:number;people:number;totalCents:number};
 export type ProposalProductItem={id?:string;productId?:string;productName:string;sku:string;unit:string;quantity:number;unitPriceCents:number;totalCents:number};

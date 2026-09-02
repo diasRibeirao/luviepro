@@ -78,7 +78,8 @@ export class AuthService {
     const appUrl = (process.env.APP_URL || 'http://localhost:8081').replace(/\/$/, '');
     const resetUrl = `${appUrl}/reset-password?token=${raw}`;
     const sent = await this.mail.sendPasswordReset({ to: user.email, name: user.name, resetUrl, expiresAt });
-    if (process.env.NODE_ENV !== 'production' && !sent.sent) response.devResetUrl = resetUrl;
+    const nonProductionEnvironment=process.env.NODE_ENV !== 'production'||process.env.APP_ENV==='staging';
+    if (nonProductionEnvironment && !sent.sent) response.devResetUrl = resetUrl;
     await this.audit(user.tenantId, user.id, 'password_reset_requested', 'user', user.id, { emailSent: sent.sent });
     return response;
   }

@@ -155,7 +155,8 @@ export class QuotesService {
       if(!service)throw new NotFoundException('Serviço não encontrado ou inativo');
       const days=input.days??service.defaultDays,people=input.people??service.people;
       const calc=this.calculate({dailyRateCents:input.dailyRateCents??service.dailyRateCents,days,people,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps});
-      items.push({tenantId,serviceName:service.name,days,people,...calc,configurationJson:{serviceId:service.id,dailyRateCents:input.dailyRateCents??service.dailyRateCents,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps},stages:{create:service.stages.map(st=>({tenantId,sequence:st.sequence,description:st.description,duration:st.duration}))}});
+      const selectedStages=input.stages===undefined?service.stages:input.stages.map((st,index)=>({sequence:index+1,description:st.description.trim(),duration:st.duration?.trim()||null})).filter(st=>st.description);
+      items.push({tenantId,serviceName:service.name,days,people,...calc,configurationJson:{serviceId:service.id,dailyRateCents:input.dailyRateCents??service.dailyRateCents,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps},stages:{create:selectedStages.map(st=>({tenantId,sequence:st.sequence,description:st.description,duration:st.duration}))}});
     }
     return items;
   }

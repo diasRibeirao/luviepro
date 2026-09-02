@@ -83,4 +83,10 @@ describe('QuotesService',()=>{
     await expect((service as any).buildProductItems('t1',[{productId:'p1',quantity:1},{productId:'p1',quantity:2}])).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('uses quote-specific stages instead of resetting to service defaults',async()=>{
+    db.service.findFirst.mockResolvedValue({id:'s1',name:'Mudança',defaultDays:3,people:1,dailyRateCents:10000,variableCostCents:0,fixedCostCents:0,safetyMarginBps:0,stages:[{sequence:1,description:'Pré',duration:'1 dia'},{sequence:2,description:'Pós',duration:'2 dias'}]});
+    const items=await (service as any).buildQuoteItems('t1',[{serviceId:'s1',days:1,people:1,stages:[{description:'Somente pré-mudança',duration:'1 dia'}]}]);
+    expect(items[0].stages.create).toEqual([{tenantId:'t1',sequence:1,description:'Somente pré-mudança',duration:'1 dia'}]);
+  });
+
 });
