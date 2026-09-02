@@ -13,6 +13,19 @@ export class ProjectsService {
     return this.db.auditLog.create({ data: { tenantId, actorUserId, action, entity, entityId, metadata: auditMetadata(metadata) } });
   }
 
+  private async assigneeId(tenantId: string, value?: string) {
+    if (value === undefined) return undefined;
+    const id = value.trim();
+    if (!id) return null;
+    const user = await this.db.user.findFirst({ where: { id, tenantId, active: true }, select: { id: true } });
+    if (!user) throw new BadRequestException('Responsável inválido ou inativo');
+    return user.id;
+  }
+
+  assignees(tenantId: string) {
+    return this.db.user.findMany({ where: { tenantId, active: true }, select: { id: true, name: true, email: true, role: true }, orderBy: { name: 'asc' } });
+  }
+
 
   private durationDays(value?: string | null) {
     if (!value) return 0;
@@ -131,7 +144,7 @@ export class ProjectsService {
   projects(tenantId: string) {
     return this.db.project.findMany({
       where: { tenantId },
-      include: { client: true, quote: true, tasks: { where: { tenantId }, orderBy: [{ status: 'asc' }, { dueDate: 'asc' }, { createdAt: 'asc' }] } },
+      include: { client: true, quote: true, assignee: { select: { id: true, name: true, email: true } }, tasks: { where: { tenantId }, include: { assignee: { select: { id: true, name: true, email: true } } }, orderBy: [{ status: 'asc' }, { dueDate: 'asc' }, { createdAt: 'asc' }] } },
       orderBy: { name: 'asc' },
     });
   }
@@ -142,7 +155,8 @@ export class ProjectsService {
       include: {
         client: true,
         quote: { include: { items: { where: { tenantId }, include: { stages: { where: { tenantId }, orderBy: { sequence: 'asc' } } }, orderBy: { id: 'asc' } } } },
-        tasks: { where: { tenantId }, orderBy: [{ status: 'asc' }, { priority: 'desc' }, { dueDate: 'asc' }, { createdAt: 'asc' }] },
+        assignee: { select: { id: true, name: true, email: true } },
+        tasks: { where: { tenantId }, include: { assignee: { select: { id: true, name: true, email: true } } }, orderBy: [{ status: 'asc' }, { priority: 'desc' }, { dueDate: 'asc' }, { createdAt: 'asc' }] },
         activityNotes: { where: { tenantId }, orderBy: { createdAt: 'desc' }, take: 30 },
       },
     });
@@ -156,6 +170,7 @@ export class ProjectsService {
     const progress = data.progress === undefined ? project.progress : clampInteger(data.progress, 0, 100);
     const status = data.status ?? project.status;
     const normalizedProgress = status === 'completed' ? 100 : progress;
+    const assigneeUserId = await this.assigneeId(tenantId, data.assigneeUserId);
     const nextStartDate = data.startDate ? this.addBusinessDays(parseDateOrThrow(data.startDate,'Data inicial'),0) : project.startDate;
     let nextEndDate = data.endDate ? parseDateOrThrow(data.endDate,'Data final') : project.endDate;
     if (data.startDate && data.endDate === undefined && project.quoteId && nextStartDate) {
@@ -170,8 +185,9 @@ export class ProjectsService {
         notes: data.notes === undefined ? project.notes : nullableTrimmed(data.notes),
         startDate: nextStartDate,
         endDate: nextEndDate,
+        ...(assigneeUserId !== undefined ? { assigneeUserId } : {}),
       },
-      include: { client: true, quote: true, tasks: { where: { tenantId }, orderBy: { createdAt: 'asc' } } },
+      include: { client: true, quote: true, assignee: { select: { id: true, name: true, email: true } }, tasks: { where: { tenantId }, include: { assignee: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'asc' } } },
     });
     if (data.startDate && project.quoteId && nextStartDate) {
       await this.rescheduleImportedStages(tenantId, id, project.quoteId, nextStartDate);
@@ -179,7 +195,7 @@ export class ProjectsService {
     if((data.startDate!==undefined||data.endDate!==undefined)&&updated.startDate){
       await this.db.calendarEvent.updateMany({where:{tenantId,projectId:id,status:'active'},data:{startAt:updated.startDate,endAt:updated.endDate}});
     }
-    await this.audit(tenantId, actorUserId, 'update', 'project', id, { status: updated.status, progress: updated.progress, startDate: updated.startDate, endDate: updated.endDate });
+    await this.audit(tenantId, actorUserId, 'update', 'project', id, { status: updated.status, progress: updated.progress, startDate: updated.startDate, endDate: updated.endDate, assigneeUserId: updated.assigneeUserId });
     return this.project(tenantId, id);
   }
 
@@ -198,6 +214,7 @@ export class ProjectsService {
       title: `${item.serviceName} — ${stage.description}`,
       description: `Etapa importada automaticamente do serviço ${item.serviceName}${stage.duration ? ` · Duração prevista: ${stage.duration}` : ''}`,
       priority: 'medium',
+      assigneeUserId: project.assigneeUserId,
     }))).filter(task => !titles.has(task.title));
     if (tasks.length) await this.db.projectTask.createMany({ data: tasks });
     if (project.startDate) await this.rescheduleImportedStages(tenantId, projectId, project.quote.id, project.startDate);
@@ -217,6 +234,7 @@ export class ProjectsService {
   async createProjectTask(tenantId: string, projectId: string, data: CreateProjectTaskDto, actorUserId?: string) {
     const project = await this.db.project.findFirst({ where: { id: projectId, tenantId } });
     if (!project) throw new NotFoundException('Projeto não encontrado');
+    const requestedAssignee = await this.assigneeId(tenantId, data.assigneeUserId);
     const task = await this.db.projectTask.create({
       data: {
         tenantId,
@@ -225,7 +243,9 @@ export class ProjectsService {
         description: data.description,
         priority: data.priority ?? 'medium',
         dueDate: data.dueDate ? parseDateOrThrow(data.dueDate,'Prazo') : undefined,
+        assigneeUserId: requestedAssignee === undefined ? project.assigneeUserId : requestedAssignee,
       },
+      include: { assignee: { select: { id: true, name: true, email: true } } },
     });
     await this.audit(tenantId, actorUserId, 'create', 'project_task', task.id, { projectId, title: task.title });
     return task;
@@ -235,6 +255,7 @@ export class ProjectsService {
     const task = await this.db.projectTask.findFirst({ where: { id: taskId, projectId, tenantId } });
     if (!task) throw new NotFoundException('Tarefa não encontrada');
     const status = data.status ?? task.status;
+    const assigneeUserId = await this.assigneeId(tenantId, data.assigneeUserId);
     const updated = await this.db.projectTask.update({
       where: { id: taskId },
       data: {
@@ -244,7 +265,9 @@ export class ProjectsService {
         priority: data.priority ?? task.priority,
         dueDate: data.dueDate ? parseDateOrThrow(data.dueDate,'Prazo') : task.dueDate,
         completedAt: status === 'completed' ? (task.completedAt ?? new Date()) : null,
+        ...(assigneeUserId !== undefined ? { assigneeUserId } : {}),
       },
+      include: { assignee: { select: { id: true, name: true, email: true } } },
     });
     const [total, done] = await Promise.all([
       this.db.projectTask.count({ where: { projectId, tenantId } }),

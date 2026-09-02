@@ -9,7 +9,7 @@ describe('legacy refresh-token removal', () => {
     const sessionBlock = schema.match(/model AuthSession \{[\s\S]*?\n\}/)?.[0] ?? '';
     expect(userBlock).not.toContain('refreshTokenHash');
     expect(platformBlock).not.toContain('refreshTokenHash');
-    expect(sessionBlock).toContain('refreshTokenHash String');
+    expect(sessionBlock).toMatch(/\brefreshTokenHash\s+String\b/);
   });
 
   it('drops the obsolete principal columns in the migration', () => {

@@ -35,6 +35,24 @@ describe('CalendarService', () => {
     expect(db.calendarEvent.create).not.toHaveBeenCalled();
   });
 
+  it('creates a calendar event linked to an existing project and client', async () => {
+    db.project.findFirst.mockResolvedValue({ id: 'p1', tenantId: 't1' });
+    db.client.findFirst.mockResolvedValue({ id: 'c1', tenantId: 't1' });
+    db.calendarEvent.create.mockResolvedValue({ id: 'e1', title: 'Projeto Casa', startAt: new Date('2026-09-02T00:00:00') });
+    await service.create('t1', 'u1', {
+      title: 'Projeto Casa',
+      type: 'project',
+      startAt: '2026-09-02T00:00:00',
+      endAt: '2026-09-10T23:59:59',
+      allDay: true,
+      projectId: 'p1',
+      clientId: 'c1',
+    });
+    expect(db.project.findFirst).toHaveBeenCalledWith({ where: { id: 'p1', tenantId: 't1' } });
+    expect(db.client.findFirst).toHaveBeenCalledWith({ where: { id: 'c1', tenantId: 't1' } });
+    expect(db.calendarEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ projectId: 'p1', clientId: 'c1', type: 'project', allDay: true }) }));
+  });
+
   it('updates only fields supplied in a calendar patch', async () => {
     const startAt = new Date('2026-08-28T12:00:00');
     db.calendarEvent.findFirst.mockResolvedValue({ id: 'e1', tenantId: 't1', title: 'Original', startAt, endAt: null });

@@ -187,6 +187,8 @@ model User {
   passwordChangedAt DateTime?
   passwordResetTokens PasswordResetToken[]
   authSessions AuthSession[]
+  assignedProjects Project[] @relation("ProjectAssignee")
+  assignedProjectTasks ProjectTask[] @relation("ProjectTaskAssignee")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([customProfileId])
@@ -753,10 +755,13 @@ model Project {
   startDate DateTime?
   endDate DateTime?
   notes String?
+  assigneeUserId String?
+  assignee User? @relation("ProjectAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
   tasks ProjectTask[]
   activityNotes ProjectNote[]
   monthlyFollowUps MonthlyFollowUp[]
   @@index([tenantId, status])
+  @@index([tenantId, assigneeUserId, status])
 }
 model ProjectStatus {
   id String @id @default(cuid())
@@ -819,10 +824,13 @@ model ProjectTask {
   status String @default("pending")
   priority String @default("medium")
   dueDate DateTime?
+  assigneeUserId String?
+  assignee User? @relation("ProjectTaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
   completedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([tenantId, projectId, status])
+  @@index([tenantId, assigneeUserId, status, dueDate])
 }
 
 model ProjectNote {
