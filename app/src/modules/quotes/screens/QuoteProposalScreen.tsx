@@ -137,8 +137,8 @@ export default function QuoteProposalScreen(){
 
         <View style={s.paymentPlan}>
           <Text style={s.paymentTitle}>Plano de pagamento</Text>
-          <Text style={s.paymentLine}>À vista: <Text style={s.paymentStrong}>{money(payment.cashCents)}</Text></Text>
-          <Text style={s.paymentLine}>Parcelado sem entrada: {payment.installmentCents===payment.lastInstallmentCents?`${payment.installments} parcelas de ${money(payment.installmentCents)}`:`${payment.installments-1} parcelas de ${money(payment.installmentCents)} + última de ${money(payment.lastInstallmentCents)}`}</Text>
+          <Text style={s.paymentLine}>Entrada via PIX (30%): <Text style={s.paymentStrong}>{money(payment.depositCents)}</Text></Text>
+          <Text style={s.paymentLine}>Saldo no cartão (70%): {payment.installmentCents===payment.lastInstallmentCents?`${payment.installments} parcelas de ${money(payment.installmentCents)}`:`${payment.installments-1} parcelas de ${money(payment.installmentCents)} + última de ${money(payment.lastInstallmentCents)}`}</Text>
           {tenant.proposalPaymentTerms?<Text style={s.paymentNote}>{tenant.proposalPaymentTerms}</Text>:null}
           {tenant.pixKey?<Text style={s.paymentNote}>Chave PIX: {tenant.pixKey}</Text>:null}
         </View>

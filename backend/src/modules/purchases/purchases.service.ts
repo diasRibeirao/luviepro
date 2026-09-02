@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
-import { CreatePurchaseDto, CreatePurchasePaymentDto, CreateSupplierDto, ReceivePurchaseDto, UpdatePurchaseDto } from './dto/purchases.dto';
+import { CreatePurchaseDto, CreatePurchasePaymentDto, CreateSupplierDto, ReceivePurchaseDto, UpdatePurchaseDto, UpdateSupplierDto } from './dto/purchases.dto';
 
 const includePurchase={supplier:true,items:{include:{product:true}},payments:{orderBy:{paidAt:'desc' as const}}} as const;
 
@@ -12,6 +12,20 @@ export class PurchasesService {
 
   createSupplier(tenantId:string,b:CreateSupplierDto){
     return this.db.supplier.create({data:{tenantId,name:b.name.trim(),document:b.document?.trim()||null,email:b.email?.trim()||null,phone:b.phone?.trim()||null,contactName:b.contactName?.trim()||null,notes:b.notes?.trim()||null,active:b.active!==false}})
+  }
+
+  async updateSupplier(tenantId:string,id:string,b:UpdateSupplierDto){
+    const supplier=await this.db.supplier.findFirst({where:{id,tenantId}});
+    if(!supplier)throw new NotFoundException('Fornecedor não encontrado');
+    return this.db.supplier.update({where:{id},data:{
+      ...(b.name!==undefined?{name:b.name.trim()}:{}),
+      ...(b.document!==undefined?{document:b.document.trim()||null}:{}),
+      ...(b.email!==undefined?{email:b.email.trim()||null}:{}),
+      ...(b.phone!==undefined?{phone:b.phone.trim()||null}:{}),
+      ...(b.contactName!==undefined?{contactName:b.contactName.trim()||null}:{}),
+      ...(b.notes!==undefined?{notes:b.notes.trim()||null}:{}),
+      ...(b.active!==undefined?{active:b.active}:{}),
+    }});
   }
 
   list(tenantId:string){return this.db.purchaseOrder.findMany({where:{tenantId},include:includePurchase,orderBy:{createdAt:'desc'}})}
