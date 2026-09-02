@@ -19,8 +19,10 @@ export class PurchasesService {
   async updateSupplier(tenantId:string,id:string,b:UpdateSupplierDto){
     const supplier=await this.db.supplier.findFirst({where:{id,tenantId}});
     if(!supplier)throw new NotFoundException('Fornecedor não encontrado');
+
     const document=b.document?.trim();
     if(document&&await this.db.supplier.findFirst({where:{tenantId,document,id:{not:id}}}))throw new ConflictException('Já existe um fornecedor com este CPF/CNPJ');
+
     return this.db.supplier.update({where:{id},data:{
       ...(b.name!==undefined?{name:b.name.trim()}:{}),
       ...(b.document!==undefined?{document:b.document.trim()||null}:{}),
