@@ -45,7 +45,7 @@ export function usePlatformData({compact,onUnauthorized}:{compact:boolean;onUnau
  },[onUnauthorized]);
 
  const loadTab=useCallback(async()=>{
-  if(tab==='overview'||tab==='plans'||tab==='email')return;
+  if(tab==='overview'||tab==='plans'||tab==='email'||tab==='maintenance')return;
   const endpoint=tab==='companies'?'tenants':tab==='users'?'users':tab==='subs'?'subscriptions':'payments';
   const params=[`page=${page}`,`pageSize=${compact?12:20}`,query.trim()&&`q=${encodeURIComponent(query.trim())}`,statusFilter!=='all'&&`status=${encodeURIComponent(statusFilter)}`,planFilter!=='all'&&`plan=${encodeURIComponent(planFilter)}`,companyFilter!=='all'&&`tenantId=${encodeURIComponent(companyFilter)}`].filter(Boolean).join('&');
   try{

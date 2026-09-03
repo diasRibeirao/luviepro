@@ -9,10 +9,11 @@ export const PLATFORM_TABS=[
  {key:'overview',icon:'speedometer-outline',label:'Visão geral',subtitle:'Indicadores e saúde geral da operação'},
  {key:'companies',icon:'business-outline',label:'Empresas',subtitle:'Contas, planos e situação das empresas'},
  {key:'users',icon:'people-outline',label:'Usuários',subtitle:'Acessos e perfis de todos os clientes'},
+ {key:'maintenance',icon:'construct-outline',label:'Manutenção',subtitle:'Usuários Master e manutenção administrativa'},
  {key:'plans',icon:'layers-outline',label:'Planos',subtitle:'Preços e limites comerciais'},
  {key:'subs',icon:'repeat-outline',label:'Assinaturas',subtitle:'Ciclos contratados e vencimentos'},
  {key:'payments',icon:'card-outline',label:'Pagamentos',subtitle:'Conciliação financeira do Mercado Pago'},
- {key:'email',icon:'mail-outline',label:'E-mail',subtitle:'Infraestrutura global de envio de e-mails'},
+ {key:'email',icon:'mail-outline',label:'E-mail e SMTP',subtitle:'Infraestrutura global de envio de e-mails'},
 ] as const satisfies ReadonlyArray<{key:PlatformTab;icon:string;label:string;subtitle:string}>;
 
 export function PlatformSidebar({compact,active,onSelect,onLogout}:{compact:boolean;active:PlatformTab;onSelect:(tab:PlatformTab)=>void;onLogout:()=>void|Promise<void>}) {

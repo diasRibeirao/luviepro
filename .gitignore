@@ -9,3 +9,7 @@ coverage/
 .env
 
 .git.zip
+
+*.sql
+
+luviepro-backup-*.sql

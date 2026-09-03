@@ -73,34 +73,52 @@ export class AuthService {
     const rateKey=`auth:password-reset:${createHash('sha256').update(normalized).digest('hex')}`;
     const rate=this.redis?await this.redis.consumeRateLimit(rateKey,3,900):{allowed:true};
     if(!rate.allowed)return response;
+
     const user = await this.db.user.findUnique({ where: { email: normalized } });
-    if (!user?.active) return response;
+    const platformAdmin = user ? null : await this.db.platformAdmin.findUnique({ where: { email: normalized } });
+    if ((!user || !user.active) && (!platformAdmin || !platformAdmin.active)) return response;
+
     const raw = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(raw).digest('hex');
     const expiresAt = passwordResetExpiresAt();
-    await this.db.passwordResetToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } });
-    await this.db.passwordResetToken.create({ data: { userId: user.id, tokenHash, expiresAt } });
+    if(user){
+      await this.db.passwordResetToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } });
+      await this.db.passwordResetToken.create({ data: { userId: user.id, tokenHash, expiresAt } });
+    }else if(platformAdmin){
+      await this.db.passwordResetToken.updateMany({ where: { platformAdminId: platformAdmin.id, usedAt: null }, data: { usedAt: new Date() } });
+      await this.db.passwordResetToken.create({ data: { platformAdminId: platformAdmin.id, tokenHash, expiresAt } });
+    }
+
     const appUrl = (process.env.APP_WEB_URL || process.env.APP_URL || 'http://localhost:8081').replace(/\/$/, '');
     const resetUrl = `${appUrl}/reset-password?token=${raw}`;
-    const sent = await this.mail.sendPasswordReset({ to: user.email, name: user.name, resetUrl, expiresAt });
+    const recipient = user ?? platformAdmin!;
+    const sent = await this.mail.sendPasswordReset({ to: recipient.email, name: recipient.name, resetUrl, expiresAt });
     const nonProductionEnvironment=process.env.NODE_ENV !== 'production'||process.env.APP_ENV==='staging';
     if (nonProductionEnvironment && !sent.sent) response.devResetUrl = resetUrl;
-    await this.audit(user.tenantId, user.id, 'password_reset_requested', 'user', user.id, { emailSent: sent.sent });
+    if(user)await this.audit(user.tenantId, user.id, 'password_reset_requested', 'user', user.id, { emailSent: sent.sent });
     return response;
   }
 
   async resetPassword(token: string, password: string) {
     if (password.length < AUTH_SECURITY.minPasswordLength) throw new BadRequestException(`A senha deve ter pelo menos ${AUTH_SECURITY.minPasswordLength} caracteres`);
     const tokenHash = createHash('sha256').update(token).digest('hex');
-    const record = await this.db.passwordResetToken.findUnique({ where: { tokenHash }, include: { user: true } });
-    if (!record || record.usedAt || record.expiresAt.getTime() < Date.now() || !record.user.active) throw new BadRequestException('Link de redefinição inválido ou expirado');
-    if(await compare(password,record.user.passwordHash))throw new BadRequestException('A nova senha deve ser diferente da senha atual');
+    const record = await this.db.passwordResetToken.findUnique({ where: { tokenHash }, include: { user: true, platformAdmin: true } });
+    const target=record?.user??record?.platformAdmin;
+    if (!record || record.usedAt || record.expiresAt.getTime() < Date.now() || !target?.active) throw new BadRequestException('Link de redefinição inválido ou expirado');
+    if(await compare(password,target.passwordHash))throw new BadRequestException('A nova senha deve ser diferente da senha atual');
+    const passwordHash=await hash(password, AUTH_SECURITY.bcryptRounds);
     await this.db.$transaction(async tx => {
-      await tx.user.update({ where: { id: record.userId }, data: { passwordHash: await hash(password, AUTH_SECURITY.bcryptRounds), passwordChangedAt: new Date(), failedLoginAttempts: 0, lockedUntil: null } });
-      await tx.authSession.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: 'password_reset' } });
-      await tx.passwordResetToken.updateMany({ where: { userId: record.userId, usedAt: null }, data: { usedAt: new Date() } });
+      if(record.userId){
+        await tx.user.update({ where: { id: record.userId }, data: { passwordHash, passwordChangedAt: new Date(), failedLoginAttempts: 0, lockedUntil: null } });
+        await tx.authSession.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: 'password_reset' } });
+        await tx.passwordResetToken.updateMany({ where: { userId: record.userId, usedAt: null }, data: { usedAt: new Date() } });
+      }else if(record.platformAdminId){
+        await tx.platformAdmin.update({ where: { id: record.platformAdminId }, data: { passwordHash } });
+        await tx.authSession.updateMany({ where: { platformAdminId: record.platformAdminId, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: 'password_reset' } });
+        await tx.passwordResetToken.updateMany({ where: { platformAdminId: record.platformAdminId, usedAt: null }, data: { usedAt: new Date() } });
+      }
     });
-    await this.audit(record.user.tenantId, record.userId, 'password_reset_completed', 'user', record.userId);
+    if(record.user)await this.audit(record.user.tenantId, record.userId!, 'password_reset_completed', 'user', record.userId!);
     return { ok: true };
   }
 

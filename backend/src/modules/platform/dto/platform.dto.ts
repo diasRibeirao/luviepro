@@ -37,6 +37,15 @@ export class PlatformTenantDto {
 
 export class PlatformUserDto {
   @IsOptional()
+  @IsString()
+  @MinLength(2)
+  name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
   @IsBoolean()
   active?: boolean;
 
@@ -205,4 +214,27 @@ export class PlatformListQueryDto {
   @IsOptional()
   @IsString()
   tenantId?: string;
+}
+export class PlatformMasterCreateDto {
+  @IsString()
+  @MinLength(2)
+  name!: string;
+
+  @IsEmail()
+  email!: string;
+}
+
+export class PlatformMasterUpdateDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 }

@@ -203,6 +203,7 @@ model PlatformAdmin {
   active Boolean @default(true)
   lastLoginAt DateTime?
   authSessions AuthSession[]
+  passwordResetTokens PasswordResetToken[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -230,13 +231,16 @@ model AuthSession {
 }
 model PasswordResetToken {
   id String @id @default(cuid())
-  userId String
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String?
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platformAdminId String?
+  platformAdmin PlatformAdmin? @relation(fields: [platformAdminId], references: [id], onDelete: Cascade)
   tokenHash String @unique
   expiresAt DateTime
   usedAt DateTime?
   createdAt DateTime @default(now())
   @@index([userId, expiresAt])
+  @@index([platformAdminId, expiresAt])
 }
 model UserInvitation {
   id String @id @default(cuid())

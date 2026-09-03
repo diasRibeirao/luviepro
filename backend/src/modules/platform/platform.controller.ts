@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/c
 import { Roles } from '../../roles.guard';
 import { PlatformRequest } from '../../request-user';
 import { PlatformAdminService } from './platform-admin.service';
-import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformListQueryDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
+import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformListQueryDto, PlatformMasterCreateDto, PlatformMasterUpdateDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
 
 @Roles('platform_admin')
 @Controller('platform')
@@ -13,6 +13,10 @@ export class PlatformController {
   @Get('subscriptions') subscriptions(@Query() query:PlatformListQueryDto){return this.platform.subscriptions(query)}
   @Get('payments') payments(@Query() query:PlatformListQueryDto){return this.platform.payments(query)}
   @Get('users') users(@Query() query:PlatformListQueryDto){return this.platform.users(query)}
+  @Get('masters') masters(@Req() request:PlatformRequest,@Query() query:PlatformListQueryDto){return this.platform.masters(query,request.user.sub)}
+  @Post('masters') createMaster(@Body() body:PlatformMasterCreateDto){return this.platform.createMaster(body)}
+  @Patch('masters/:id') updateMaster(@Req() request:PlatformRequest,@Param('id') id:string,@Body() body:PlatformMasterUpdateDto){return this.platform.updateMaster(id,body,request.user.sub)}
+  @Post('masters/:id/password-reset') resetMaster(@Param('id') id:string){return this.platform.masterPasswordReset(id)}
   @Get('plans') plans(){return this.platform.plans()}
   @Post('plans') createPlan(@Body() body:PlatformCreatePlanDto){return this.platform.createPlan(body)}
   @Post('tenants') create(@Req() request:PlatformRequest,@Body() body:PlatformCreateTenantDto){return this.platform.createTenant(body,request.user.sub)}

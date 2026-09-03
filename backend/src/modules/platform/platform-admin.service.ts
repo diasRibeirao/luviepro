@@ -1,11 +1,12 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
+import { hash } from 'bcryptjs';
 import { PrismaService } from '../../prisma.service';
 import { MailService } from '../../mail.service';
 import { AuthService } from '../auth/auth.service';
 import { periodEnd, periodPrice } from '../../plan-policy';
 import { pagination } from '../../http/pagination';
-import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformListQueryDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
+import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformListQueryDto, PlatformMasterCreateDto, PlatformMasterUpdateDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
 
 @Injectable()
 export class PlatformAdminService {
@@ -56,6 +57,53 @@ export class PlatformAdminService {
   async subscriptions(query?:PlatformListQueryDto){const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);const q=query?.q?.trim();const where:any={...(query?.status&&query.status!=='all'&&{status:query.status}),...(query?.plan&&query.plan!=='all'&&{plan:query.plan}),...(query?.tenantId&&query.tenantId!=='all'&&{tenantId:query.tenantId}),...(q&&{OR:[{tenant:{name:{contains:q,mode:'insensitive'}}},{plan:{contains:q,mode:'insensitive'}}]})};const args:any={where,select:{id:true,plan:true,period:true,amountCents:true,status:true,startsAt:true,expiresAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},...(paged?{skip:p.skip,take:p.take}:{take:200})};const[items,total]=await Promise.all([this.db.subscription.findMany(args),paged?this.db.subscription.count({where}):Promise.resolve(0)]);return paged?this.pageResult(items,total,p.page,p.pageSize):items;}
   async payments(query?:PlatformListQueryDto){const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);const q=query?.q?.trim();const where:any={...(query?.status&&query.status!=='all'&&{status:query.status}),...(query?.plan&&query.plan!=='all'&&{plan:query.plan}),...(query?.tenantId&&query.tenantId!=='all'&&{tenantId:query.tenantId}),...(q&&{OR:[{tenant:{name:{contains:q,mode:'insensitive'}}},{providerPaymentId:{contains:q,mode:'insensitive'}},{paymentMethod:{contains:q,mode:'insensitive'}}]})};const args:any={where,select:{id:true,provider:true,providerPaymentId:true,plan:true,period:true,amountCents:true,status:true,paymentMethod:true,paidAt:true,createdAt:true,tenant:{select:{id:true,name:true,slug:true}}},orderBy:{createdAt:'desc'},...(paged?{skip:p.skip,take:p.take}:{take:300})};const[items,total]=await Promise.all([this.db.payment.findMany(args),paged?this.db.payment.count({where}):Promise.resolve(0)]);return paged?this.pageResult(items,total,p.page,p.pageSize):items;}
   async users(query?:PlatformListQueryDto){const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);const q=query?.q?.trim();const where:any={...(query?.status&&query.status!=='all'&&{active:query.status==='active'}),...(query?.plan&&query.plan!=='all'&&{tenant:{plan:query.plan}}),...(query?.tenantId&&query.tenantId!=='all'&&{tenantId:query.tenantId}),...(q&&{OR:[{name:{contains:q,mode:'insensitive'}},{email:{contains:q,mode:'insensitive'}},{tenant:{name:{contains:q,mode:'insensitive'}}}]})};const args:any={where,select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}},orderBy:{createdAt:'desc'},...(paged?{skip:p.skip,take:p.take}:{take:500})};const[items,total]=await Promise.all([this.db.user.findMany(args),paged?this.db.user.count({where}):Promise.resolve(0)]);return paged?this.pageResult(items,total,p.page,p.pageSize):items;}
+  async masters(query:PlatformListQueryDto|undefined,currentAdminId:string){
+    const paged=this.usesPagination(query),p=pagination(query?.page,query?.pageSize);
+    const q=query?.q?.trim();
+    const where:any={...(query?.status&&query.status!=='all'&&{active:query.status==='active'}),...(q&&{OR:[{name:{contains:q,mode:'insensitive'}},{email:{contains:q,mode:'insensitive'}}]})};
+    const select={id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,updatedAt:true};
+    const [items,total] = await Promise.all([
+      this.db.platformAdmin.findMany({
+        where,
+        select,
+        orderBy:[{active:'desc'},{name:'asc'}],
+        skip:paged ? p.skip : 0,
+        take:paged ? p.take : 100,
+      }),
+      paged ? this.db.platformAdmin.count({where}) : Promise.resolve(0),
+    ]);
+    const rows=items.map(item=>({...item,current:item.id===currentAdminId}));
+    return paged?this.pageResult(rows,total,p.page,p.pageSize):rows;
+  }
+
+  async createMaster(data:PlatformMasterCreateDto){
+    const email=String(data.email).trim().toLowerCase(),name=String(data.name).trim();
+    if(await this.db.platformAdmin.findUnique({where:{email}}))throw new ConflictException('Este e-mail já é um usuário Master');
+    if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já pertence a um usuário de empresa');
+    const passwordHash=await hash(randomBytes(48).toString('hex'),12);
+    const master=await this.db.platformAdmin.create({data:{name,email,passwordHash,role:'platform_admin',active:true},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,updatedAt:true}});
+    const delivery=await this.auth.forgotPassword(email);
+    return {...master,current:false,firstAccessRequested:true,delivery};
+  }
+
+  async updateMaster(id:string,data:PlatformMasterUpdateDto,currentAdminId:string){
+    const master=await this.db.platformAdmin.findUnique({where:{id}});
+    if(!master)throw new NotFoundException('Usuário Master não encontrado');
+    if(id===currentAdminId&&data.active===false)throw new BadRequestException('Você não pode inativar o próprio usuário Master');
+    if(data.active===false&&master.active){const active=await this.db.platformAdmin.count({where:{active:true}});if(active<=1)throw new BadRequestException('A plataforma precisa manter pelo menos um usuário Master ativo');}
+    const email=data.email?.trim().toLowerCase();
+    if(email&&email!==master.email){if(await this.db.platformAdmin.findUnique({where:{email}}))throw new ConflictException('Este e-mail já é utilizado por outro Master');if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já pertence a um usuário de empresa');}
+    const updated=await this.db.$transaction(async tx=>{const value=await tx.platformAdmin.update({where:{id},data:{...(data.name!==undefined&&{name:data.name.trim()}),...(email&&{email}),...(data.active!==undefined&&{active:data.active})},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,updatedAt:true}});if(data.active===false)await tx.authSession.updateMany({where:{platformAdminId:id,revokedAt:null},data:{revokedAt:new Date(),revokedReason:'platform_admin_deactivated'}});return value;});
+    return {...updated,current:id===currentAdminId};
+  }
+
+  async masterPasswordReset(id:string){
+    const master=await this.db.platformAdmin.findUnique({where:{id}});
+    if(!master)throw new NotFoundException('Usuário Master não encontrado');
+    if(!master.active)throw new BadRequestException('Ative o usuário Master antes de enviar a recuperação de senha');
+    return this.auth.forgotPassword(master.email);
+  }
+
   plans(){return this.db.planLimit.findMany({orderBy:[{sortOrder:'asc'},{monthlyPriceCents:'asc'}]});}
 
   async changeTenant(id:string,data:PlatformTenantDto){
@@ -125,8 +173,12 @@ export class PlatformAdminService {
 
   async updateUser(id:string,data:PlatformUserDto){
     const user=await this.db.user.findUnique({where:{id}});if(!user)throw new NotFoundException('Usuário não encontrado');
+    if(user.role==='owner'&&data.role&&data.role!=='owner')throw new BadRequestException('O proprietário não pode ser rebaixado por esta manutenção. Use um fluxo de transferência de propriedade');
+    if(user.role!=='owner'&&data.role==='owner')throw new BadRequestException('Use um fluxo de transferência de propriedade para definir outro proprietário');
+    const email=data.email?.trim().toLowerCase();
+    if(email&&email!==user.email){if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já possui acesso ao LuviePro');if(await this.db.platformAdmin.findUnique({where:{email}}))throw new ConflictException('Este e-mail pertence a um usuário Master');}
     const updated=await this.db.$transaction(async tx=>{
-      const result=await tx.user.update({where:{id},data:{...(data.active!==undefined&&{active:data.active}),...(data.role!==undefined&&{role:data.role})},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}}});
+      const result=await tx.user.update({where:{id},data:{...(data.name!==undefined&&{name:data.name.trim()}),...(email&&{email}),...(data.active!==undefined&&{active:data.active}),...(data.role!==undefined&&{role:data.role})},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,tenant:{select:{id:true,name:true,plan:true,status:true}}}});
       if(data.active===false)await tx.authSession.updateMany({where:{userId:id,revokedAt:null},data:{revokedAt:new Date(),revokedReason:'user_deactivated'}});
       return result;
     });

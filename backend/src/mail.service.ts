@@ -18,12 +18,16 @@ export type MailStatus={
   userConfigured:boolean;
   passwordConfigured:boolean;
   resendApiKeyConfigured:boolean;
+  lastTestOk?:boolean;
+  lastTestAt?:string|null;
 };
 
 @Injectable()
 export class MailService {
   private readonly logger=new Logger(MailService.name);
   private transporter?:MailTransport;
+  private lastTestOk?:boolean;
+  private lastTestAt?:string;
 
   private provider():MailProvider{
     const configured=(process.env.MAIL_PROVIDER||'').trim().toLowerCase();
@@ -52,9 +56,9 @@ export class MailService {
     const smtp=this.smtpConfig();
     const resend=this.resendConfig();
     if(provider==='resend'){
-      return {provider,configured:!!(resend.apiKey&&resend.from),from:resend.from||null,host:null,port:null,secure:null,userConfigured:false,passwordConfigured:false,resendApiKeyConfigured:!!resend.apiKey};
+      return {provider,configured:!!(resend.apiKey&&resend.from),from:resend.from||null,host:null,port:null,secure:null,userConfigured:false,passwordConfigured:false,resendApiKeyConfigured:!!resend.apiKey,lastTestOk:this.lastTestOk,lastTestAt:this.lastTestAt??null};
     }
-    return {provider,configured:!!(smtp.host&&smtp.from),from:smtp.from||null,host:smtp.host||null,port:smtp.port,secure:smtp.secure,userConfigured:!!smtp.user,passwordConfigured:!!smtp.pass,resendApiKeyConfigured:!!resend.apiKey};
+    return {provider,configured:!!(smtp.host&&smtp.from),from:smtp.from||null,host:smtp.host||null,port:smtp.port,secure:smtp.secure,userConfigured:!!smtp.user,passwordConfigured:!!smtp.pass,resendApiKeyConfigured:!!resend.apiKey,lastTestOk:this.lastTestOk,lastTestAt:this.lastTestAt??null};
   }
 
   private getTransporter():MailTransport|undefined{
@@ -136,7 +140,10 @@ export class MailService {
 
   async sendTest(input:{to:string;name:string}){
     const provider=this.provider()==='resend'?'Resend':'SMTP';
-    return this.send(input.to,'Teste de e-mail do LuviePro',`Olá, ${input.name}. O envio de e-mail do LuviePro via ${provider} está configurado e funcionando corretamente.`,`<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#183326"><h2>E-mail configurado com sucesso</h2><p>Olá, <strong>${escapeHtml(input.name)}</strong>.</p><p>Este é um e-mail de teste do LuviePro enviado via <strong>${provider}</strong>. Se você recebeu esta mensagem, o envio está funcionando corretamente.</p></div>`);
+    const delivery=await this.send(input.to,'Teste de e-mail do LuviePro',`Olá, ${input.name}. O envio de e-mail do LuviePro via ${provider} está configurado e funcionando corretamente.`,`<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#183326"><h2>E-mail configurado com sucesso</h2><p>Olá, <strong>${escapeHtml(input.name)}</strong>.</p><p>Este é um e-mail de teste do LuviePro enviado via <strong>${provider}</strong>. Se você recebeu esta mensagem, o envio está funcionando corretamente.</p></div>`);
+    this.lastTestOk=delivery.sent;
+    this.lastTestAt=new Date().toISOString();
+    return delivery;
   }
   async sendUserInvitation(input:{to:string;name:string;tenantName:string;roleLabel:string;inviteUrl:string;expiresAt:Date}):Promise<MailDelivery>{const expires=input.expiresAt.toLocaleString('pt-BR');return this.send(input.to,`Primeiro acesso ao ${input.tenantName} no LuviePro`,`Olá, ${input.name}. Você recebeu acesso a ${input.tenantName} no LuviePro como ${input.roleLabel}. Crie sua senha pelo link: ${input.inviteUrl}. O link expira em ${expires}.`,`<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#183326"><h2>Seu primeiro acesso ao LuviePro</h2><p>Olá, <strong>${escapeHtml(input.name)}</strong>.</p><p>Você recebeu acesso à empresa <strong>${escapeHtml(input.tenantName)}</strong> com o perfil <strong>${escapeHtml(input.roleLabel)}</strong>.</p><p>Para concluir seu primeiro acesso, crie sua senha individual.</p><p style="margin:28px 0"><a href="${input.inviteUrl}" style="background:#244d3b;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">Criar minha senha</a></p><p style="font-size:13px;color:#65736c">Este link expira em ${expires} e só pode ser utilizado uma vez.</p></div>`);}
   async sendAccessActivated(input:{to:string;name:string;tenantName:string;loginUrl:string}):Promise<MailDelivery>{return this.send(input.to,'Seu acesso ao LuviePro foi ativado',`Olá, ${input.name}. Seu acesso a ${input.tenantName} foi ativado. Entre em ${input.loginUrl}.`,`<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#183326"><h2>Acesso ativado</h2><p>Olá, <strong>${escapeHtml(input.name)}</strong>.</p><p>Seu primeiro acesso à empresa <strong>${escapeHtml(input.tenantName)}</strong> foi concluído com sucesso.</p><p style="margin:28px 0"><a href="${input.loginUrl}" style="background:#244d3b;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">Entrar no LuviePro</a></p></div>`);}

@@ -14,6 +14,7 @@ import {usePlatformData} from '../usePlatformData';
 import {PlatformOverview as Overview} from '../PlatformOverview';
 import {PLATFORM_TABS,PlatformSidebar} from '../PlatformSidebar';
 import {PlatformEmailSettings} from '../PlatformEmailSettings';
+import {PlatformMaintenance} from '../PlatformMaintenance';
 import {SafeAreaView,useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {PlatformCompany,PlatformEditableItem,PlatformPayment,PlatformPlan,PlatformSubscription,PlatformTenantCreateResult,PlatformUser} from '../contracts';
 
@@ -34,11 +35,12 @@ export default function Platform(){
   router.replace('/');
  }
  async function patch(path:string,body:Record<string,unknown>,message:string){try{await api(path,{method:'PATCH',body:JSON.stringify(body)});setEditing(undefined);await reload();Alert.alert(message)}catch(e:unknown){Alert.alert('Não foi possível salvar',e instanceof Error?e.message:'Erro inesperado')}}
+ async function resetClientPassword(user:PlatformUser){const confirmed=await confirm({title:'Enviar recuperação de senha?',message:`Será enviado um link de redefinição para ${user.email}.`,confirmLabel:'Enviar link'});if(!confirmed)return;try{await api(`/platform/users/${user.id}/password-reset`,{method:'POST'});Alert.alert('Recuperação enviada',`Confira a caixa de entrada de ${user.email}.`)}catch(e:unknown){Alert.alert('Não foi possível enviar',e instanceof Error?e.message:'Erro inesperado')}}
  if(loading&&!data)return <View style={s.loading}><ActivityIndicator color={theme.gold}/><Text style={s.muted}>Carregando console administrativo...</Text></View>;
  const activeTab=PLATFORM_TABS.find(item=>item.key===tab)!;
  return <SafeAreaView style={[s.page,compact&&s.pageCompact]} edges={['top','left','right']}><PlatformSidebar compact={compact} active={tab} onSelect={selectTab} onLogout={signOut}/>
  <ScrollView style={s.main} contentContainerStyle={[s.content,compact&&s.contentCompact,{paddingBottom:compact?96+insets.bottom:30}]} keyboardShouldPersistTaps="handled"><View style={[s.header,compact&&s.headerCompact]}><View style={s.headerTitle}><Text style={s.eyebrow}>LUVIEPRO · PLATFORM</Text><Text style={s.title}>{activeTab.label}</Text><Text style={s.muted}>{activeTab.subtitle}</Text></View><View style={[s.headerActions,compact&&s.headerActionsCompact]}>{tab==='companies'?<Pressable onPress={()=>setCreatingTenant(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Nova empresa</Text></Pressable>:tab==='plans'?<Pressable onPress={()=>setCreatingPlan(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Novo plano</Text></Pressable>:null}<Pressable accessibilityRole="button" accessibilityLabel="Conta do administrador" accessibilityState={{expanded:accountOpen}} onPress={()=>setAccountOpen(true)} style={({pressed})=>[s.admin,pressed&&s.adminPressed]}><View style={s.adminAvatar}><Text style={s.adminInitial}>LM</Text></View>{!compact&&<View style={s.adminText}><Text style={s.strong}>LuviePro Master</Text><Text style={s.small}>Administrador da plataforma</Text></View>}<Ionicons name="chevron-down" size={15} color={theme.muted}/></Pressable></View></View>
- {tab==='overview'?<Overview data={data} companies={companies} users={users} payments={payments} onTab={selectTab}/>:tab==='email'?<PlatformEmailSettings/>:<>
+ {tab==='overview'?<Overview data={data} companies={companies} users={users} payments={payments} onTab={selectTab}/>:tab==='email'?<PlatformEmailSettings/>:tab==='maintenance'?<PlatformMaintenance onOpenClientUsers={()=>selectTab('users')}/>:<>
   <PlatformSearch compact={phone} value={query} total={tab==='plans'?filtered.length:pageMeta.total} onChange={value=>{setQuery(value);setPage(1)}}/>
   {tab!=='plans'?<PlatformFilterBar compact={phone}>
    <PlatformFilterGroup compact={phone} label="Status" value={statusFilter} onChange={value=>{setStatusFilter(value);setPage(1)}} values={tab==='users'?[['all','Todos'],['active','Ativos'],['inactive','Inativos']]:tab==='companies'?[['all','Todos'],['active','Ativas'],['suspended','Suspensas'],['cancelled','Canceladas']]:[['all','Todos'],['active','Ativas'],['trial','Teste'],['approved','Aprovados'],['pending','Pendentes'],['cancelled','Cancelados']]}/>
@@ -47,7 +49,7 @@ export default function Platform(){
   </PlatformFilterBar>:null}
   {listLoading&&tab!=='plans'
    ?<View style={s.listLoading}><ActivityIndicator color={theme.gold}/><Text style={s.small}>Atualizando registros...</Text></View>
-   :tab==='companies'?<Companies rows={filtered as PlatformCompany[]} onEdit={setEditing} compact={compact}/>:tab==='users'?<Users rows={filtered as PlatformUser[]} onEdit={setEditing} compact={compact}/>:tab==='plans'?<Plans rows={filtered as PlatformPlan[]} onEdit={setEditing}/>:tab==='subs'?<Subscriptions rows={filtered as PlatformSubscription[]} compact={compact}/>:<Payments rows={filtered as PlatformPayment[]} compact={compact}/>}
+   :tab==='companies'?<Companies rows={filtered as PlatformCompany[]} onEdit={setEditing} compact={compact}/>:tab==='users'?<Users rows={filtered as PlatformUser[]} onEdit={setEditing} onReset={user=>void resetClientPassword(user)} compact={compact}/>:tab==='plans'?<Plans rows={filtered as PlatformPlan[]} onEdit={setEditing}/>:tab==='subs'?<Subscriptions rows={filtered as PlatformSubscription[]} compact={compact}/>:<Payments rows={filtered as PlatformPayment[]} compact={compact}/>}
   {tab!=='plans'&&!listLoading?<PlatformPagination page={page} totalPages={pageMeta.totalPages} onChange={setPage}/>:null}
  </>}
  </ScrollView>

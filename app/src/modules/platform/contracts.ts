@@ -1,4 +1,4 @@
-export type PlatformTab = 'overview' | 'companies' | 'users' | 'plans' | 'subs' | 'payments' | 'email';
+export type PlatformTab = 'overview' | 'companies' | 'users' | 'plans' | 'subs' | 'payments' | 'email' | 'maintenance';
 
 export type PlatformPage<T> = {
   items: T[];
@@ -28,6 +28,18 @@ export type PlatformUser = {
   active: boolean;
   lastLoginAt?: string | null;
   tenant?: Pick<PlatformCompany, 'id' | 'name' | 'plan' | 'status'>;
+};
+
+export type PlatformMaster = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  current?: boolean;
+  lastLoginAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
 };
 
 export type PlatformPlan = {
