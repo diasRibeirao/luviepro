@@ -24,18 +24,22 @@ export class NotificationsService {
     const prefs = await this.preferences(tenantId, userId);
     const now = new Date();
     const horizon = new Date(now.getTime() + 7 * 86400000);
-    const [events, tasks, quotes] = await Promise.all([
+    const [events, tasks, projects, quotes] = await Promise.all([
       prefs.agendaReminders
         ? this.db.calendarEvent.findMany({ where: { tenantId, status: 'active', startAt: { gte: now, lte: horizon } } })
         : [],
       prefs.taskDeadlines
-        ? this.db.projectTask.findMany({ where: { tenantId, status: { not: 'completed' }, dueDate: { gte: now, lte: horizon } }, include: { project: true } })
+        ? this.db.projectTask.findMany({ where: { tenantId, assigneeUserId: userId, status: { not: 'completed' }, dueDate: { lte: horizon } }, include: { project: true }, orderBy: { dueDate: 'asc' }, take: 50 })
+        : [],
+      prefs.projectDeadlines
+        ? this.db.project.findMany({ where: { tenantId, assigneeUserId: userId, status: { in: ['scheduled', 'in_progress'] }, endDate: { lte: horizon } }, include: { client: true }, orderBy: { endDate: 'asc' }, take: 30 })
         : [],
       prefs.quoteExpirations
         ? this.db.quote.findMany({ where: { tenantId, status: 'sent', validUntil: { gte: now, lte: horizon } } })
         : [],
     ]);
 
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const rows = [
       ...events.map(x => ({
         key: `calendar:${x.id}:${x.startAt.toISOString()}`,
@@ -48,9 +52,17 @@ export class NotificationsService {
       ...tasks.filter(x => x.dueDate).map(x => ({
         key: `task:${x.id}:${x.dueDate!.toISOString()}`,
         type: 'task_due',
-        title: `Prazo: ${x.title}`,
+        title: x.dueDate! < startOfToday ? `Tarefa atrasada: ${x.title}` : `Prazo: ${x.title}`,
         message: x.project?.name ?? null,
         route: notificationRoutes.project(x.projectId),
+        entityId: x.id,
+      })),
+      ...projects.filter(x => x.endDate).map(x => ({
+        key: `project:${x.id}:${x.endDate!.toISOString()}`,
+        type: 'project_due',
+        title: x.endDate! < startOfToday ? `Projeto atrasado: ${x.name}` : `Prazo do projeto: ${x.name}`,
+        message: x.client?.name ? `${x.client.name} · ${x.endDate!.toLocaleDateString('pt-BR')}` : x.endDate!.toLocaleDateString('pt-BR'),
+        route: notificationRoutes.project(x.id),
         entityId: x.id,
       })),
       ...quotes.filter(x => x.validUntil).map(x => ({

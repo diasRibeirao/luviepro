@@ -43,7 +43,7 @@ export class DashboardService {
     const actorIds = [...new Set(auditRows.map(x => x.actorUserId).filter((x): x is string => !!x))];
     const actors = actorIds.length ? await this.db.user.findMany({ where: { tenantId, id: { in: actorIds } }, select: { id: true, name: true } }) : [];
     const actorNames = new Map(actors.map(x => [x.id, x.name]));
-    const [myTasks, myProjects, myTaskCount, myProjectCount] = userId ? await Promise.all([
+    const [myTasks, myProjects, myTaskCount, myProjectCount, myOverdueTaskCount] = userId ? await Promise.all([
       this.db.projectTask.findMany({
         where: { tenantId, assigneeUserId: userId, status: { not: 'completed' } },
         include: { project: { select: { id: true, name: true, client: { select: { name: true } } } } },
@@ -58,7 +58,8 @@ export class DashboardService {
       }),
       this.db.projectTask.count({ where: { tenantId, assigneeUserId: userId, status: { not: 'completed' } } }),
       this.db.project.count({ where: { tenantId, assigneeUserId: userId, status: { in: ['scheduled', 'in_progress'] } } }),
-    ]) : [[], [], 0, 0];
+      this.db.projectTask.count({ where: { tenantId, assigneeUserId: userId, status: { not: 'completed' }, dueDate: { lt: startOfToday } } }),
+    ]) : [[], [], 0, 0, 0];
     const routeFor = (entity: string, id?: string | null) => {
       if (!id) return null;
       if (entity === 'project' || entity === 'project_task') return entity === 'project' ? `/projects/${id}` : '/projects';
@@ -91,6 +92,7 @@ export class DashboardService {
       priorityCount,
       myPending: {
         total: myTaskCount + myProjectCount,
+        overdueTaskCount: myOverdueTaskCount,
         tasks: myTasks.map(task => ({ id: task.id, title: task.title, priority: task.priority, dueDate: task.dueDate, project: task.project })),
         projects: myProjects.map(project => ({ id: project.id, name: project.name, status: project.status, progress: project.progress, endDate: project.endDate, client: project.client })),
       },

@@ -3,7 +3,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps,ReactNode } from 'react';
 import {Modal,Platform,Pressable,ScrollView,StyleSheet,useWindowDimensions,View} from 'react-native';
 import {router,useFocusEffect,type Href} from 'expo-router';
-import {ApiError,money} from '../../../api';
+import {ApiError,getSession,money} from '../../../api';
 import {theme} from '../../../theme';
 import {AppShell} from '../../../components/AppShell';
 import {AsyncState} from '../../../components/AsyncState';
@@ -21,14 +21,15 @@ type IoniconName=ComponentProps<typeof Ionicons>['name'];
 const errorMessage=(error:unknown)=>{if(error instanceof ApiError)return error.message;if(error instanceof Error)return error.message;return 'Não foi possível carregar projetos'};
 
 const fallback:ProjectStatus[]=[{key:'scheduled',name:'Agendados',color:theme.gold,active:true},{key:'in_progress',name:'Em andamento',color:theme.green2,active:true},{key:'completed',name:'Concluídos',color:'#6F8C78',active:true}];
-const filters=['Todos','Com atraso','Alta prioridade'];
+const filters=['Todos','Meus projetos','Minhas tarefas atrasadas','Com atraso','Alta prioridade'];
 
 export function ProjectsScreen(){
   const[list,setList]=useState<ProjectRecord[]>([]),[statuses,setStatuses]=useState<ProjectStatus[]>(fallback),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState(''),[query,setQuery]=useState(''),[filter,setFilter]=useState('Todos'),[sort,setSort]=useState('priority'),[page,setPage]=useState(1),[boardWidth,setBoardWidth]=useState(0),[draggedId,setDraggedId]=useState<string>(),[dropStatus,setDropStatus]=useState<string>(),[assignees,setAssignees]=useState<ProjectAssignee[]>([]),[assigneeFilter,setAssigneeFilter]=useState('all');
   const{notify}=useFeedback();
   const{width}=useWindowDimensions();const compact=width<820;
   const load=useCallback(()=>{setLoading(true);setLoadError('');Promise.all([projectsApi.list(),projectsApi.listStatuses(),projectsApi.listAssignees()]).then(([projects,configured,available])=>{setList(projects);setStatuses(configured?.length?configured:fallback);setAssignees(available)}).catch((e:unknown)=>setLoadError(errorMessage(e))).finally(()=>setLoading(false))},[]);useFocusEffect(load);
-  const filtered=useMemo(()=>{const items=list.filter(project=>{const term=query.trim().toLowerCase();const matches=!term||`${project.name} ${project.client?.name??''} ${project.quote?.number??''} ${project.assignee?.name??''}`.toLowerCase().includes(term);const responsible=assigneeFilter==='all'||(assigneeFilter==='none'?!project.assigneeUserId:project.assigneeUserId===assigneeFilter);const overdue=project.tasks?.some(isOverdue);const high=project.tasks?.some(t=>t.status!=='completed'&&t.priority==='high');return matches&&responsible&&(filter==='Todos'||filter==='Com atraso'&&overdue||filter==='Alta prioridade'&&high)});return [...items].sort((a,b)=>{const critical=(p:ProjectRecord)=>(p.tasks?.filter(isOverdue).length??0)*100+(p.tasks?.filter(t=>t.status!=='completed'&&t.priority==='high').length??0);if(sort==='name')return String(a.name).localeCompare(String(b.name),'pt-BR');if(sort==='progress-desc')return b.progress-a.progress;if(sort==='progress-asc')return a.progress-b.progress;return critical(b)-critical(a)})},[list,query,filter,sort,assigneeFilter]);
+  const currentUserId=getSession()?.id;
+  const filtered=useMemo(()=>{const items=list.filter(project=>{const term=query.trim().toLowerCase();const matches=!term||`${project.name} ${project.client?.name??''} ${project.quote?.number??''} ${project.assignee?.name??''}`.toLowerCase().includes(term);const responsible=assigneeFilter==='all'||(assigneeFilter==='none'?!project.assigneeUserId:project.assigneeUserId===assigneeFilter);const overdue=project.tasks?.some(isOverdue);const myOverdue=!!currentUserId&&project.tasks?.some(task=>task.assigneeUserId===currentUserId&&isOverdue(task));const high=project.tasks?.some(t=>t.status!=='completed'&&t.priority==='high');const quickFilter=filter==='Todos'||filter==='Meus projetos'&&!!currentUserId&&project.assigneeUserId===currentUserId||filter==='Minhas tarefas atrasadas'&&!!myOverdue||filter==='Com atraso'&&overdue||filter==='Alta prioridade'&&high;return matches&&responsible&&quickFilter});return [...items].sort((a,b)=>{const critical=(p:ProjectRecord)=>(p.tasks?.filter(isOverdue).length??0)*100+(p.tasks?.filter(t=>t.status!=='completed'&&t.priority==='high').length??0);if(sort==='name')return String(a.name).localeCompare(String(b.name),'pt-BR');if(sort==='progress-desc')return b.progress-a.progress;if(sort==='progress-asc')return a.progress-b.progress;return critical(b)-critical(a)})},[list,query,filter,sort,assigneeFilter,currentUserId]);
   const pageSize=12;const visible=useMemo(()=>paginate(filtered,page,pageSize),[filtered,page]);useEffect(()=>setPage(1),[query,filter,sort,assigneeFilter]);
   const columns=statuses.filter(status=>status.active||list.some(project=>project.status===status.key));const needsScroll=!compact&&columns.length>4;const visibleCount=Math.min(Math.max(columns.length,1),4);const columnWidth=compact?(boardWidth||Math.max(270,width-44)):boardWidth?Math.max(280,(boardWidth-(visibleCount-1)*12)/visibleCount):330;const totalOverdue=list.reduce((sum,p)=>sum+(p.tasks?.filter(isOverdue).length??0),0);
 

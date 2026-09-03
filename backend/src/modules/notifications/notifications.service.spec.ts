@@ -3,9 +3,10 @@ import { NotificationsService } from './notifications.service';
 
 describe('NotificationsService tenant isolation', () => {
   const baseDb = () => ({
-    notificationPreference: { upsert: jest.fn().mockResolvedValue({ agendaReminders:false, taskDeadlines:false, quoteExpirations:false }) },
+    notificationPreference: { upsert: jest.fn().mockResolvedValue({ agendaReminders:false, projectDeadlines:false, taskDeadlines:false, quoteExpirations:false }) },
     calendarEvent: { findMany: jest.fn() },
     projectTask: { findMany: jest.fn() },
+    project: { findMany: jest.fn() },
     quote: { findMany: jest.fn() },
     userNotification: {
       upsert: jest.fn(),
@@ -36,7 +37,7 @@ describe('NotificationsService tenant isolation', () => {
 
   it('persists task notifications with the projects detail route', async () => {
     const db:any=baseDb();
-    db.notificationPreference.upsert.mockResolvedValue({ agendaReminders:false, taskDeadlines:true, quoteExpirations:false });
+    db.notificationPreference.upsert.mockResolvedValue({ agendaReminders:false, projectDeadlines:false, taskDeadlines:true, quoteExpirations:false });
     db.projectTask.findMany.mockResolvedValue([{
       id:'task-1',
       title:'Entrega',
@@ -50,6 +51,37 @@ describe('NotificationsService tenant isolation', () => {
 
     expect(db.userNotification.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create:expect.objectContaining({route:'/projects/project-1'}),
+    }));
+  });
+
+  it('only loads task deadlines assigned to the authenticated user', async () => {
+    const db:any=baseDb();
+    db.notificationPreference.upsert.mockResolvedValue({ agendaReminders:false, projectDeadlines:false, taskDeadlines:true, quoteExpirations:false });
+    db.projectTask.findMany.mockResolvedValue([]);
+    const service=new NotificationsService(db);
+
+    await service.list('tenant-a','user-a');
+
+    expect(db.projectTask.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where:expect.objectContaining({tenantId:'tenant-a',assigneeUserId:'user-a'}),
+    }));
+  });
+
+  it('creates assigned project deadline notifications', async () => {
+    const db:any=baseDb();
+    db.notificationPreference.upsert.mockResolvedValue({ agendaReminders:false, projectDeadlines:true, taskDeadlines:false, quoteExpirations:false });
+    db.project.findMany.mockResolvedValue([{
+      id:'project-1',name:'Projeto 1',endDate:new Date('2026-09-05T12:00:00.000Z'),client:{name:'Cliente 1'},
+    }]);
+    const service=new NotificationsService(db);
+
+    await service.list('tenant-a','user-a');
+
+    expect(db.project.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where:expect.objectContaining({tenantId:'tenant-a',assigneeUserId:'user-a'}),
+    }));
+    expect(db.userNotification.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create:expect.objectContaining({type:'project_due',route:'/projects/project-1'}),
     }));
   });
 
