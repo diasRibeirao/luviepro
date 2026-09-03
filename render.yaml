@@ -94,19 +94,15 @@ services:
       - key: DEMO_SEED
         value: "0"
       - key: MAIL_PROVIDER
-        value: "resend"
-      - key: RESEND_API_KEY
-        sync: false
-      - key: RESEND_FROM
-        sync: false
+        value: "smtp"
       - key: SMTP_HOST
-        sync: false
+        value: "smtp.sendgrid.net"
       - key: SMTP_PORT
-        value: "587"
+        value: "2525"
       - key: SMTP_SECURE
         value: "false"
       - key: SMTP_USER
-        sync: false
+        value: "apikey"
       - key: SMTP_PASS
         sync: false
       - key: SMTP_FROM
