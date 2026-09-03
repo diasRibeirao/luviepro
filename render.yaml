@@ -63,6 +63,8 @@ services:
         generateValue: true
       - key: PLATFORM_ADMIN_EMAIL
         value: master@luviepro.local
+      - key: PLATFORM_ADMIN_NOTIFICATION_EMAIL
+        sync: false
       - key: PLATFORM_ADMIN_PASSWORD
         sync: false
       - key: MERCADO_PAGO_ACCESS_TOKEN
