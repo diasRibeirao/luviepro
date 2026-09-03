@@ -12,6 +12,7 @@ export const PLATFORM_TABS=[
  {key:'plans',icon:'layers-outline',label:'Planos',subtitle:'Preços e limites comerciais'},
  {key:'subs',icon:'repeat-outline',label:'Assinaturas',subtitle:'Ciclos contratados e vencimentos'},
  {key:'payments',icon:'card-outline',label:'Pagamentos',subtitle:'Conciliação financeira do Mercado Pago'},
+ {key:'email',icon:'mail-outline',label:'E-mail e SMTP',subtitle:'Infraestrutura global de envio de e-mails'},
 ] as const satisfies ReadonlyArray<{key:PlatformTab;icon:string;label:string;subtitle:string}>;
 
 export function PlatformSidebar({compact,active,onSelect,onLogout}:{compact:boolean;active:PlatformTab;onSelect:(tab:PlatformTab)=>void;onLogout:()=>void|Promise<void>}) {

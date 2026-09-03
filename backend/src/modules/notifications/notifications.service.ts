@@ -1,11 +1,26 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { NotificationPreferencesDto } from './dto/notifications.dto';
 import { notificationRoutes } from './types/notification-routes';
+import { MailService } from '../../mail.service';
+import { RedisService } from '../../redis.service';
 
 @Injectable()
-export class NotificationsService {
-  constructor(private readonly db: PrismaService) {}
+export class NotificationsService implements OnModuleInit,OnModuleDestroy {
+  private emailTimer?:NodeJS.Timeout;
+  private emailCycleRunning=false;
+  constructor(private readonly db: PrismaService,@Optional() private readonly mail?:MailService,@Optional() private readonly redis?:RedisService) {}
+
+  onModuleInit(){if(process.env.NOTIFICATION_EMAIL_WORKER_ENABLED!=='true'||!this.mail)return;const interval=Math.max(60000,Number(process.env.NOTIFICATION_EMAIL_WORKER_INTERVAL_MS||300000));this.emailTimer=setInterval(()=>void this.runEmailCycle(),interval);this.emailTimer.unref?.();setTimeout(()=>void this.runEmailCycle(),10000).unref?.();}
+  onModuleDestroy(){if(this.emailTimer)clearInterval(this.emailTimer);}
+
+  async runEmailCycle(){
+    if(this.emailCycleRunning)return {processed:0,sent:0};
+    this.emailCycleRunning=true;
+    try{return await this.runEmailCycleUnlocked();}finally{this.emailCycleRunning=false;}
+  }
+
+  private async runEmailCycleUnlocked(){if(!this.mail)return {processed:0,sent:0};const execute=async()=>{const prefs=await this.db.notificationPreference.findMany({where:{emailEnabled:true},select:{tenantId:true,userId:true},take:200});let sent=0;for(const pref of prefs){await this.sync(pref.tenantId,pref.userId);const user=await this.db.user.findFirst({where:{id:pref.userId,tenantId:pref.tenantId,active:true},select:{name:true,email:true}});if(!user)continue;const pending=await this.db.userNotification.findMany({where:{tenantId:pref.tenantId,userId:pref.userId,archivedAt:null,emailSentAt:null},orderBy:{createdAt:'asc'},take:20});for(const item of pending){const base=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');const url=item.route?`${base}${item.route.startsWith('/')?'':'/'}${item.route}`:base;const delivery=await this.mail!.sendNotification({to:user.email,name:user.name,title:item.title,message:item.message,url});if(delivery.sent){await this.db.userNotification.updateMany({where:{id:item.id,tenantId:pref.tenantId,userId:pref.userId,emailSentAt:null},data:{emailSentAt:new Date()}});sent++;}}}return {processed:prefs.length,sent};};if(!this.redis)return execute();const interval=Math.max(60000,Number(process.env.NOTIFICATION_EMAIL_WORKER_INTERVAL_MS||300000));const lock=await this.redis.withWorkerLock('notifications:email-worker',Math.max(3600000,interval*2),execute);return lock.acquired?(lock.value??{processed:0,sent:0}):{processed:0,sent:0};}
 
   private requireContext(tenantId: string, userId: string) {
     if (!tenantId || !userId) throw new BadRequestException('Contexto da empresa ou usuário ausente');
@@ -113,8 +128,10 @@ export class NotificationsService {
     return this.preferences(tenantId, userId);
   }
 
-  updatePreferences(tenantId: string, userId: string, data: NotificationPreferencesDto) {
+  async updatePreferences(tenantId: string, userId: string, data: NotificationPreferencesDto) {
     this.requireContext(tenantId, userId);
+    const current=await this.preferences(tenantId,userId);
+    if(data.emailEnabled===true&&!current.emailEnabled)await this.db.userNotification.updateMany({where:{tenantId,userId,emailSentAt:null},data:{emailSentAt:new Date()}});
     return this.db.notificationPreference.upsert({ where: { userId }, update: data, create: { tenantId, userId, ...data } });
   }
 }

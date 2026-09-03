@@ -91,6 +91,22 @@ services:
         value: "false"
       - key: DEMO_SEED
         value: "0"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: NOTIFICATION_EMAIL_WORKER_ENABLED
+        value: "true"
+      - key: NOTIFICATION_EMAIL_WORKER_INTERVAL_MS
+        value: "300000"
 
 databases:
   - name: luviepro-postgres-hml

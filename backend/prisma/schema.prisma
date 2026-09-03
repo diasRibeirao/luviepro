@@ -893,10 +893,12 @@ model UserNotification {
   entityId String?
   readAt DateTime?
   archivedAt DateTime?
+  emailSentAt DateTime?
   createdAt DateTime @default(now())
   @@unique([userId, key])
   @@index([tenantId, userId, archivedAt, createdAt])
   @@index([tenantId, userId, readAt])
+  @@index([tenantId, userId, emailSentAt])
 }
 
 model NotificationPreference {

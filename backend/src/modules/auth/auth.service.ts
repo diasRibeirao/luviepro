@@ -8,6 +8,7 @@ import { AuthSessionService } from './auth-session.service';
 import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
 import type { ForgotPasswordResponse, RegisterInput } from './types/auth.types';
 import { isBillingPeriod, isPlanCode, type BillingPeriod, type PlanCode } from '../../plan-policy';
+import { RedisService } from '../../redis.service';
 
 @Injectable()
 export class AuthService {
@@ -15,6 +16,7 @@ export class AuthService {
     private readonly db: PrismaService,
     private readonly mail: MailService,
     private readonly sessions: AuthSessionService,
+    private readonly redis?: RedisService,
   ) {}
 
   private async audit(tenantId: string, actorUserId: string | undefined, action: string, entity: string, entityId?: string, metadata?: AuditMetadata) {
@@ -67,15 +69,18 @@ export class AuthService {
 
   async forgotPassword(email: string) {
     const normalized = normalizeEmail(email);
-    const user = await this.db.user.findUnique({ where: { email: normalized } });
     const response: ForgotPasswordResponse = { ok: true, message: 'Se o e-mail estiver cadastrado, enviaremos as instruções de recuperação.' };
+    const rateKey=`auth:password-reset:${createHash('sha256').update(normalized).digest('hex')}`;
+    const rate=this.redis?await this.redis.consumeRateLimit(rateKey,3,900):{allowed:true};
+    if(!rate.allowed)return response;
+    const user = await this.db.user.findUnique({ where: { email: normalized } });
     if (!user?.active) return response;
     const raw = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(raw).digest('hex');
     const expiresAt = passwordResetExpiresAt();
     await this.db.passwordResetToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } });
     await this.db.passwordResetToken.create({ data: { userId: user.id, tokenHash, expiresAt } });
-    const appUrl = (process.env.APP_URL || 'http://localhost:8081').replace(/\/$/, '');
+    const appUrl = (process.env.APP_WEB_URL || process.env.APP_URL || 'http://localhost:8081').replace(/\/$/, '');
     const resetUrl = `${appUrl}/reset-password?token=${raw}`;
     const sent = await this.mail.sendPasswordReset({ to: user.email, name: user.name, resetUrl, expiresAt });
     const nonProductionEnvironment=process.env.NODE_ENV !== 'production'||process.env.APP_ENV==='staging';
@@ -89,6 +94,7 @@ export class AuthService {
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const record = await this.db.passwordResetToken.findUnique({ where: { tokenHash }, include: { user: true } });
     if (!record || record.usedAt || record.expiresAt.getTime() < Date.now() || !record.user.active) throw new BadRequestException('Link de redefinição inválido ou expirado');
+    if(await compare(password,record.user.passwordHash))throw new BadRequestException('A nova senha deve ser diferente da senha atual');
     await this.db.$transaction(async tx => {
       await tx.user.update({ where: { id: record.userId }, data: { passwordHash: await hash(password, AUTH_SECURITY.bcryptRounds), passwordChangedAt: new Date(), failedLoginAttempts: 0, lockedUntil: null } });
       await tx.authSession.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: 'password_reset' } });

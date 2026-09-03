@@ -13,6 +13,7 @@ import {NewPlatformPlanModal as NewPlanModal,NewPlatformTenantModal as NewTenant
 import {usePlatformData} from '../usePlatformData';
 import {PlatformOverview as Overview} from '../PlatformOverview';
 import {PLATFORM_TABS,PlatformSidebar} from '../PlatformSidebar';
+import {PlatformEmailSettings} from '../PlatformEmailSettings';
 import {SafeAreaView,useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {PlatformCompany,PlatformEditableItem,PlatformPayment,PlatformPlan,PlatformSubscription,PlatformTenantCreateResult,PlatformUser} from '../contracts';
 
@@ -37,7 +38,7 @@ export default function Platform(){
  const activeTab=PLATFORM_TABS.find(item=>item.key===tab)!;
  return <SafeAreaView style={[s.page,compact&&s.pageCompact]} edges={['top','left','right']}><PlatformSidebar compact={compact} active={tab} onSelect={selectTab} onLogout={signOut}/>
  <ScrollView style={s.main} contentContainerStyle={[s.content,compact&&s.contentCompact,{paddingBottom:compact?96+insets.bottom:30}]} keyboardShouldPersistTaps="handled"><View style={[s.header,compact&&s.headerCompact]}><View style={s.headerTitle}><Text style={s.eyebrow}>LUVIEPRO · PLATFORM</Text><Text style={s.title}>{activeTab.label}</Text><Text style={s.muted}>{activeTab.subtitle}</Text></View><View style={[s.headerActions,compact&&s.headerActionsCompact]}>{tab==='companies'?<Pressable onPress={()=>setCreatingTenant(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Nova empresa</Text></Pressable>:tab==='plans'?<Pressable onPress={()=>setCreatingPlan(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Novo plano</Text></Pressable>:null}<Pressable accessibilityRole="button" accessibilityLabel="Conta do administrador" accessibilityState={{expanded:accountOpen}} onPress={()=>setAccountOpen(true)} style={({pressed})=>[s.admin,pressed&&s.adminPressed]}><View style={s.adminAvatar}><Text style={s.adminInitial}>LM</Text></View>{!compact&&<View style={s.adminText}><Text style={s.strong}>LuviePro Master</Text><Text style={s.small}>Administrador da plataforma</Text></View>}<Ionicons name="chevron-down" size={15} color={theme.muted}/></Pressable></View></View>
- {tab==='overview'?<Overview data={data} companies={companies} users={users} payments={payments} onTab={selectTab}/>:<>
+ {tab==='overview'?<Overview data={data} companies={companies} users={users} payments={payments} onTab={selectTab}/>:tab==='email'?<PlatformEmailSettings/>:<>
   <PlatformSearch compact={phone} value={query} total={tab==='plans'?filtered.length:pageMeta.total} onChange={value=>{setQuery(value);setPage(1)}}/>
   {tab!=='plans'?<PlatformFilterBar compact={phone}>
    <PlatformFilterGroup compact={phone} label="Status" value={statusFilter} onChange={value=>{setStatusFilter(value);setPage(1)}} values={tab==='users'?[['all','Todos'],['active','Ativos'],['inactive','Inativos']]:tab==='companies'?[['all','Todos'],['active','Ativas'],['suspended','Suspensas'],['cancelled','Canceladas']]:[['all','Todos'],['active','Ativas'],['trial','Teste'],['approved','Aprovados'],['pending','Pendentes'],['cancelled','Cancelados']]}/>

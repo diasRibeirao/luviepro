@@ -30,6 +30,7 @@ import {MetricsController} from './observability/metrics.controller';
 import { OrdersModule } from './modules/orders/orders.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
 import { FinanceModule } from './modules/finance/finance.module';
+import { MailModule } from './modules/mail/mail.module';
 @Module({
   imports:[
     CoreModule,
@@ -50,6 +51,7 @@ import { FinanceModule } from './modules/finance/finance.module';
     AuditModule,
     DashboardModule,
     PricingModule,
+    MailModule,
   ],
   controllers:[HealthController,MetricsController],
   providers:[
