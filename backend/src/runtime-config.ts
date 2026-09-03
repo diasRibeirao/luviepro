@@ -8,7 +8,11 @@ export function validateRuntimeConfig(env:NodeJS.ProcessEnv=process.env){
   const staging=isStaging(env);
   const errors:string[]=[];
   const required=['DATABASE_URL','JWT_SECRET','JWT_REFRESH_SECRET','CORS_ORIGINS','APP_WEB_URL','MERCADO_PAGO_ACCESS_TOKEN','MERCADO_PAGO_WEBHOOK_URL','MERCADO_PAGO_WEBHOOK_SECRET'];
-  if(!staging)required.push('SMTP_HOST','SMTP_FROM');
+  if(!staging){
+    const mailProvider=envString(env,'MAIL_PROVIDER').toLowerCase()||(envString(env,'RESEND_API_KEY')?'resend':'smtp');
+    if(mailProvider==='resend')required.push('RESEND_API_KEY','RESEND_FROM');
+    else required.push('SMTP_HOST','SMTP_FROM');
+  }
   for(const k of required)if(!envString(env,k))errors.push(`${k} não configurado`);
 
   const jwt=envString(env,'JWT_SECRET'),refresh=envString(env,'JWT_REFRESH_SECRET');
@@ -42,6 +46,9 @@ export function validateRuntimeConfig(env:NodeJS.ProcessEnv=process.env){
   const redisUrl=envString(env,'REDIS_URL'),redisPassword=envString(env,'REDIS_PASSWORD');
   if(!redisUrl&&!redisPassword)errors.push('Configure REDIS_URL ou REDIS_PASSWORD para autenticar o Redis em produção');
   if(redisUrl&&!/^rediss?:\/\//i.test(redisUrl))errors.push('REDIS_URL deve utilizar redis:// ou rediss://');
+
+  const mailProvider=envString(env,'MAIL_PROVIDER').toLowerCase();
+  if(mailProvider&&mailProvider!=='smtp'&&mailProvider!=='resend')errors.push('MAIL_PROVIDER deve ser smtp ou resend');
 
   for(const [k,d,min,max] of [
     ['SMTP_PORT',587,1,65535],

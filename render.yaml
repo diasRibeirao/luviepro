@@ -91,6 +91,12 @@ services:
         value: "false"
       - key: DEMO_SEED
         value: "0"
+      - key: MAIL_PROVIDER
+        value: "resend"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
