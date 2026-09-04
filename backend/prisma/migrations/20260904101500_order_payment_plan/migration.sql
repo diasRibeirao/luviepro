@@ -1,0 +1,3 @@
+ALTER TABLE "Order"
+  ADD COLUMN "paymentPlan" TEXT NOT NULL DEFAULT 'cash',
+  ADD COLUMN "installments" INTEGER NOT NULL DEFAULT 1;

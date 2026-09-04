@@ -3,10 +3,13 @@ import { IsDateString, IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 
 export const ORDER_STATUSES=['confirmed','preparing','ready','delivered','canceled'] as const;
 export const PAYMENT_STATUSES=['pending','partial','paid','refunded'] as const;
 export const DELIVERY_METHODS=['delivery','pickup'] as const;
+export const PAYMENT_PLANS=['cash','installments'] as const;
 
 export class UpdateOrderDto {
   @IsOptional() @IsIn(ORDER_STATUSES) status?: string;
   @IsOptional() @IsIn(DELIVERY_METHODS) deliveryMethod?: string;
+  @IsOptional() @IsIn(PAYMENT_PLANS) paymentPlan?: string;
+  @IsOptional() @IsInt() @Min(1) installments?: number;
   @IsOptional() @IsDateString() paymentDueAt?: string;
   @IsOptional() @IsString() @MaxLength(1000) notes?: string;
 }

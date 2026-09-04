@@ -8,6 +8,7 @@ import { toJsonValue } from '../../domain/json-value';
 import type { Prisma } from '../../../../generated-prisma';
 import type { BuiltQuoteItem, QuoteTimelineEvent } from './types/quote.types';
 import { isQuoteStatus, QUOTE_TRANSITIONS } from './types/quote.types';
+import { calculatePricing } from '../pricing/pricing-calculation';
 
 type Calc={dailyRateCents:number;days:number;people:number;variableCostCents:number;fixedCostCents:number;safetyMarginBps:number;variableCostMode?:string};
 
@@ -24,14 +25,23 @@ export class QuotesService {
   }
 
   private calculate(x:Calc){
-    for(const v of Object.values(x))if(typeof v==='number'&&(!Number.isInteger(v)||v<0))throw new BadRequestException('Use inteiros não negativos; dinheiro em centavos.');
-    const laborCents=x.dailyRateCents*x.days;
-    const mode=x.variableCostMode??'per_day';
-    const variableCents=mode==='fixed'?x.variableCostCents:mode==='per_person'?x.variableCostCents*x.people:mode==='per_person_day'?x.variableCostCents*x.people*x.days:x.variableCostCents*x.days;
-    const subtotal=laborCents+variableCents+x.fixedCostCents;
-    const marginBaseCents=laborCents+variableCents;
-    const marginCents=Math.round(marginBaseCents*x.safetyMarginBps/10000);
-    return {laborCents,variableCents,fixedCents:x.fixedCostCents,marginCents,totalCents:subtotal+marginCents};
+    return calculatePricing(x);
+  }
+
+  private durationDays(value?:string|null){
+    if(!value)return 0;
+    const normalized=String(value).trim().replace(',','.');
+    const match=normalized.match(/\d+(?:\.\d+)?/);
+    if(!match)return 0;
+    const amount=Number(match[0]);
+    if(!Number.isFinite(amount)||amount<=0)return 0;
+    if(/hora|horas|\bh\b/i.test(normalized))return amount/8;
+    return amount;
+  }
+
+  private daysFromStages(stages:Array<{duration?:string|null}>,fallback:number){
+    const total=stages.reduce((sum,stage)=>sum+this.durationDays(stage.duration),0);
+    return total>0?Math.max(1,Math.ceil(total)):Math.max(1,fallback||1);
   }
 
   private async ensureProjectFromQuote(tx:Prisma.TransactionClient,quote:{id:string;tenantId:string;clientId:string;number:string;client:{name:string}}){
@@ -153,10 +163,10 @@ export class QuotesService {
     for(const input of inputs){
       const service=await this.db.service.findFirst({where:{id:input.serviceId,tenantId,active:true},include:{stages:{where:{tenantId},orderBy:{sequence:'asc'}}}});
       if(!service)throw new NotFoundException('Serviço não encontrado ou inativo');
-      const days=input.days??service.defaultDays,people=input.people??service.people;
-      const calc=this.calculate({dailyRateCents:input.dailyRateCents??service.dailyRateCents,days,people,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps});
       const selectedStages=input.stages===undefined?service.stages:input.stages.map((st,index)=>({sequence:index+1,description:st.description.trim(),duration:st.duration?.trim()||null})).filter(st=>st.description);
-      items.push({tenantId,serviceName:service.name,days,people,...calc,configurationJson:{serviceId:service.id,dailyRateCents:input.dailyRateCents??service.dailyRateCents,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps},stages:{create:selectedStages.map(st=>({tenantId,sequence:st.sequence,description:st.description,duration:st.duration}))}});
+      const days=input.days??this.daysFromStages(selectedStages,service.defaultDays),people=input.people??service.people;
+      const calc=this.calculate({dailyRateCents:input.dailyRateCents??service.dailyRateCents,days,people,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps,variableCostMode:service.variableCostMode});
+      items.push({tenantId,serviceName:service.name,days,people,...calc,configurationJson:{serviceId:service.id,dailyRateCents:input.dailyRateCents??service.dailyRateCents,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps,variableCostMode:service.variableCostMode,daysSource:input.days===undefined?'stages':'manual'},stages:{create:selectedStages.map(st=>({tenantId,sequence:st.sequence,description:st.description,duration:st.duration}))}});
     }
     return items;
   }
@@ -235,7 +245,7 @@ export class QuotesService {
       }
       // O pedido representa a venda inteira do orçamento (serviços + produtos - desconto),
       // enquanto OrderItem continua registrando somente os produtos para movimentação de estoque.
-      const created=await tx.order.create({data:{tenantId,quoteId:id,number:`PED-${quote.number.replace(/^(?:ORC|OSO|ORP)-/,'')}`,totalCents:quote.finalTotalCents,items:{create:quote.productItems.map(i=>({productId:i.productId,productName:i.productName,sku:i.sku,unit:i.unit,quantity:i.quantity,unitPriceCents:i.unitPriceCents,unitCostCents:i.unitCostCents,totalCents:i.totalCents}))}},include:{items:true}});
+      const created=await tx.order.create({data:{tenantId,quoteId:id,number:quote.number,totalCents:quote.finalTotalCents,items:{create:quote.productItems.map(i=>({productId:i.productId,productName:i.productName,sku:i.sku,unit:i.unit,quantity:i.quantity,unitPriceCents:i.unitPriceCents,unitCostCents:i.unitCostCents,totalCents:i.totalCents}))}},include:{items:true}});
       for(const item of quote.productItems){
         const r=reservations.find(x=>x.productId===item.productId)!;
         const p=await tx.product.update({where:{id:item.productId},data:{stockQuantity:{decrement:item.quantity},reservedQuantity:{decrement:r.quantity}}});

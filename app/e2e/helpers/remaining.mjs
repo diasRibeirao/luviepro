@@ -38,6 +38,13 @@ export async function mockSettingsApi(page,{account=businessAccount}={}){
 
   await page.route(/\/api\/account\/?$/,route=>fulfillJson(route,200,accountState));
 
+  // Configurações carrega catálogos auxiliares de Produtos e Financeiro em paralelo.
+  // Nos E2E eles precisam ser interceptados para a inicialização da tela não falhar.
+  await page.route(/\/api\/products\/units\/?$/,route=>fulfillJson(route,200,[]));
+  await page.route(/\/api\/products\/categories\/?$/,route=>fulfillJson(route,200,[]));
+  await page.route(/\/api\/finance\/categories\/manage\/?$/,route=>fulfillJson(route,200,[]));
+  await page.route(/\/api\/finance\/payment-methods\/manage\/?$/,route=>fulfillJson(route,200,[]));
+
   await page.route(/\/api\/account\/settings\/?$/,route=>{
     if(route.request().method()!=='PATCH')return fulfillJson(route,405,{message:'Método não suportado'});
     const payload=route.request().postDataJSON()??{};

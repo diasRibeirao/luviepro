@@ -30,7 +30,7 @@ export const quoteService={
 
 export const existingQuote={
   id:'quote-1',
-  number:'ORC-001',
+  number:'OSO-001',
   status:'draft',
   createdAt:'2026-08-20T12:00:00.000Z',
   validUntil:null,
@@ -84,6 +84,11 @@ export async function mockQuotesApi(page,{
 
   await page.route(/\/api\/clients\/?$/,route=>fulfillJson(route,200,clients));
   await page.route(/\/api\/services\/?$/,route=>fulfillJson(route,200,services));
+  // O wizard atual também consulta produtos, mesmo quando o orçamento usado no cenário é de serviço.
+  await page.route(/\/api\/products\/?$/,route=>{
+    if(route.request().method()!=='GET')return fulfillJson(route,405,{message:'Método não suportado'});
+    return fulfillJson(route,200,[]);
+  });
 
   await page.route(/\/api\/pricing\/calculate\/?$/,route=>{
     const payload=route.request().postDataJSON()??{};
@@ -121,7 +126,7 @@ export async function mockQuotesApi(page,{
       const client=clients.find(item=>item.id===payload.clientId)??clients[0];
       const created={
         id:`quote-${quotes.length+1}`,
-        number:`ORC-${String(quotes.length+1).padStart(3,'0')}`,
+        number:`OSO-${String(quotes.length+1).padStart(3,'0')}`,
         status:'draft',
         createdAt:new Date().toISOString(),
         validUntil:null,

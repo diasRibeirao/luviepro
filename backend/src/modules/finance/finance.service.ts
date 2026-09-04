@@ -53,12 +53,19 @@ export class FinanceService {
 
   async obligations(tenantId:string){
     const [orders,purchases,manual]=await Promise.all([
-      this.db.order.findMany({where:{tenantId,status:{not:'canceled'},paymentStatus:{not:'paid'}},include:{quote:{include:{client:true}}},orderBy:{paymentDueAt:'asc'}}),
+      this.db.order.findMany({where:{tenantId,status:{not:'canceled'},paymentStatus:{not:'paid'}},include:{quote:{include:{client:true}},items:true},orderBy:{paymentDueAt:'asc'}}),
       this.db.purchaseOrder.findMany({where:{tenantId,status:{not:'canceled'},paymentStatus:{not:'paid'}},include:{supplier:true},orderBy:{paymentDueAt:'asc'}}),
       this.db.financialEntry.findMany({where:{tenantId,status:'pending'},include:{category:true},orderBy:{dueAt:'asc'}}),
     ]);
     return [
-      ...orders.map(x=>({id:x.id,source:'order',type:'income' as const,status:'pending',amountCents:Math.max(0,x.totalCents-x.amountPaidCents),dueAt:x.paymentDueAt,description:`Pedido ${x.number}`,counterparty:x.quote.client.name,category:'Vendas',referenceNumber:x.number})),
+      ...orders.map(x=>({
+        id:x.id,source:'order',type:'income' as const,status:'pending',amountCents:Math.max(0,x.totalCents-x.amountPaidCents),dueAt:x.paymentDueAt,
+        description:`Pedido ${x.number}`,counterparty:x.quote.client.name,category:'Vendas',referenceNumber:x.number,
+        quoteId:x.quote.id,quoteNumber:x.quote.number,orderStatus:x.status,paymentStatus:x.paymentStatus,totalCents:x.totalCents,amountPaidCents:x.amountPaidCents,
+        paymentPlan:x.paymentPlan,installments:x.installments,paymentLinkUrl:x.quote.paymentLinkUrl??null,
+        clientEmail:x.quote.client.email??null,clientPhone:x.quote.client.phone??null,clientWhatsapp:x.quote.client.whatsapp??null,
+        items:x.items.map(i=>({id:i.id,productId:i.productId,productName:i.productName,sku:i.sku,unit:i.unit,quantity:i.quantity,unitPriceCents:i.unitPriceCents,totalCents:i.totalCents})),
+      })),
       ...purchases.map(x=>({id:x.id,source:'purchase',type:'expense' as const,status:'pending',amountCents:Math.max(0,x.totalCents-x.amountPaidCents),dueAt:x.paymentDueAt,description:`Compra ${x.number}`,counterparty:x.supplier.name,category:'Compras',referenceNumber:x.number})),
       ...manual.map(x=>({id:x.id,source:'manual',type:x.type as 'income'|'expense',status:x.status,amountCents:x.amountCents,dueAt:x.dueAt,description:x.description,counterparty:x.counterparty??'',category:x.category?.name??'Sem categoria',referenceNumber:'Manual'})),
     ].filter(x=>x.amountCents>0).sort((a,b)=>{const ad=a.dueAt?new Date(a.dueAt).getTime():Number.MAX_SAFE_INTEGER;const bd=b.dueAt?new Date(b.dueAt).getTime():Number.MAX_SAFE_INTEGER;return ad-bd});

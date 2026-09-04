@@ -19,7 +19,7 @@ async function openProjects(page){
 async function openCalendar(page){
   await page.getByRole('button',{name:'Agenda'}).first().click();
   await expect(page).toHaveURL(/\/calendar$/);
-  await expect(page.getByText('Aulas, eventos e prazos em um único lugar')).toBeVisible();
+  await expect(page.getByText('Compromissos, projetos e prazos em um único lugar')).toBeVisible();
 }
 
 test.beforeEach(async({page})=>{
@@ -34,7 +34,7 @@ test('quadro de projetos exibe status, cliente e orçamento',async({page})=>{
 
   await expect(page.getByText('Casamento Aurora',{exact:true})).toBeVisible();
   await expect(page.getByText('Evento Horizonte',{exact:true})).toBeVisible();
-  await expect(page.getByText('ORC-001',{exact:true})).toBeVisible();
+  await expect(page.getByText('OSO-001',{exact:true})).toBeVisible();
   await expect(page.getByText('2 projeto(s)')).toBeVisible();
 });
 
@@ -121,8 +121,8 @@ test('cria evento e atualiza a agenda',async({page})=>{
 
   await page.getByRole('button',{name:'Novo evento'}).click();
   await expect(page.getByRole('heading',{name:'Novo evento',exact:true})).toBeVisible();
-  await page.getByPlaceholder('Ex.: Festival esportivo').fill('Reunião de produção');
-  await page.getByPlaceholder('Ex.: Escritório principal').fill('Sala 2');
+  await page.getByPlaceholder('Ex.: Visita técnica ao cliente').fill('Reunião de produção');
+  await page.getByPlaceholder('Ex.: Residência do cliente').fill('Sala 2');
   await page.getByText('Criar evento',{exact:true}).click();
 
   await expect(page.getByText('Reunião de produção',{exact:true})).toBeVisible();

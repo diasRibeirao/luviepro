@@ -19,7 +19,7 @@ export const projectAlpha={
   progress:40,
   startDate:'2026-08-20',
   client:{name:'Empresa Aurora'},
-  quote:{number:'ORC-001',totalCents:120000,finalTotalCents:120000},
+  quote:{number:'OSO-001',totalCents:120000,finalTotalCents:120000},
   tasks:[
     {id:'task-1',title:'Confirmar flores',status:'pending',priority:'high',dueDate:'2000-01-01'},
   ],
@@ -32,7 +32,7 @@ export const projectBeta={
   progress:0,
   startDate:null,
   client:{name:'Cliente Horizonte'},
-  quote:{number:'ORC-002',totalCents:80000,finalTotalCents:80000},
+  quote:{number:'OSO-002',totalCents:80000,finalTotalCents:80000},
   tasks:[],
 };
 
@@ -68,6 +68,15 @@ export async function mockProjectsApi(page,{initial=[projectAlpha,projectBeta]}=
   }));
 
   await page.route(/\/api\/project-statuses\/?$/,route=>fulfillJson(route,200,projectStatuses));
+
+  // A tela de Projetos também carrega a lista de responsáveis/assignees.
+  // Nos E2E essa dependência deve ser mockada para não escapar para e2e.invalid.
+  await page.route(/\/api\/projects-assignees\/?$/,route=>{
+    if(route.request().method()!=='GET'){
+      return fulfillJson(route,405,{message:'Método não suportado'});
+    }
+    return fulfillJson(route,200,[]);
+  });
 
   await page.route(/\/api\/projects\/?$/,route=>{
     if(route.request().method()!=='GET'){
@@ -165,6 +174,16 @@ export const calendarVisitToday=()=>({
 
 export async function mockCalendarApi(page,{initial=[calendarEventToday(),calendarVisitToday()],createError=null}={}){
   const events=initial.map(event=>({...event}));
+
+  // A agenda também carrega projetos para exibir prazos. Nos testes de agenda
+  // esse endpoint precisa ser interceptado, senão o browser tenta resolver
+  // https://e2e.invalid/api/projects e gera ERR_NAME_NOT_RESOLVED.
+  await page.route(/\/api\/projects\/?$/,route=>{
+    if(route.request().method()!=='GET'){
+      return fulfillJson(route,405,{message:'Método não suportado'});
+    }
+    return fulfillJson(route,200,[]);
+  });
 
   await page.route(/\/api\/calendar\/?$/,route=>{
     const method=route.request().method();

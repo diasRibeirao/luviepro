@@ -31,9 +31,19 @@ if(!existsSync(playwrightCli)){
 }
 
 try{
-  const e2eEnv={...process.env,EXPO_PUBLIC_E2E_API_URL:E2E_API_URL};
+  // O Expo substitui EXPO_PUBLIC_* durante o bundle e pode reaproveitar cache.
+  // Para o E2E usamos a própria variável pública oficial, com URL HTTPS fictícia,
+  // desabilitamos o .env do projeto e limpamos o cache do Metro. Assim o teste
+  // não toca na API local/HML e continua passando pela mesma regra de segurança
+  // aplicada à build de produção.
+  const e2eEnv={
+    ...process.env,
+    EXPO_NO_DOTENV:'1',
+    EXPO_PUBLIC_API_URL:E2E_API_URL,
+    EXPO_PUBLIC_E2E_API_URL:E2E_API_URL,
+  };
   console.log(`[E2E] Override dedicado da API: ${E2E_API_URL}`);
-  run('Gerando bundle Web',process.execPath,[npmCli,'run','export:web'],e2eEnv);
+  run('Gerando bundle Web',process.execPath,[npmCli,'run','export:web','--','--clear'],e2eEnv);
   run('Executando Playwright',process.execPath,[playwrightCli,'test'],e2eEnv);
   console.log('\n[E2E] Homologação Web concluída com sucesso.');
 }catch(error){

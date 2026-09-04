@@ -72,7 +72,7 @@ test('cadastro valida nome obrigatório antes de chamar a API',async({page})=>{
   await page.getByText('Cadastrar cliente',{exact:true}).click();
 
   await expect(page.getByText('Informe o nome completo do cliente.')).toBeVisible();
-  await expect(page.getByText('Revise os campos destacados')).toBeVisible();
+  await expect(page.getByText('Informe um telefone para contato.')).toBeVisible();
 });
 
 test('cadastra cliente e atualiza a listagem',async({page})=>{
@@ -82,6 +82,7 @@ test('cadastra cliente e atualiza a listagem',async({page})=>{
 
   await page.getByRole('button',{name:'Novo cliente'}).click();
   await page.getByLabel('Nome completo').fill('Ana Souza');
+  await page.getByLabel('Telefone').fill('(18) 99123-4567');
   await page.getByLabel('E-mail').fill('ana@example.com');
   await page.getByRole('textbox',{name:'Cidade',exact:true}).fill('Penápolis');
   await page.getByLabel('UF').fill('sp');
@@ -120,6 +121,7 @@ test('erro da API no cadastro mantém o modal e informa o usuário',async({page}
 
   await page.getByRole('button',{name:'Novo cliente'}).click();
   await page.getByLabel('Nome completo').fill('Cliente Duplicado');
+  await page.getByLabel('Telefone').fill('(18) 99123-4567');
   await page.getByText('Cadastrar cliente',{exact:true}).click();
 
   await expect(page.getByText('Não foi possível salvar')).toBeVisible();

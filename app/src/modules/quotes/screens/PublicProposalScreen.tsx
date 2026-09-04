@@ -147,10 +147,12 @@ export default function PublicProposal() {
       : null);
   const proposalTotal = data.finalTotalCents || data.totalCents;
   const payment = standardPaymentPlan(proposalTotal);
-  const documentTitle =
-    data.items.length > 0
-      ? "ORDEM DE SERVIÇO PARA ORGANIZAÇÃO"
-      : "ORDEM DE REVENDA DE PRODUTO";
+  const hasServices = data.items.length > 0;
+  const hasProducts = (data.productItems?.length ?? 0) > 0;
+  const productOnly = !hasServices && hasProducts;
+  const documentTitle = productOnly
+    ? "CONFERÊNCIA DE PRODUTOS ORGANIZADORES UTILIZADOS EM PROJETO"
+    : "ORDEM DE SERVIÇO PARA ORGANIZAÇÃO";
   return (
     <ScrollView style={s.page} contentContainerStyle={s.wrap}>
       <View style={s.language}>
@@ -250,16 +252,25 @@ export default function PublicProposal() {
         </View>
         <View style={s.commercial}>
           <Text style={s.notesTitle}>Plano de pagamento</Text>
-          <Text style={s.notesText}>
-            Entrada via PIX (30%):{" "}
-            <Text style={s.paymentStrong}>{money(payment.depositCents)}</Text>
-          </Text>
-          <Text style={s.notesText}>
-            Saldo no cartão (70%):{" "}
-            {payment.installmentCents === payment.lastInstallmentCents
-              ? `${payment.installments} parcelas de ${money(payment.installmentCents)}`
-              : `${payment.installments - 1} parcelas de ${money(payment.installmentCents)} + última de ${money(payment.lastInstallmentCents)}`}
-          </Text>
+          {productOnly ? (
+            <>
+              <Text style={s.notesText}>À vista ou parcelado sem entrada.</Text>
+              <Text style={s.notesText}>A condição final de parcelamento é definida na confirmação da venda.</Text>
+            </>
+          ) : (
+            <>
+              <Text style={s.notesText}>
+                Entrada via PIX (30%):{" "}
+                <Text style={s.paymentStrong}>{money(payment.depositCents)}</Text>
+              </Text>
+              <Text style={s.notesText}>
+                Saldo no cartão (70%):{" "}
+                {payment.installmentCents === payment.lastInstallmentCents
+                  ? `${payment.installments} parcelas de ${money(payment.installmentCents)}`
+                  : `${payment.installments - 1} parcelas de ${money(payment.installmentCents)} + última de ${money(payment.lastInstallmentCents)}`}
+              </Text>
+            </>
+          )}
           {data.tenant.proposalPaymentTerms ? (
             <Text style={s.notesText}>{data.tenant.proposalPaymentTerms}</Text>
           ) : null}

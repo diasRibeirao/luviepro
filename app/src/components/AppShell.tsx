@@ -23,12 +23,13 @@ const items=[
   {href:'/finance',key:'finance',icon:'wallet-outline',group:'comercial'},
   {href:'/projects',key:'projects',icon:'briefcase-outline',group:'operacao'},
   {href:'/calculator',key:'calculator',icon:'calculator-outline',group:'operacao'},
+  {href:'/casa-nova',key:'casaNova',icon:'home-outline',group:'operacao'},
   {href:'/company',key:'company',icon:'business-outline',group:'administracao'},
   {href:'/settings',key:'settings',icon:'settings-outline',group:'administracao'},
   {href:'/project-statuses',key:'projectStatuses',icon:'options-outline',group:'administracao'},
 ] as const;
 const groupLabels={principal:'Principal',comercial:'Comercial',operacao:'Operação',administracao:'Administração'} as const;
-const itemPermissions:Record<string,string|undefined>={dashboard:'dashboard.read',calendar:'calendar.read',notifications:undefined,clients:'clients.read',services:'services.read',products:undefined,quotes:'quotes.read',orders:'quotes.read',purchases:'quotes.read',finance:'finance.read',projects:'projects.read',calculator:'quotes.write',company:'settings.manage',settings:'settings.manage',projectStatuses:'settings.manage'};
+const itemPermissions:Record<string,string|undefined>={dashboard:'dashboard.read',calendar:'calendar.read',notifications:undefined,clients:'clients.read',services:'services.read',products:undefined,quotes:'quotes.read',orders:'quotes.read',purchases:'quotes.read',finance:'finance.read',projects:'projects.read',calculator:'quotes.write',casaNova:undefined,company:'settings.manage',settings:'settings.manage',projectStatuses:'settings.manage'};
 type AccountSummary={tenant?:{plan?:string};usage?:{clients?:number};limit?:{maxClients?:number}};
 type UnreadCount={count?:number};
 type IoniconName=ComponentProps<typeof Ionicons>['name'];

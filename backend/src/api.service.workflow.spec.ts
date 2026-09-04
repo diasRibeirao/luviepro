@@ -22,7 +22,7 @@ describe('ApiService workflows',()=>{
   });
 
   it('revoga link público sem alterar o orçamento',async()=>{
-    const quote={id:'q1',tenantId:'t1',number:'ORC-2026-001',publicToken:'abc'};
+    const quote={id:'q1',tenantId:'t1',number:'OSO-2026-001',publicToken:'abc'};
     const db:any={quote:{findFirst:jest.fn().mockResolvedValue(quote),update:jest.fn().mockResolvedValue({...quote,publicToken:null})},auditLog:{create:jest.fn().mockResolvedValue({})}};
     const service=new ApiService(db,jwt,mail);
     await expect(service.revokeQuoteShare('t1','q1','u1')).resolves.toEqual({ok:true});
@@ -33,7 +33,7 @@ describe('ApiService workflows',()=>{
     const createdAt=new Date('2026-08-26T10:00:00Z');
     const db:any={
       quote:{findFirst:jest.fn().mockResolvedValue({id:'q1',createdAt,updatedAt:createdAt,sentAt:null,approvedAt:null,clientDecision:null,clientDecisionAt:null,clientDecisionName:null,status:'sent',version:2})},
-      auditLog:{findMany:jest.fn().mockResolvedValue([{action:'share',createdAt:new Date('2026-08-26T11:00:00Z'),metadata:{number:'ORC-2026-001'}},{action:'client_approved',createdAt:new Date('2026-08-26T12:00:00Z'),metadata:{name:'Cliente Teste'}}])}
+      auditLog:{findMany:jest.fn().mockResolvedValue([{action:'share',createdAt:new Date('2026-08-26T11:00:00Z'),metadata:{number:'OSO-2026-001'}},{action:'client_approved',createdAt:new Date('2026-08-26T12:00:00Z'),metadata:{name:'Cliente Teste'}}])}
     };
     const service=new ApiService(db,jwt,mail);const events=await service.quoteTimeline('t1','q1');
     expect(events.map((x:any)=>x.title)).toEqual(['Cliente aprovou a proposta','Link público compartilhado','Orçamento criado']);

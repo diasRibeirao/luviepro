@@ -31,6 +31,7 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { MailModule } from './modules/mail/mail.module';
+import { CasaNovaModule } from './modules/casa-nova/casa-nova.module';
 @Module({
   imports:[
     CoreModule,
@@ -52,6 +53,7 @@ import { MailModule } from './modules/mail/mail.module';
     DashboardModule,
     PricingModule,
     MailModule,
+    CasaNovaModule,
   ],
   controllers:[HealthController,MetricsController],
   providers:[

@@ -80,7 +80,9 @@ export default function QuoteProposalScreen(){
   const proposalTotal=data.finalTotalCents||data.totalCents;
   const payment=standardPaymentPlan(proposalTotal);
   const hasServices=data.items.length>0;
-  const documentTitle=hasServices?'ORDEM DE SERVIÇO PARA ORGANIZAÇÃO':'ORDEM DE REVENDA DE PRODUTO';
+  const hasProducts=!!data.productItems?.length;
+  const productOnly=!hasServices&&hasProducts;
+  const documentTitle=productOnly?'CONFERÊNCIA DE PRODUTOS ORGANIZADORES UTILIZADOS EM PROJETO':'ORDEM DE SERVIÇO PARA ORGANIZAÇÃO';
 
   return <View nativeID="proposal-screen" style={s.screen}>
     {webPrintStyle}
@@ -137,8 +139,7 @@ export default function QuoteProposalScreen(){
 
         <View style={s.paymentPlan}>
           <Text style={s.paymentTitle}>Plano de pagamento</Text>
-          <Text style={s.paymentLine}>Entrada via PIX (30%): <Text style={s.paymentStrong}>{money(payment.depositCents)}</Text></Text>
-          <Text style={s.paymentLine}>Saldo no cartão (70%): {payment.installmentCents===payment.lastInstallmentCents?`${payment.installments} parcelas de ${money(payment.installmentCents)}`:`${payment.installments-1} parcelas de ${money(payment.installmentCents)} + última de ${money(payment.lastInstallmentCents)}`}</Text>
+          {productOnly?<><Text style={s.paymentLine}>À vista ou parcelado sem entrada.</Text><Text style={s.paymentLine}>A condição final de parcelamento é definida na confirmação da venda.</Text></>:<><Text style={s.paymentLine}>Entrada via PIX (30%): <Text style={s.paymentStrong}>{money(payment.depositCents)}</Text></Text><Text style={s.paymentLine}>Saldo no cartão (70%): {payment.installmentCents===payment.lastInstallmentCents?`${payment.installments} parcelas de ${money(payment.installmentCents)}`:`${payment.installments-1} parcelas de ${money(payment.installmentCents)} + última de ${money(payment.lastInstallmentCents)}`}</Text></>}
           {tenant.proposalPaymentTerms?<Text style={s.paymentNote}>{tenant.proposalPaymentTerms}</Text>:null}
           {tenant.pixKey?<Text style={s.paymentNote}>Chave PIX: {tenant.pixKey}</Text>:null}
         </View>

@@ -10,6 +10,7 @@ async function openAuthenticatedRoute(page,path){
   const routes={
     '/account':()=>page.getByRole('button',{name:'Minha conta',exact:true}).click(),
     '/settings':()=>page.getByRole('button',{name:'Configurações',exact:true}).click(),
+    '/company':()=>page.getByRole('button',{name:'Empresa',exact:true}).click(),
     '/project-statuses':()=>page.getByRole('button',{name:'Status dos projetos',exact:true}).click(),
     '/plans':async()=>{
       const planButton=page.getByRole('button',{name:/^Plano .+ utilizados$/}).first();
@@ -31,6 +32,15 @@ async function expectAnyVisible(locator,label){
   throw new Error(`Nenhuma ocorrência visível encontrada para: ${label}`);
 }
 
+async function clickAnyVisible(locator,label){
+  const count=await locator.count();
+  for(let index=0;index<count;index++){
+    const item=locator.nth(index);
+    if(await item.isVisible()){await item.click();return;}
+  }
+  throw new Error(`Nenhuma ocorrência visível encontrada para clicar: ${label}`);
+}
+
 test.beforeEach(async({page})=>{
   installDiagnostics(page);
   await mockBaseApi(page);
@@ -49,7 +59,7 @@ test('configurações business exibem usuários, perfis e auditoria',async({page
   await mockSettingsApi(page);
   await loginAsUser(page);
   await openAuthenticatedRoute(page,'/settings');
-  await expect(page.getByText('Usuários e acessos',{exact:true}).first()).toBeVisible();
+  await expect(page.getByText('Usuários',{exact:true}).first()).toBeVisible();
   await expect(page.getByText('Perfis e permissões',{exact:true}).first()).toBeVisible();
   await expect(page.getByText('Auditoria',{exact:true}).first()).toBeVisible();
 });
@@ -57,11 +67,11 @@ test('configurações business exibem usuários, perfis e auditoria',async({page
 test('salva dados principais da empresa',async({page})=>{
   const state=await mockSettingsApi(page);
   await loginAsUser(page);
-  await openAuthenticatedRoute(page,'/settings');
+  await openAuthenticatedRoute(page,'/company');
 
-  await page.getByRole('textbox').first().fill('Luvie Produções');
+  await page.locator('input').first().fill('Luvie Produções');
   await page.getByText('Salvar alterações',{exact:true}).click();
-  await expect(page.getByText('Configurações salvas',{exact:true})).toBeVisible();
+  await expect(page.getByText('Dados da empresa salvos',{exact:true})).toBeVisible();
   expect(state.account.tenant.name).toBe('Luvie Produções');
 });
 
@@ -69,7 +79,7 @@ test('usuários e acessos lista pessoas licenciadas',async({page})=>{
   await mockSettingsApi(page);
   await loginAsUser(page);
   await openAuthenticatedRoute(page,'/settings');
-  await page.getByText('Usuários e acessos',{exact:true}).first().click();
+  await page.getByText('Usuários',{exact:true}).first().click();
   await expect(page.getByText('João Comercial',{exact:true})).toBeVisible();
   await expect(page.getByText('2 / 10',{exact:true})).toBeVisible();
 });
@@ -78,17 +88,26 @@ test('envia convite de usuário válido',async({page})=>{
   const state=await mockSettingsApi(page);
   await loginAsUser(page);
   await openAuthenticatedRoute(page,'/settings');
-  await page.getByText('Usuários e acessos',{exact:true}).first().click();
+  await page.getByText('Usuários',{exact:true}).first().click();
+  await expect(page).toHaveURL(/\/settings\/users$/);
+  await page.getByRole('button',{name:'Novo usuário'}).click();
 
-  const fields=page.getByRole('textbox');
+  const modal=page.locator('[aria-label="Fechar janela"] + div').last();
+  await expect(modal).toBeVisible();
+  const fields=modal.getByRole('textbox');
   await fields.nth(0).fill('Ana Financeiro');
   await fields.nth(1).fill('ana@luvie.test');
-  await page.getByText('Financeiro',{exact:true}).first().click();
-  await page.getByText('Enviar convite',{exact:true}).click();
+  await modal.getByText('Financeiro',{exact:true}).click();
+  await modal.getByText('Enviar primeiro acesso',{exact:true}).click();
 
-  await expect(page.getByText('Convite enviado',{exact:true})).toBeVisible();
-  await expect(page.getByText('Ana Financeiro',{exact:true})).toBeVisible();
+  await expect(page.getByText('Primeiro acesso enviado',{exact:true})).toBeVisible();
   expect(state.invites).toHaveLength(1);
+  expect(state.invites[0]).toMatchObject({
+    name:'Ana Financeiro',
+    email:'ana@luvie.test',
+    role:'finance',
+    status:'pending',
+  });
 });
 
 test('perfil personalizado business é exibido',async({page})=>{
@@ -118,14 +137,15 @@ test('cria perfil personalizado com permissão de dashboard',async({page})=>{
 test('segurança altera senha quando confirmação confere',async({page})=>{
   await mockSettingsApi(page);
   await loginAsUser(page);
-  await openAuthenticatedRoute(page,'/settings');
-  await page.getByText('Segurança',{exact:true}).first().click();
+  await openAuthenticatedRoute(page,'/account');
+  await page.getByText('Alterar senha',{exact:true}).first().click();
+  await expect(page.getByRole('heading',{name:'Alterar senha',exact:true})).toBeVisible();
 
-  const textboxes=page.getByRole('textbox');
-  await textboxes.nth(0).fill('senha-atual');
-  await textboxes.nth(1).fill('nova-senha-123');
-  await textboxes.nth(2).fill('nova-senha-123');
-  await page.getByText('Alterar senha',{exact:true}).click();
+  const passwordInputs=page.locator('input');
+  await passwordInputs.nth(0).fill('senha-atual');
+  await passwordInputs.nth(1).fill('nova-senha-123');
+  await passwordInputs.nth(2).fill('nova-senha-123');
+  await page.getByText('Alterar senha',{exact:true}).last().click();
   await expect(page.getByText('Senha alterada',{exact:true})).toBeVisible();
 });
 
@@ -141,7 +161,7 @@ test('plano starter não exibe perfis personalizados nem auditoria para propriet
   await loginAsUser(page,login);
   await openAuthenticatedRoute(page,'/settings');
 
-  await expect(page.getByText('Usuários e acessos',{exact:true}).first()).toBeVisible();
+  await expect(page.getByText('Usuários',{exact:true}).first()).toBeVisible();
   await expect(page.getByText('Perfis e permissões',{exact:true})).toHaveCount(0);
   await expect(page.getByText('Auditoria',{exact:true})).toHaveCount(0);
 });

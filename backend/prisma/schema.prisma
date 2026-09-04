@@ -62,6 +62,8 @@ model Tenant {
   quotes Quote[]
   projects Project[]
   projectStatuses ProjectStatus[]
+  casaNovaLists CasaNovaList[]
+  casaNovaItems CasaNovaItem[]
   subscriptions Subscription[]
   payments Payment[]
   webhookEvents WebhookEvent[]
@@ -69,6 +71,37 @@ model Tenant {
   userInvitations UserInvitation[]
   accessProfiles AccessProfile[]
 }
+
+model CasaNovaList {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  guests Int @default(2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items CasaNovaItem[]
+  @@unique([tenantId])
+}
+
+model CasaNovaItem {
+  id String @id @default(cuid())
+  tenantId String
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  listId String
+  list CasaNovaList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  itemName String
+  category String
+  baseQuantity Int
+  unit String
+  isScalable Boolean @default(true)
+  checked Boolean @default(false)
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([tenantId, category])
+  @@index([listId, checked])
+}
+
 model PlanLimit {
   plan String @id
   name String
@@ -548,6 +581,8 @@ model Order {
   number String
   status String @default("confirmed")
   paymentStatus String @default("pending")
+  paymentPlan String @default("cash")
+  installments Int @default(1)
   deliveryMethod String @default("delivery")
   notes String?
   totalCents Int
