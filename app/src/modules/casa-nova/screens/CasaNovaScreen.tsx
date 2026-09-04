@@ -75,16 +75,28 @@ export function CasaNovaScreen(){
  };
 
  const save=async()=>{
-  const baseQuantity=Math.max(1,Number(qty)||1);
+  if(busy)return;
   const clean=name.trim();
-  if(clean.length<2||busy)return;
+  if(clean.length<2){setMessage('Informe o nome do item com pelo menos 2 caracteres.');return}
+  const parsedQuantity=Number(String(qty).replace(',','.'));
+  if(!isFinite(parsedQuantity)||parsedQuantity<1){setMessage('Informe uma quantidade válida, maior ou igual a 1.');return}
+  const baseQuantity=Math.max(1,Math.round(parsedQuantity));
   const duplicate=items.some(x=>x.id!==editingId&&x.itemName.trim().toLocaleLowerCase('pt-BR')===clean.toLocaleLowerCase('pt-BR'));
   if(duplicate){setMessage('Este item já existe na lista. Edite o item existente em vez de duplicá-lo.');return}
   setBusy(true);
   try{
    const payload={itemName:clean,category,baseQuantity,unit:unit.trim()||'un.',isScalable:scalable,notes:notes.trim(),quantityOverride:null};
-   if(editingId){await casaNovaApi.updateItem(editingId,payload);setMessage('Item atualizado com sucesso.')}else{await casaNovaApi.addItem(payload);setMessage('Item adicionado à lista.')}
-   resetForm();await load();
+   if(editingId){
+    const updated=await casaNovaApi.updateItem(editingId,payload);
+    setItems(rows=>rows.map(item=>item.id===updated.id?updated:item));
+    setMessage('Item atualizado com sucesso.');
+   }else{
+    const created=await casaNovaApi.addItem(payload);
+    setItems(rows=>[...rows,created]);
+    setMessage(`Item “${created.itemName}” adicionado à lista.`);
+   }
+   resetForm();
+   await load();
   }catch(error){setMessage(errorMessage(error))}finally{setBusy(false)}
  };
 
