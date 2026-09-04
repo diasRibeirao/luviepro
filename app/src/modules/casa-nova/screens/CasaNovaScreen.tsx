@@ -13,6 +13,7 @@ const categories=['Todos','Cozinha e mesa','Eletrodomésticos','Mercado','Hortif
 const categoryOptions=categories.slice(1).map(x=>({label:x,value:x}));
 const automaticQuantity=(item:CasaNovaItem,guests:number)=>item.isScalable?Math.max(1,Math.ceil(item.baseQuantity*(guests/2))):item.baseQuantity;
 const quantity=(item:CasaNovaItem,guests:number)=>item.quantityOverride??automaticQuantity(item,guests);
+const errorMessage=(error:unknown)=>error instanceof Error?error.message:'Não foi possível concluir a operação.';
 
 export function CasaNovaScreen(){
  const {width}=useWindowDimensions();
@@ -35,7 +36,7 @@ export function CasaNovaScreen(){
  const[deleteConfirmId,setDeleteConfirmId]=useState<string|null>(null);
  const[message,setMessage]=useState('');
 
- const load=async()=>{setLoading(true);try{const data=await casaNovaApi.get();setGuests(data.guests);setItems(data.items);setSelectedIds(ids=>ids.filter(id=>data.items.some(item=>item.id===id)))}finally{setLoading(false)}};
+ const load=async()=>{setLoading(true);try{const data=await casaNovaApi.get();setGuests(data.guests);setItems(data.items);setSelectedIds(ids=>ids.filter(id=>data.items.some(item=>item.id===id)))}catch(error){setMessage(errorMessage(error))}finally{setLoading(false)}};
  useEffect(()=>{void load()},[]);
 
  const visible=useMemo(()=>filter==='Todos'?items:items.filter(x=>x.category===filter),[items,filter]);
@@ -47,12 +48,12 @@ export function CasaNovaScreen(){
   if(next<2||next>12||busy)return;
   const previous=guests;
   setGuests(next);
-  try{await casaNovaApi.updateGuests(next)}catch{setGuests(previous)}
+  try{await casaNovaApi.updateGuests(next)}catch(error){setGuests(previous);setMessage(errorMessage(error))}
  };
 
  const toggle=async(item:CasaNovaItem)=>{
   setItems(rows=>rows.map(x=>x.id===item.id?{...x,checked:!x.checked}:x));
-  try{await casaNovaApi.updateItem(item.id,{checked:!item.checked})}catch{setItems(rows=>rows.map(x=>x.id===item.id?item:x))}
+  try{await casaNovaApi.updateItem(item.id,{checked:!item.checked})}catch(error){setItems(rows=>rows.map(x=>x.id===item.id?item:x));setMessage(errorMessage(error))}
  };
 
  const toggleSelected=(id:string)=>setSelectedIds(ids=>ids.includes(id)?ids.filter(x=>x!==id):[...ids,id]);
@@ -64,13 +65,13 @@ export function CasaNovaScreen(){
  const remove=async(item:CasaNovaItem)=>{
   if(busy)return;
   setBusy(true);
-  try{await casaNovaApi.removeItem(item.id);setItems(rows=>rows.filter(x=>x.id!==item.id));setSelectedIds(ids=>ids.filter(id=>id!==item.id));if(editingId===item.id)resetForm();setDeleteConfirmId(null);setMessage('Item excluído da lista.')}finally{setBusy(false)}
+  try{await casaNovaApi.removeItem(item.id);setItems(rows=>rows.filter(x=>x.id!==item.id));setSelectedIds(ids=>ids.filter(id=>id!==item.id));if(editingId===item.id)resetForm();setDeleteConfirmId(null);setMessage('Item excluído da lista.')}catch(error){setMessage(errorMessage(error))}finally{setBusy(false)}
  };
 
  const essentials=async()=>{
   if(busy)return;
   setBusy(true);
-  try{const result=await casaNovaApi.addEssentials();await load();setMessage(result.added?`${result.added} itens padrão restaurados na lista.`:'Todos os itens padrão já estão nesta conta.')}finally{setBusy(false)}
+  try{const result=await casaNovaApi.addEssentials();await load();setMessage(result.added?`${result.added} itens padrão restaurados na lista.`:'Todos os itens padrão já estão nesta conta.')}catch(error){setMessage(errorMessage(error))}finally{setBusy(false)}
  };
 
  const save=async()=>{
@@ -84,7 +85,7 @@ export function CasaNovaScreen(){
    const payload={itemName:clean,category,baseQuantity,unit:unit.trim()||'un.',isScalable:scalable,notes:notes.trim(),quantityOverride:null};
    if(editingId){await casaNovaApi.updateItem(editingId,payload);setMessage('Item atualizado com sucesso.')}else{await casaNovaApi.addItem(payload);setMessage('Item adicionado à lista.')}
    resetForm();await load();
-  }finally{setBusy(false)}
+  }catch(error){setMessage(errorMessage(error))}finally{setBusy(false)}
  };
 
  const changeItemQuantity=async(item:CasaNovaItem,delta:-1|1)=>{
@@ -94,19 +95,19 @@ export function CasaNovaScreen(){
   if(next===current)return;
   const previous=item.quantityOverride;
   setItems(rows=>rows.map(x=>x.id===item.id?{...x,quantityOverride:next}:x));
-  try{await casaNovaApi.updateItem(item.id,{quantityOverride:next})}catch{setItems(rows=>rows.map(x=>x.id===item.id?{...x,quantityOverride:previous}:x))}
+  try{await casaNovaApi.updateItem(item.id,{quantityOverride:next})}catch(error){setItems(rows=>rows.map(x=>x.id===item.id?{...x,quantityOverride:previous}:x));setMessage(errorMessage(error))}
  };
 
  const bulkUpdate=async(patch:{category?:CasaNovaCategory;isScalable?:boolean;checked?:boolean})=>{
   if(!selectedIds.length||busy)return;
   setBusy(true);
-  try{const result=await casaNovaApi.bulkUpdate({ids:selectedIds,...patch});await load();setMessage(`${result.updated} item(ns) atualizado(s) em massa.`)}finally{setBusy(false)}
+  try{const result=await casaNovaApi.bulkUpdate({ids:selectedIds,...patch});await load();setMessage(`${result.updated} item(ns) atualizado(s) em massa.`)}catch(error){setMessage(errorMessage(error))}finally{setBusy(false)}
  };
 
  const bulkRemove=async()=>{
   if(!selectedIds.length||busy)return;
   setBusy(true);
-  try{const result=await casaNovaApi.bulkRemove(selectedIds);setSelectedIds([]);setBulkDeleteConfirm(false);await load();setMessage(`${result.deleted} item(ns) excluído(s) da lista.`)}finally{setBusy(false)}
+  try{const result=await casaNovaApi.bulkRemove(selectedIds);setSelectedIds([]);setBulkDeleteConfirm(false);await load();setMessage(`${result.deleted} item(ns) excluído(s) da lista.`)}catch(error){setMessage(errorMessage(error))}finally{setBusy(false)}
  };
 
  const exportList=async()=>{
@@ -134,7 +135,7 @@ export function CasaNovaScreen(){
     <View style={s.listCol}>
      <View style={s.listHeader}>
       <View><Text style={s.eyebrow}>LISTA INTELIGENTE</Text><Text style={s.sectionTitle}>O que falta para a casa ficar completa</Text></View>
-      <View style={s.headerActions}><Pressable onPress={()=>void exportList()} style={s.exportBtn}><Ionicons name="document-outline" size={16} color={theme.green2}/><Text style={s.exportText}>Exportar Excel</Text></Pressable><Pressable onPress={()=>void essentials()} style={s.essentialBtn}><Ionicons name="sparkles-outline" size={16} color={theme.white}/><Text style={s.essentialText}>{busy?'Aguarde...':'Restaurar padrão'}</Text></Pressable></View>
+      <View style={s.headerActions}><Pressable onPress={()=>{resetForm();setMessage(compact?'Preencha o formulário “Adicionar item” logo abaixo da lista.':'Preencha o formulário “Adicionar item” ao lado da lista.')}} style={s.addItemShortcut}><Ionicons name="add-circle-outline" size={16} color={theme.white}/><Text style={s.addItemShortcutText}>Adicionar item</Text></Pressable><Pressable onPress={()=>void exportList()} style={s.exportBtn}><Ionicons name="document-outline" size={16} color={theme.green2}/><Text style={s.exportText}>Exportar Excel</Text></Pressable><Pressable onPress={()=>void essentials()} style={s.essentialBtn}><Ionicons name="sparkles-outline" size={16} color={theme.white}/><Text style={s.essentialText}>{busy?'Aguarde...':'Restaurar padrão'}</Text></Pressable></View>
      </View>
 
      <View style={s.filters}>{categories.map(c=><Pressable key={c} onPress={()=>setFilter(c)} style={[s.filter,filter===c&&s.filterOn]}><Text style={[s.filterText,filter===c&&s.filterTextOn]}>{c}</Text></Pressable>)}</View>
@@ -160,7 +161,7 @@ export function CasaNovaScreen(){
      </View>)}</View>}
     </View>
 
-    <View style={s.addPanel}><View style={s.addHead}><View><Text style={s.addEyebrow}>{editingId?'EDITAR DETALHES':'PERSONALIZE'}</Text><Text style={s.addTitle}>{editingId?'Atualize os dados do item':'Inclua o que é a cara de vocês'}</Text></View>{editingId?<Pressable onPress={resetForm} style={s.cancelEdit}><Ionicons name="close" size={18} color={theme.white}/></Pressable>:null}</View><Field label="Item" value={name} onChange={setName} placeholder="Ex.: taças de vinho"/><SelectField label="Categoria" value={category} options={categoryOptions} onChange={v=>setCategory(v as CasaNovaCategory)}/><View style={s.two}><View style={{flex:1}}><Field label="Qtd. base para 2 pessoas" value={qty} onChange={setQty} keyboard="numeric"/></View><View style={{flex:1}}><Field label="Unidade" value={unit} onChange={setUnit}/></View></View><Field label="Observações" value={notes} onChange={setNotes} placeholder="Opcional"/><Pressable onPress={()=>setScalable(v=>!v)} style={s.scaleRow}><View style={[s.checkbox,scalable&&s.checkboxOn]}>{scalable?<Ionicons name="checkmark" size={15} color={theme.white}/>:null}</View><Text style={s.scaleText}>Ajustar automaticamente conforme o número de pessoas</Text></Pressable><Pressable onPress={()=>void save()} style={s.addButton}><Ionicons name={editingId?'save-outline':'add'} size={18} color={theme.g900}/><Text style={s.addButtonText}>{busy?'Salvando...':editingId?'Salvar detalhes':'Adicionar item'}</Text></Pressable>{editingId?<Pressable onPress={resetForm} style={s.cancelButton}><Text style={s.cancelButtonText}>Cancelar edição</Text></Pressable>:null}</View>
+    <View style={s.addPanel}><View style={s.addHead}><View><Text style={s.addEyebrow}>{editingId?'EDITAR DETALHES':'PERSONALIZE'}</Text><Text style={s.addTitle}>{editingId?'Atualize os dados do item':'Adicionar item'}</Text></View>{editingId?<Pressable onPress={resetForm} style={s.cancelEdit}><Ionicons name="close" size={18} color={theme.white}/></Pressable>:null}</View><Field label="Item" value={name} onChange={setName} placeholder="Ex.: taças de vinho"/><SelectField label="Categoria" value={category} options={categoryOptions} onChange={v=>setCategory(v as CasaNovaCategory)}/><View style={s.two}><View style={{flex:1}}><Field label="Qtd. base para 2 pessoas" value={qty} onChange={setQty} keyboard="numeric"/></View><View style={{flex:1}}><Field label="Unidade" value={unit} onChange={setUnit}/></View></View><Field label="Observações" value={notes} onChange={setNotes} placeholder="Opcional"/><Pressable onPress={()=>setScalable(v=>!v)} style={s.scaleRow}><View style={[s.checkbox,scalable&&s.checkboxOn]}>{scalable?<Ionicons name="checkmark" size={15} color={theme.white}/>:null}</View><Text style={s.scaleText}>Ajustar automaticamente conforme o número de pessoas</Text></Pressable><Pressable onPress={()=>void save()} style={s.addButton}><Ionicons name={editingId?'save-outline':'add'} size={18} color={theme.g900}/><Text style={s.addButtonText}>{busy?'Salvando...':editingId?'Salvar detalhes':'Adicionar item'}</Text></Pressable>{editingId?<Pressable onPress={resetForm} style={s.cancelButton}><Text style={s.cancelButtonText}>Cancelar edição</Text></Pressable>:null}</View>
    </View>
   </View>}
  </AppShell>
@@ -172,7 +173,7 @@ function Field({label,value,onChange,placeholder,keyboard}:{label:string;value:s
 const s=StyleSheet.create({
  page:{gap:18},hero:{backgroundColor:theme.green,borderRadius:20,padding:28,flexDirection:'row',gap:24,alignItems:'center'},heroCompact:{flexDirection:'column',alignItems:'stretch'},heroText:{flex:1},kicker:{fontSize:10,fontWeight:'900',letterSpacing:1.5,color:theme.goldLight},heroTitle:{fontFamily:'serif',fontSize:30,fontWeight:'800',lineHeight:36,color:theme.white,marginTop:8,maxWidth:620},heroDesc:{fontSize:13,lineHeight:20,color:'rgba(255,255,255,.72)',marginTop:10,maxWidth:620},guestCard:{minWidth:260,borderRadius:16,backgroundColor:theme.white,padding:18},guestLabel:{fontSize:12,fontWeight:'800',color:theme.ink},guestRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:12},round:{width:42,height:42,borderRadius:21,alignItems:'center',justifyContent:'center',backgroundColor:theme.green50},roundActive:{backgroundColor:theme.green2},roundDisabled:{opacity:.38},guestNumber:{fontFamily:'serif',fontSize:30,fontWeight:'800',color:theme.ink,textAlign:'center'},guestWord:{fontSize:10,fontWeight:'800',color:theme.muted,textAlign:'center'},minGuests:{fontSize:9,fontWeight:'700',color:theme.muted,textAlign:'center',marginTop:7},dots:{flexDirection:'row',flexWrap:'wrap',gap:5,marginTop:10},dot:{width:8,height:8,borderRadius:4,backgroundColor:theme.borderStrong},dotOn:{backgroundColor:theme.gold},
  summary:{flexDirection:'row',gap:12},summaryCompact:{flexDirection:'column'},sumCard:{flex:1,borderRadius:15,borderWidth:1,borderColor:theme.border,backgroundColor:theme.white,padding:18,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},sumDark:{backgroundColor:theme.green,borderColor:theme.green},sumGold:{backgroundColor:theme.goldPale,borderColor:'#EAD99B'},sumLabel:{fontSize:11,fontWeight:'700',color:theme.muted},sumValue:{fontFamily:'serif',fontSize:27,fontWeight:'800',color:theme.ink,marginTop:4},sumDarkText:{color:theme.white},
- body:{flexDirection:'row',alignItems:'flex-start',gap:18},bodyCompact:{flexDirection:'column'},listCol:{flex:1,minWidth:0,width:'100%'},listHeader:{flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:12,flexWrap:'wrap'},headerActions:{flexDirection:'row',gap:8,flexWrap:'wrap'},eyebrow:{fontSize:10,fontWeight:'900',letterSpacing:1.3,color:theme.gold},sectionTitle:{fontFamily:'serif',fontSize:22,fontWeight:'800',color:theme.ink,marginTop:4},essentialBtn:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:theme.green2,borderRadius:999,paddingHorizontal:14,paddingVertical:10},essentialText:{fontSize:11,fontWeight:'900',color:theme.white},exportBtn:{flexDirection:'row',alignItems:'center',gap:6,borderWidth:1,borderColor:theme.borderStrong,backgroundColor:theme.white,borderRadius:999,paddingHorizontal:14,paddingVertical:10},exportText:{fontSize:11,fontWeight:'900',color:theme.green2},
+ body:{flexDirection:'row',alignItems:'flex-start',gap:18},bodyCompact:{flexDirection:'column'},listCol:{flex:1,minWidth:0,width:'100%'},listHeader:{flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:12,flexWrap:'wrap'},headerActions:{flexDirection:'row',gap:8,flexWrap:'wrap'},addItemShortcut:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:theme.green2,borderRadius:999,paddingHorizontal:14,paddingVertical:10},addItemShortcutText:{fontSize:11,fontWeight:'900',color:theme.white},eyebrow:{fontSize:10,fontWeight:'900',letterSpacing:1.3,color:theme.gold},sectionTitle:{fontFamily:'serif',fontSize:22,fontWeight:'800',color:theme.ink,marginTop:4},essentialBtn:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:theme.green2,borderRadius:999,paddingHorizontal:14,paddingVertical:10},essentialText:{fontSize:11,fontWeight:'900',color:theme.white},exportBtn:{flexDirection:'row',alignItems:'center',gap:6,borderWidth:1,borderColor:theme.borderStrong,backgroundColor:theme.white,borderRadius:999,paddingHorizontal:14,paddingVertical:10},exportText:{fontSize:11,fontWeight:'900',color:theme.green2},
  filters:{flexDirection:'row',gap:7,flexWrap:'wrap',marginVertical:14},filter:{borderWidth:1,borderColor:theme.borderStrong,borderRadius:999,paddingHorizontal:12,paddingVertical:8,backgroundColor:theme.white},filterOn:{backgroundColor:theme.green,borderColor:theme.green},filterText:{fontSize:11,fontWeight:'800',color:theme.green2},filterTextOn:{color:theme.white},
  bulkBar:{borderWidth:1,borderColor:theme.border,backgroundColor:theme.white,borderRadius:13,padding:12,marginBottom:10,gap:10},selectAll:{flexDirection:'row',alignItems:'center',gap:8},selectAllText:{fontSize:11,fontWeight:'900',color:theme.green2},selectedCount:{fontSize:10,fontWeight:'800',color:theme.muted},bulkActions:{flexDirection:'row',alignItems:'flex-end',gap:8,flexWrap:'wrap'},bulkSelect:{minWidth:210,flexGrow:1,maxWidth:280},bulkButton:{minHeight:38,borderRadius:9,borderWidth:1,borderColor:theme.borderStrong,backgroundColor:theme.green50,paddingHorizontal:10,alignItems:'center',justifyContent:'center'},bulkButtonText:{fontSize:10,fontWeight:'900',color:theme.green2},bulkDanger:{minHeight:38,borderRadius:9,backgroundColor:theme.danger,paddingHorizontal:11,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:5},bulkDangerText:{fontSize:10,fontWeight:'900',color:theme.white},bulkConfirm:{paddingTop:9,borderTopWidth:1,borderTopColor:theme.border,flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},bulkConfirmText:{fontSize:11,fontWeight:'800',color:theme.muted},
  cards:{gap:9},item:{backgroundColor:theme.white,borderWidth:1,borderColor:theme.border,borderLeftWidth:4,borderLeftColor:theme.borderStrong,borderRadius:13,padding:13,flexDirection:'row',gap:10},itemDone:{opacity:.72,borderLeftColor:theme.success},itemSelected:{borderColor:theme.green2,backgroundColor:'#FBFDFB'},selectBox:{width:22,height:22,borderRadius:6,borderWidth:2,borderColor:'#91A59A',alignItems:'center',justifyContent:'center',flexShrink:0},selectBoxOn:{backgroundColor:theme.green2,borderColor:theme.green2},checkbox:{width:19,height:19,borderRadius:5,borderWidth:2,borderColor:'#91A59A',alignItems:'center',justifyContent:'center'},checkboxOn:{backgroundColor:theme.green2,borderColor:theme.green2},itemBody:{flex:1},itemTop:{flexDirection:'row',alignItems:'center',gap:8,flexWrap:'wrap'},itemName:{fontSize:13,fontWeight:'900',color:theme.ink},itemNameDone:{textDecorationLine:'line-through'},itemMeta:{fontSize:11,color:theme.muted,marginTop:3},boughtRow:{flexDirection:'row',alignItems:'center',gap:6,marginTop:7,alignSelf:'flex-start'},boughtText:{fontSize:9,fontWeight:'800',color:theme.muted},qtyControl:{flexDirection:'row',alignItems:'center',gap:4},qtyStep:{width:31,height:31,borderRadius:8,borderWidth:1,borderColor:theme.borderStrong,backgroundColor:theme.white,alignItems:'center',justifyContent:'center'},qtyStepDisabled:{opacity:.35},qtyBox:{borderRadius:10,backgroundColor:theme.goldPale,paddingHorizontal:10,paddingVertical:6,minWidth:118},qty:{fontSize:12,fontWeight:'900',color:'#6B5521',textAlign:'center'},qtyCaption:{fontSize:9,fontWeight:'700',color:'#8A7747',textAlign:'center',marginTop:1},detailEdit:{padding:7},trash:{padding:7},

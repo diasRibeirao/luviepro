@@ -32,6 +32,7 @@ test('rota autenticada sem sessão redireciona para login',()=>{
   assert.equal(authGuardRedirect(false,'/home'),'/');
   assert.equal(authGuardRedirect(false,'/projects/p1'),'/');
   assert.equal(authGuardRedirect(false,'/casa-nova'),'/');
+  for(const path of ['/clients','/services','/products','/quotes','/projects','/calendar','/finance','/settings'])assert.equal(authGuardRedirect(false,path),'/',path);
   assert.equal(isPublicAuthRoute('/casa-nova'),false);
 });
 
