@@ -39,7 +39,7 @@ export default function ProductCategoriesScreen(){
    if(item.active){const count=item.usageCount||0;const ok=await confirm({title:'Inativar categoria?',message:count>0?`Esta categoria está vinculada a ${count} produto(s). Os produtos existentes manterão a categoria, mas ela não ficará disponível em novos cadastros.`:'A categoria deixará de ficar disponível em novos cadastros de produtos.',confirmLabel:'Inativar',danger:true});if(!ok)return}
    try{setBusy(true);await productsApi.updateCategory(item.id,{name:item.name,active:!item.active});await load();notify({tone:'success',title:item.active?'Categoria inativada':'Categoria ativada'})}catch(e){notify({tone:'error',title:'Não foi possível alterar a categoria',message:msg(e)})}finally{setBusy(false)}}
  return <AppShell title="Categorias de produtos" subtitle="Cadastros usados na classificação dos produtos." action={<HeaderAction label="Nova categoria" onPress={create}/>}> 
-  <Pressable onPress={()=>router.push('/settings')} style={s.back}><Ionicons name="arrow-back" size={16} color={theme.green2}/><Text style={s.backText}>Voltar para Configurações</Text></Pressable>
+  
   {loading||error?<AsyncState loading={loading} error={error} onRetry={load}/>:<>
    <View style={[s.summaryRow,compact&&s.summaryCompact]}><Summary label="Total de categorias" value={String(items.length)} icon="pricetags-outline"/><Summary label="Categorias ativas" value={String(activeCount)} icon="checkmark-circle-outline"/><Summary label="Em uso" value={String(usedCount)} icon="cube-outline"/></View>
    <View style={s.panel}>
