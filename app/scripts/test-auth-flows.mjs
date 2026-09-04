@@ -31,6 +31,8 @@ test('falha de login é propagada e não estabelece sessão',async()=>{
 test('rota autenticada sem sessão redireciona para login',()=>{
   assert.equal(authGuardRedirect(false,'/home'),'/');
   assert.equal(authGuardRedirect(false,'/projects/p1'),'/');
+  assert.equal(authGuardRedirect(false,'/casa-nova'),'/');
+  assert.equal(isPublicAuthRoute('/casa-nova'),false);
 });
 
 test('rotas públicas permanecem acessíveis sem sessão',()=>{
