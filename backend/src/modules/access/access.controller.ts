@@ -1,9 +1,7 @@
 import { Body,Controller,Get,Param,Patch,Post,Req,Res } from '@nestjs/common';
-import type { Request, Response } from 'express';
 import { Public } from '../../public.decorator';
 import { Roles } from '../../roles.guard';
 import { TenantRequest } from '../../request-user';
-import { isWebAuthClient,webSessionResponse } from '../auth/auth-cookie';
 import { AcceptInvitationDto,CreateAccessProfileDto,CreateUserDto,UpdateAccessProfileDto,UpdateUserDto } from './dto/access.dto';
 import { AccessManagementService } from './access-management.service';
 import { AuthService } from '../auth/auth.service';
@@ -13,9 +11,8 @@ export class AccessController {
   constructor(private access:AccessManagementService,private auth:AuthService){}
   @Public() @Get('auth/invitations/:token') invitation(@Param('token') t:string){return this.access.invitationInfo(t)}
   @Public() @Post('auth/invitations/:token/accept')
-  async accept(@Param('token') t:string,@Body() b:AcceptInvitationDto,@Req() req:Request,@Res({passthrough:true}) res:Response){
-    const value=await this.access.acceptInvitation(t,b.password);
-    return isWebAuthClient(req)?webSessionResponse(res,value):value;
+  async accept(@Param('token') t:string,@Body() b:AcceptInvitationDto){
+    return this.access.acceptInvitation(t,b.password);
   }
   @Roles('owner','admin') @Get('users') users(@Req() r:TenantRequest){return this.access.users(r.user.tenantId)}
   @Roles('owner') @Post('users') create(@Req() r:TenantRequest,@Body() b:CreateUserDto){return this.access.createUser(r.user.tenantId,b,r.user.sub)}
