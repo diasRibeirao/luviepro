@@ -238,24 +238,32 @@ export class QuotesService {
     if(!quote)throw new NotFoundException('Orçamento não encontrado');
     if(quote.status!=='approved')throw new BadRequestException('A venda só pode ser confirmada após a aprovação');
     if(quote.order)return quote.order;
-    const order=await this.db.$transaction(async tx=>{
-      const reservations=await tx.stockReservation.findMany({where:{tenantId,quoteId:id,status:'active'}});
-      for(const item of quote.productItems){
-        const r=reservations.find(x=>x.productId===item.productId);
-        const p=await tx.product.findFirst({where:{id:item.productId,tenantId}});
-        if(!r||!p||r.quantity<item.quantity||p.stockQuantity<item.quantity)throw new BadRequestException(`Estoque/reserva inválida para ${item.productName}`);
-      }
-      // O pedido representa a venda inteira do orçamento (serviços + produtos - desconto),
-      // enquanto OrderItem continua registrando somente os produtos para movimentação de estoque.
-      const created=await tx.order.create({data:{tenantId,quoteId:id,number:quote.number,totalCents:quote.finalTotalCents,items:{create:quote.productItems.map(i=>({productId:i.productId,productName:i.productName,sku:i.sku,unit:i.unit,quantity:i.quantity,unitPriceCents:i.unitPriceCents,unitCostCents:i.unitCostCents,totalCents:i.totalCents}))}},include:{items:true}});
-      for(const item of quote.productItems){
-        const r=reservations.find(x=>x.productId===item.productId)!;
-        const p=await tx.product.update({where:{id:item.productId},data:{stockQuantity:{decrement:item.quantity},reservedQuantity:{decrement:r.quantity}}});
-        await tx.stockReservation.update({where:{id:r.id},data:{status:'fulfilled',releasedAt:new Date()}});
-        await tx.stockMovement.create({data:{tenantId,productId:item.productId,type:'sale',quantity:-item.quantity,balanceAfter:p.stockQuantity,unitCostCents:item.unitCostCents,reason:`Venda ${created.number}`,referenceType:'order',referenceId:created.id,actorUserId}});
-      }
-      return created;
-    });
+    let order;
+    try{
+      order=await this.db.$transaction(async tx=>{
+        const reservations=await tx.stockReservation.findMany({where:{tenantId,quoteId:id,status:'active'}});
+        for(const item of quote.productItems){
+          const r=reservations.find(x=>x.productId===item.productId);
+          const p=await tx.product.findFirst({where:{id:item.productId,tenantId}});
+          if(!r||!p||r.quantity<item.quantity||p.stockQuantity<item.quantity)throw new BadRequestException(`Estoque/reserva inválida para ${item.productName}`);
+        }
+        // O pedido representa a venda inteira do orçamento (serviços + produtos - desconto),
+        // enquanto OrderItem continua registrando somente os produtos para movimentação de estoque.
+        const created=await tx.order.create({data:{tenantId,quoteId:id,number:quote.number,totalCents:quote.finalTotalCents,items:{create:quote.productItems.map(i=>({productId:i.productId,productName:i.productName,sku:i.sku,unit:i.unit,quantity:i.quantity,unitPriceCents:i.unitPriceCents,unitCostCents:i.unitCostCents,totalCents:i.totalCents}))}},include:{items:true}});
+        for(const item of quote.productItems){
+          const r=reservations.find(x=>x.productId===item.productId)!;
+          const p=await tx.product.update({where:{id:item.productId},data:{stockQuantity:{decrement:item.quantity},reservedQuantity:{decrement:r.quantity}}});
+          await tx.stockReservation.update({where:{id:r.id},data:{status:'fulfilled',releasedAt:new Date()}});
+          await tx.stockMovement.create({data:{tenantId,productId:item.productId,type:'sale',quantity:-item.quantity,balanceAfter:p.stockQuantity,unitCostCents:item.unitCostCents,reason:`Venda ${created.number}`,referenceType:'order',referenceId:created.id,actorUserId}});
+        }
+        return created;
+      });
+    }catch(error){
+      if((error as {code?:string})?.code!=='P2002')throw error;
+      const existing=await this.db.order.findFirst({where:{tenantId,quoteId:id},include:{items:true}});
+      if(!existing)throw error;
+      return existing;
+    }
     await this.audit(tenantId,actorUserId,'confirm_sale','quote',id,{orderNumber:order.number,totalCents:order.totalCents,productItems:quote.productItems.length});
     return order;
   }

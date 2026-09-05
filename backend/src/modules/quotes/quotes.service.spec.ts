@@ -16,7 +16,7 @@ describe('QuotesService',()=>{
     projectTask:{findMany:jest.fn(),createMany:jest.fn()},
     product:{findFirst:jest.fn(),update:jest.fn(),updateMany:jest.fn()},
     stockReservation:{findMany:jest.fn(),findUnique:jest.fn(),create:jest.fn(),update:jest.fn()},
-    order:{create:jest.fn()},
+    order:{create:jest.fn(),findFirst:jest.fn()},
     auditLog:{create:jest.fn(),findMany:jest.fn()},
     $transaction:jest.fn(),
   };
@@ -78,6 +78,27 @@ describe('QuotesService',()=>{
     db.order.create.mockResolvedValue({id:'o1',number:'OSO-2026-001',totalCents:350000,items:[]});
     await expect(service.confirmSale('t1','q1','u1')).resolves.toEqual(expect.objectContaining({number:'OSO-2026-001',totalCents:350000}));
     expect(db.order.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({totalCents:350000,items:{create:[]}})}));
+  });
+
+
+  it('returns the order created by a concurrent request when confirm sale loses the unique race',async()=>{
+    db.quote.findFirst.mockResolvedValue({id:'q1',tenantId:'t1',number:'OSO-2026-001',status:'approved',finalTotalCents:350000,productItems:[],order:null});
+    const collision=Object.assign(new Error('Unique constraint failed'),{code:'P2002'});
+    db.$transaction.mockRejectedValueOnce(collision);
+    db.order.findFirst.mockResolvedValue({id:'o1',quoteId:'q1',number:'OSO-2026-001',totalCents:350000,items:[]});
+
+    await expect(service.confirmSale('t1','q1','u1')).resolves.toEqual(expect.objectContaining({id:'o1',quoteId:'q1'}));
+    expect(db.order.findFirst).toHaveBeenCalledWith({where:{tenantId:'t1',quoteId:'q1'},include:{items:true}});
+    expect(db.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('does not hide an unrelated P2002 when no order exists for the quote',async()=>{
+    db.quote.findFirst.mockResolvedValue({id:'q1',tenantId:'t1',number:'OSO-2026-001',status:'approved',finalTotalCents:350000,productItems:[],order:null});
+    const collision=Object.assign(new Error('Unique constraint failed'),{code:'P2002'});
+    db.$transaction.mockRejectedValueOnce(collision);
+    db.order.findFirst.mockResolvedValue(null);
+
+    await expect(service.confirmSale('t1','q1','u1')).rejects.toBe(collision);
   });
 
   it('duplicates a rejected proposal preserving the filled negotiation data',async()=>{
