@@ -50,45 +50,27 @@ type StandardItem=(typeof essentials)[number];
 @Injectable() export class CasaNovaService{
   constructor(private db:PrismaService){}
 
-  private async dbStep<T>(step:string,tenantId:string,run:()=>Promise<T>):Promise<T>{
-    try{return await run()}catch(exception){
-      const error=exception as Error&{code?:unknown;meta?:unknown;clientVersion?:unknown};
-      console.error(JSON.stringify({
-        level:'error',
-        event:'casa_nova_db_error',
-        step,
-        tenantId,
-        name:error instanceof Error?error.name:'UnknownError',
-        message:error instanceof Error?error.message:String(exception),
-        ...(typeof error?.code==='string'?{code:error.code}:{}),
-        ...(error?.meta&&typeof error.meta==='object'?{meta:error.meta}:{}),
-        ...(typeof error?.clientVersion==='string'?{clientVersion:error.clientVersion}:{}),
-      }));
-      throw exception;
-    }
-  }
-
   private async ensureList(tenantId:string){
-    let list=await this.dbStep('ensureList.findUnique',tenantId,()=>this.db.casaNovaList.findUnique({where:{tenantId}}));
-    if(!list)list=await this.dbStep('ensureList.create',tenantId,()=>this.db.casaNovaList.create({data:{tenantId,guests:2,defaultsInitialized:false}}));
+    let list=await this.db.casaNovaList.findUnique({where:{tenantId}});
+    if(!list)list=await this.db.casaNovaList.create({data:{tenantId,guests:2,defaultsInitialized:false}});
     if(!list.defaultsInitialized){
       await this.addMissingStandards(tenantId,list.id);
-      list=await this.dbStep('ensureList.markDefaultsInitialized',tenantId,()=>this.db.casaNovaList.update({where:{tenantId},data:{defaultsInitialized:true}}));
+      list=await this.db.casaNovaList.update({where:{tenantId},data:{defaultsInitialized:true}});
     }
     return list;
   }
 
   private async addMissingStandards(tenantId:string,listId:string){
-    const existing=await this.dbStep('addMissingStandards.findExisting',tenantId,()=>this.db.casaNovaItem.findMany({where:{tenantId,listId},select:{itemName:true}}));
+    const existing=await this.db.casaNovaItem.findMany({where:{tenantId,listId},select:{itemName:true}});
     const names=new Set(existing.map(x=>x.itemName.trim().toLocaleLowerCase('pt-BR')));
     const pending=essentials.filter(x=>!names.has(x[0].toLocaleLowerCase('pt-BR')));
-    if(pending.length)await this.dbStep('addMissingStandards.createMany',tenantId,()=>this.db.casaNovaItem.createMany({data:pending.map(([itemName,category,baseQuantity,unit,isScalable,notes]:StandardItem)=>({tenantId,listId,itemName,category,baseQuantity,unit,isScalable,checked:false,notes}))}));
+    if(pending.length)await this.db.casaNovaItem.createMany({data:pending.map(([itemName,category,baseQuantity,unit,isScalable,notes]:StandardItem)=>({tenantId,listId,itemName,category,baseQuantity,unit,isScalable,checked:false,notes}))});
     return {added:pending.length,total:existing.length+pending.length};
   }
 
   async get(tenantId:string){
     const list=await this.ensureList(tenantId);
-    const items=await this.dbStep('get.findItems',tenantId,()=>this.db.casaNovaItem.findMany({where:{tenantId,listId:list.id},orderBy:[{checked:'asc'},{category:'asc'},{itemName:'asc'}]}));
+    const items=await this.db.casaNovaItem.findMany({where:{tenantId,listId:list.id},orderBy:[{checked:'asc'},{category:'asc'},{itemName:'asc'}]});
     return {...list,items};
   }
 
