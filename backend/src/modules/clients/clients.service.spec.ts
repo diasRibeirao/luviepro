@@ -7,12 +7,14 @@ describe('ClientsService',()=>{
     planLimit:{findUnique:jest.fn()},
     client:{findMany:jest.fn(),findFirst:jest.fn(),count:jest.fn(),create:jest.fn(),update:jest.fn()},
     auditLog:{create:jest.fn()},
+    $transaction:jest.fn(),
   };
   let service:ClientsService;
 
   beforeEach(()=>{
     jest.clearAllMocks();
     db.auditLog.create.mockResolvedValue({});
+    db.$transaction.mockImplementation(async(fn:any)=>fn(db));
     service=new ClientsService(db);
   });
 

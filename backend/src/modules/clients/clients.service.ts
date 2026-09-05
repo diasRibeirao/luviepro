@@ -46,17 +46,54 @@ export class ClientsService {
   list(tenantId:string){return this.db.client.findMany({where:{tenantId},orderBy:{name:'asc'}});}
 
   async create(tenantId:string,data:CreateClientDto,actorUserId?:string){
-    await this.assertCapacity(tenantId);
-    const client=await this.db.client.create({data:{tenantId,...this.normalize(data)}});
+    const normalized=this.normalize(data);
+    let client=null;
+    for(let attempt=0;attempt<3&&!client;attempt++){
+      try{
+        client=await this.db.$transaction(async tx=>{
+          const tenant=await tx.tenant.findUnique({where:{id:tenantId}});
+          if(!tenant)throw new NotFoundException('Tenant não encontrada');
+          const limit=await tx.planLimit.findUnique({where:{plan:tenant.plan}});
+          if(limit){
+            const used=await tx.client.count({where:{tenantId,active:true}});
+            if(capacityReached(limit.maxClients<0?null:limit.maxClients,used))throw new BadRequestException('Limite de clientes do plano atingido');
+          }
+          return tx.client.create({data:{tenantId,...normalized}});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    if(!client)throw new BadRequestException('O cadastro de clientes foi alterado por outra operação. Tente novamente.');
     await this.audit(tenantId,actorUserId,'create',client.id,{type:client.type,document:client.document});
     return client;
   }
 
   async update(tenantId:string,id:string,data:UpdateClientDto,actorUserId?:string){
-    const client=await this.db.client.findFirst({where:{id,tenantId}});
-    if(!client)throw new NotFoundException('Cliente não encontrado');
-    if(data.active===true&&!client.active)await this.assertCapacity(tenantId);
-    const updated=await this.db.client.update({where:{id},data:this.normalize(data,client)});
+    let updated=null;
+    for(let attempt=0;attempt<3&&!updated;attempt++){
+      try{
+        updated=await this.db.$transaction(async tx=>{
+          const client=await tx.client.findFirst({where:{id,tenantId}});
+          if(!client)throw new NotFoundException('Cliente não encontrado');
+          if(data.active===true&&!client.active){
+            const tenant=await tx.tenant.findUnique({where:{id:tenantId}});
+            if(!tenant)throw new NotFoundException('Tenant não encontrada');
+            const limit=await tx.planLimit.findUnique({where:{plan:tenant.plan}});
+            if(limit){
+              const used=await tx.client.count({where:{tenantId,active:true}});
+              if(capacityReached(limit.maxClients<0?null:limit.maxClients,used))throw new BadRequestException('Limite de clientes do plano atingido');
+            }
+          }
+          return tx.client.update({where:{id},data:this.normalize(data,client)});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    if(!updated)throw new BadRequestException('O cliente foi alterado por outra operação. Atualize a lista e tente novamente.');
     await this.audit(tenantId,actorUserId,'update',id,{type:updated.type,document:updated.document,active:updated.active});
     return updated;
   }

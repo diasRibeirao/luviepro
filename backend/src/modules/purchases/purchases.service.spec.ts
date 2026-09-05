@@ -2,9 +2,9 @@ import {ConflictException,NotFoundException} from '@nestjs/common';
 import {PurchasesService} from './purchases.service';
 
 describe('PurchasesService supplier management',()=>{
- const db:any={supplier:{findFirst:jest.fn(),create:jest.fn(),update:jest.fn(),findMany:jest.fn()},auditLog:{create:jest.fn()}};
+ const db:any={supplier:{findFirst:jest.fn(),create:jest.fn(),update:jest.fn(),findMany:jest.fn()},auditLog:{create:jest.fn()},$transaction:jest.fn()};
  const service=new PurchasesService(db);
- beforeEach(()=>jest.clearAllMocks());
+ beforeEach(()=>{jest.clearAllMocks();db.$transaction.mockImplementation(async(fn:any)=>fn(db));});
 
  it('lists active and inactive suppliers in a stable order',async()=>{
   db.supplier.findMany.mockResolvedValue([]);

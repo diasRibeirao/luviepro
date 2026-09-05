@@ -16,4 +16,10 @@ describe('Purchase concurrency safeguards',()=>{
     expect(source).toContain("costCents:weightedCost");
   });
 
+
+  it('serializes supplier document creation checks',()=>{expect(source).toContain("tx.supplier.findFirst({where:{tenantId,document}}");expect(source).toContain("tx.supplier.create({data:{tenantId,name:b.name.trim(),document");});
+
+  it('serializes supplier document updates',()=>{expect(source).toContain("const supplier=await tx.supplier.findFirst({where:{id,tenantId}})");expect(source).toContain("return tx.supplier.update({where:{id}");});
+
+  it('serializes purchase cancellation against receipts and payments',()=>{expect(source).toContain("const current=await tx.purchaseOrder.findFirst({where:{id,tenantId},include:includePurchase})");expect(source).toContain("current.items.some(i=>i.receivedQuantity>0)");});
 });

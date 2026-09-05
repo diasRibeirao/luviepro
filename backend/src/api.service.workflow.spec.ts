@@ -7,7 +7,7 @@ describe('ApiService workflows',()=>{
   it('envia orçamento e calcula validade',async()=>{
     const quote={id:'q1',tenantId:'t1',status:'draft',validityDays:30,sentAt:null,validUntil:null};
     const db:any={
-      quote:{findFirst:jest.fn().mockResolvedValue(quote),update:jest.fn().mockImplementation(({data}:any)=>Promise.resolve({...quote,...data}))},
+      quote:{findFirst:jest.fn().mockResolvedValue(quote),update:jest.fn().mockImplementation(({data}:any)=>Promise.resolve({...quote,...data})),updateMany:jest.fn().mockResolvedValue({count:1}),findUniqueOrThrow:jest.fn().mockImplementation(()=>Promise.resolve({...quote,status:'sent',sentAt:new Date(),validUntil:new Date()}))},
       auditLog:{create:jest.fn().mockResolvedValue({})},
       $transaction:jest.fn().mockImplementation(async(fn:any)=>fn(db)),
     };

@@ -91,41 +91,48 @@ export class ProjectsService {
   }
 
   async createProjectStatus(tenantId: string, data: CreateProjectStatusDto, userId?: string) {
-    const store = this.db.projectStatus;
     const key = data.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     if (!key) throw new BadRequestException('Nome de status inválido');
-    const exists = await store.findUnique({ where: { tenantId_key: { tenantId, key } } });
-    if (exists) throw new ConflictException('Já existe um status com este nome');
-    const status = await store.create({
-      data: {
-        tenantId,
-        key,
-        name: data.name.trim(),
-        color: data.color ?? '#2F6B4F',
-        position: data.position ?? await store.count({ where: { tenantId } }),
-      },
-    });
+    let status=null;
+    for(let attempt=0;attempt<3&&!status;attempt++){
+      try{
+        status=await this.db.$transaction(async tx=>{
+          const exists=await tx.projectStatus.findUnique({ where: { tenantId_key: { tenantId, key } } });
+          if (exists) throw new ConflictException('Já existe um status com este nome');
+          const position=data.position ?? await tx.projectStatus.count({ where: { tenantId } });
+          return tx.projectStatus.create({data:{tenantId,key,name:data.name.trim(),color:data.color ?? '#2F6B4F',position}});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        const code=(error as {code?:string})?.code;
+        if(code==='P2034'&&attempt<2)continue;
+        if(code==='P2002')throw new ConflictException('Já existe um status com este nome');
+        throw error;
+      }
+    }
+    if(!status)throw new ConflictException('O catálogo de status foi alterado por outra operação. Tente novamente.');
     await this.audit(tenantId, userId, 'create', 'project_status', status.id, { key, name: status.name });
     return status;
   }
 
   async updateProjectStatus(tenantId: string, id: string, data: UpdateProjectStatusDto, userId?: string) {
-    const store = this.db.projectStatus;
-    const status = await store.findFirst({ where: { id, tenantId } });
-    if (!status) throw new NotFoundException('Status não encontrado');
-    if (data.active === false) {
-      const inUse = await this.db.project.count({ where: { tenantId, status: status.key } });
-      if (inUse) throw new BadRequestException(`Este status possui ${inUse} projeto(s). Mova os projetos antes de desativar.`);
+    let updated=null;
+    for(let attempt=0;attempt<3&&!updated;attempt++){
+      try{
+        updated=await this.db.$transaction(async tx=>{
+          const status=await tx.projectStatus.findFirst({ where: { id, tenantId } });
+          if (!status) throw new NotFoundException('Status não encontrado');
+          if (data.active === false) {
+            const inUse = await tx.project.count({ where: { tenantId, status: status.key } });
+            if (inUse) throw new BadRequestException(`Este status possui ${inUse} projeto(s). Mova os projetos antes de desativar.`);
+          }
+          return tx.projectStatus.update({where:{id},data:{name:data.name?.trim() ?? status.name,color:data.color ?? status.color,position:data.position ?? status.position,active:data.active ?? status.active}});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
     }
-    const updated = await store.update({
-      where: { id },
-      data: {
-        name: data.name?.trim() ?? status.name,
-        color: data.color ?? status.color,
-        position: data.position ?? status.position,
-        active: data.active ?? status.active,
-      },
-    });
+    if(!updated)throw new ConflictException('O status foi alterado por outra operação. Atualize a lista e tente novamente.');
     await this.audit(tenantId, userId, 'update', 'project_status', id, { name: updated.name, active: updated.active });
     return updated;
   }
@@ -200,26 +207,36 @@ export class ProjectsService {
   }
 
   async importQuoteStages(tenantId: string, projectId: string, actorUserId?: string) {
-    const project = await this.db.project.findFirst({
-      where: { id: projectId, tenantId },
-      include: { quote: { include: { items: { where: { tenantId }, include: { stages: { where: { tenantId }, orderBy: { sequence: 'asc' } } }, orderBy: { id: 'asc' } } } } },
-    });
-    if (!project) throw new NotFoundException('Projeto não encontrado');
-    if (!project.quote) throw new BadRequestException('Este projeto não possui orçamento vinculado');
-    const existing = await this.db.projectTask.findMany({ where: { tenantId, projectId }, select: { title: true } });
-    const titles = new Set(existing.map(task => task.title));
-    const tasks = project.quote.items.flatMap(item => item.stages.map(stage => ({
-      tenantId,
-      projectId,
-      title: `${item.serviceName} — ${stage.description}`,
-      description: `Etapa importada automaticamente do serviço ${item.serviceName}${stage.duration ? ` · Duração prevista: ${stage.duration}` : ''}`,
-      priority: 'medium',
-      assigneeUserId: project.assigneeUserId,
-    }))).filter(task => !titles.has(task.title));
-    if (tasks.length) await this.db.projectTask.createMany({ data: tasks });
-    if (project.startDate) await this.rescheduleImportedStages(tenantId, projectId, project.quote.id, project.startDate);
-    await this.audit(tenantId, actorUserId, 'import_quote_stages', 'project', projectId, { imported: tasks.length, quoteId: project.quote.id });
-    return { ok: true, imported: tasks.length };
+    let imported=0;
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        imported=await this.db.$transaction(async tx=>{
+          const project = await tx.project.findFirst({
+            where: { id: projectId, tenantId },
+            include: { quote: { include: { items: { where: { tenantId }, include: { stages: { where: { tenantId }, orderBy: { sequence: 'asc' } } }, orderBy: { id: 'asc' } } } } },
+          });
+          if (!project) throw new NotFoundException('Projeto não encontrado');
+          if (!project.quote) throw new BadRequestException('Este projeto não possui orçamento vinculado');
+          const existing = await tx.projectTask.findMany({ where: { tenantId, projectId }, select: { title: true } });
+          const titles = new Set(existing.map(task => task.title));
+          const tasks = project.quote.items.flatMap(item => item.stages.map(stage => ({
+            tenantId,projectId,title:`${item.serviceName} — ${stage.description}`,
+            description:`Etapa importada automaticamente do serviço ${item.serviceName}${stage.duration ? ` · Duração prevista: ${stage.duration}` : ''}`,
+            priority:'medium',assigneeUserId:project.assigneeUserId,
+          }))).filter(task => !titles.has(task.title));
+          if (tasks.length) await tx.projectTask.createMany({ data: tasks });
+          return tasks.length;
+        },{isolationLevel:'Serializable'});
+        break;
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    const project=await this.db.project.findFirst({where:{id:projectId,tenantId},select:{quoteId:true,startDate:true}});
+    if(project?.quoteId&&project.startDate)await this.rescheduleImportedStages(tenantId,projectId,project.quoteId,project.startDate);
+    await this.audit(tenantId, actorUserId, 'import_quote_stages', 'project', projectId, { imported, quoteId: project?.quoteId??null });
+    return { ok: true, imported };
   }
 
   async createProjectNote(tenantId: string, projectId: string, content: string, actorUserId?: string) {

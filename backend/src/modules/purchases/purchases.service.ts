@@ -11,27 +11,49 @@ export class PurchasesService {
   suppliers(tenantId:string){return this.db.supplier.findMany({where:{tenantId},orderBy:[{active:'desc'},{name:'asc'}]})}
 
   async createSupplier(tenantId:string,b:CreateSupplierDto){
-    const document=b.document?.trim();
-    if(document&&await this.db.supplier.findFirst({where:{tenantId,document}}))throw new ConflictException('Já existe um fornecedor com este CPF/CNPJ');
-    return this.db.supplier.create({data:{tenantId,name:b.name.trim(),document:b.document?.trim()||null,email:b.email?.trim()||null,phone:b.phone?.trim()||null,contactName:b.contactName?.trim()||null,notes:b.notes?.trim()||null,active:b.active!==false}})
+    const document=b.document?.trim()||null;
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        return await this.db.$transaction(async tx=>{
+          if(document&&await tx.supplier.findFirst({where:{tenantId,document}}))throw new ConflictException('Já existe um fornecedor com este CPF/CNPJ');
+          return tx.supplier.create({data:{tenantId,name:b.name.trim(),document,email:b.email?.trim()||null,phone:b.phone?.trim()||null,contactName:b.contactName?.trim()||null,notes:b.notes?.trim()||null,active:b.active!==false}});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        const code=(error as {code?:string})?.code;
+        if(code==='P2034'&&attempt<2)continue;
+        if(code==='P2002')throw new ConflictException('Já existe um fornecedor com este CPF/CNPJ');
+        throw error;
+      }
+    }
+    throw new ConflictException('O cadastro de fornecedores foi alterado por outra operação. Tente novamente.');
   }
 
   async updateSupplier(tenantId:string,id:string,b:UpdateSupplierDto){
-    const supplier=await this.db.supplier.findFirst({where:{id,tenantId}});
-    if(!supplier)throw new NotFoundException('Fornecedor não encontrado');
-
     const document=b.document?.trim();
-    if(document&&await this.db.supplier.findFirst({where:{tenantId,document,id:{not:id}}}))throw new ConflictException('Já existe um fornecedor com este CPF/CNPJ');
-
-    return this.db.supplier.update({where:{id},data:{
-      ...(b.name!==undefined?{name:b.name.trim()}:{}),
-      ...(b.document!==undefined?{document:b.document.trim()||null}:{}),
-      ...(b.email!==undefined?{email:b.email.trim()||null}:{}),
-      ...(b.phone!==undefined?{phone:b.phone.trim()||null}:{}),
-      ...(b.contactName!==undefined?{contactName:b.contactName.trim()||null}:{}),
-      ...(b.notes!==undefined?{notes:b.notes.trim()||null}:{}),
-      ...(b.active!==undefined?{active:b.active}:{}),
-    }});
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        return await this.db.$transaction(async tx=>{
+          const supplier=await tx.supplier.findFirst({where:{id,tenantId}});
+          if(!supplier)throw new NotFoundException('Fornecedor não encontrado');
+          if(document&&await tx.supplier.findFirst({where:{tenantId,document,id:{not:id}}}))throw new ConflictException('Já existe um fornecedor com este CPF/CNPJ');
+          return tx.supplier.update({where:{id},data:{
+            ...(b.name!==undefined?{name:b.name.trim()}:{}),
+            ...(b.document!==undefined?{document:b.document.trim()||null}:{}),
+            ...(b.email!==undefined?{email:b.email.trim()||null}:{}),
+            ...(b.phone!==undefined?{phone:b.phone.trim()||null}:{}),
+            ...(b.contactName!==undefined?{contactName:b.contactName.trim()||null}:{}),
+            ...(b.notes!==undefined?{notes:b.notes.trim()||null}:{}),
+            ...(b.active!==undefined?{active:b.active}:{}),
+          }});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        const code=(error as {code?:string})?.code;
+        if(code==='P2034'&&attempt<2)continue;
+        if(code==='P2002')throw new ConflictException('Já existe um fornecedor com este CPF/CNPJ');
+        throw error;
+      }
+    }
+    throw new ConflictException('O fornecedor foi alterado por outra operação. Atualize a lista e tente novamente.');
   }
 
   list(tenantId:string){return this.db.purchaseOrder.findMany({where:{tenantId},include:includePurchase,orderBy:{createdAt:'desc'}})}
@@ -87,11 +109,23 @@ export class PurchasesService {
   }
 
   async update(tenantId:string,id:string,b:UpdatePurchaseDto,actor?:string){
-    const current=await this.detail(tenantId,id);
-    if(current.status==='received'&&b.status==='canceled')throw new BadRequestException('Compra já recebida não pode ser cancelada');
-    if(b.status==='canceled'&&current.items.some(i=>i.receivedQuantity>0))throw new BadRequestException('Compra com recebimento parcial não pode ser cancelada');
-    if(b.status==='canceled'&&current.amountPaidCents>0)throw new BadRequestException('Compra com pagamento registrado não pode ser cancelada');
-    const row=await this.db.purchaseOrder.update({where:{id},data:{...(b.status?{status:b.status}:{}),...(b.expectedAt!==undefined?{expectedAt:b.expectedAt?new Date(b.expectedAt):null}:{}),...(b.paymentDueAt!==undefined?{paymentDueAt:b.paymentDueAt?new Date(b.paymentDueAt):null}:{}),...(b.notes!==undefined?{notes:b.notes.trim()||null}:{}),...(b.status==='canceled'?{canceledAt:new Date()}:{}),},include:includePurchase});
+    let row:any=null;
+    for(let attempt=0;attempt<3&&!row;attempt++){
+      try{
+        row=await this.db.$transaction(async tx=>{
+          const current=await tx.purchaseOrder.findFirst({where:{id,tenantId},include:includePurchase});
+          if(!current)throw new NotFoundException('Compra não encontrada');
+          if(current.status==='received'&&b.status==='canceled')throw new BadRequestException('Compra já recebida não pode ser cancelada');
+          if(b.status==='canceled'&&current.items.some(i=>i.receivedQuantity>0))throw new BadRequestException('Compra com recebimento parcial não pode ser cancelada');
+          if(b.status==='canceled'&&current.amountPaidCents>0)throw new BadRequestException('Compra com pagamento registrado não pode ser cancelada');
+          return tx.purchaseOrder.update({where:{id},data:{...(b.status?{status:b.status}:{}),...(b.expectedAt!==undefined?{expectedAt:b.expectedAt?new Date(b.expectedAt):null}:{}),...(b.paymentDueAt!==undefined?{paymentDueAt:b.paymentDueAt?new Date(b.paymentDueAt):null}:{}),...(b.notes!==undefined?{notes:b.notes.trim()||null}:{}),...(b.status==='canceled'?{canceledAt:new Date()}:{}),},include:includePurchase});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    if(!row)throw new ConflictException('A compra foi alterada por outra operação. Atualize a compra e tente novamente.');
     await this.audit(tenantId,actor,'update',id,{status:row.status});
     return row;
   }

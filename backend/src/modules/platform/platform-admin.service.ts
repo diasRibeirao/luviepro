@@ -89,7 +89,7 @@ export class PlatformAdminService {
   async updateMaster(id:string,data:PlatformMasterUpdateDto,currentAdminId:string){
     if(id===currentAdminId&&data.active===false)throw new BadRequestException('Você não pode inativar o próprio usuário Master');
     const email=data.email?.trim().toLowerCase();
-    let updated:any=null;
+    let updated=null;
     for(let attempt=0;attempt<3&&!updated;attempt++){
       try{
         updated=await this.db.$transaction(async tx=>{
@@ -134,11 +134,26 @@ export class PlatformAdminService {
     const [targetPlan,currentPlan]=await Promise.all([this.db.planLimit.findUnique({where:{plan}}),this.db.planLimit.findUnique({where:{plan:tenant.plan}})]);
     if(!targetPlan||(!targetPlan.active&&plan!==tenant.plan))throw new BadRequestException('Plano indisponível');
     if(data.plan&&targetPlan.sortOrder<(currentPlan?.sortOrder??0)&&tenant.subscriptionExpiresAt&&tenant.subscriptionExpiresAt.getTime()>Date.now()){
-      const existing=await this.db.subscription.findFirst({where:{tenantId:id,status:'scheduled'}});
-      if(existing)throw new ConflictException('Já existe uma alteração de plano agendada para esta empresa');
-      const limit=await this.db.planLimit.findUnique({where:{plan}});if(!limit)throw new BadRequestException('Plano indisponível');
-      const startsAt=tenant.subscriptionExpiresAt,expiresAt=periodEnd(startsAt,period),subscription=await this.db.subscription.create({data:{tenantId:id,plan,period,amountCents:periodPrice(limit,period),status:'scheduled',startsAt,expiresAt}});
-      await this.audit(id,'platform_schedule_downgrade','subscription',subscription.id,{plan,period,effectiveAt:startsAt});
+      let subscription=null;
+      for(let attempt=0;attempt<3&&!subscription;attempt++){
+        try{
+          subscription=await this.db.$transaction(async tx=>{
+            const freshTenant=await tx.tenant.findUnique({where:{id}});
+            if(!freshTenant)throw new NotFoundException('Empresa não encontrada');
+            const existing=await tx.subscription.findFirst({where:{tenantId:id,status:'scheduled'}});
+            if(existing)throw new ConflictException('Já existe uma alteração de plano agendada para esta empresa');
+            const limit=await tx.planLimit.findUnique({where:{plan}});
+            if(!limit?.active)throw new BadRequestException('Plano indisponível');
+            const startsAt=freshTenant.subscriptionExpiresAt!;
+            return tx.subscription.create({data:{tenantId:id,plan,period,amountCents:periodPrice(limit,period),status:'scheduled',startsAt,expiresAt:periodEnd(startsAt,period)}});
+          },{isolationLevel:'Serializable'});
+        }catch(error){
+          if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+          throw error;
+        }
+      }
+      if(!subscription)throw new ConflictException('A alteração de plano foi modificada por outra operação. Tente novamente.');
+      await this.audit(id,'platform_schedule_downgrade','subscription',subscription.id,{plan,period,effectiveAt:subscription.startsAt});
       return {...tenant,scheduledSubscription:subscription};
     }
     return this.updateTenant(id,data);
@@ -147,31 +162,45 @@ export class PlatformAdminService {
   async cancelScheduledChange(id:string){
     const scheduled=await this.db.subscription.findFirst({where:{tenantId:id,status:'scheduled'}});
     if(!scheduled)throw new NotFoundException('Nenhuma alteração agendada para esta empresa');
-    const cancelled=await this.db.subscription.update({where:{id:scheduled.id},data:{status:'cancelled'}});
+    const claimed=await this.db.subscription.updateMany({where:{id:scheduled.id,tenantId:id,status:'scheduled'},data:{status:'cancelled'}});
+    if(claimed.count!==1)throw new ConflictException('A alteração agendada já foi processada ou cancelada por outra operação');
+    const cancelled=await this.db.subscription.findUniqueOrThrow({where:{id:scheduled.id}});
     await this.audit(id,'platform_cancel_scheduled_change','subscription',scheduled.id,{plan:scheduled.plan,period:scheduled.period});
     return {ok:true,subscription:cancelled};
   }
 
   async createTenant(data:PlatformCreateTenantDto,platformAdminId:string){
     const email=String(data.ownerEmail??'').trim().toLowerCase(),company=String(data.company??'').trim(),ownerName=String(data.ownerName??'').trim();
-    if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já possui acesso ao LuviePro');
-    const pending=await this.db.userInvitation.findFirst({where:{email,status:'pending',expiresAt:{gt:new Date()}}});
-    if(pending)throw new ConflictException('Já existe um convite pendente para este e-mail');
-    const limit=await this.db.planLimit.findUnique({where:{plan:data.plan}});if(!limit?.active)throw new BadRequestException('Plano indisponível');
-    const amountCents=periodPrice(limit,data.period);
     const now=new Date(),trialEnd=new Date(now);trialEnd.setDate(trialEnd.getDate()+14);
     const slug=`${company.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'empresa'}-${Date.now().toString(36)}`;
     const token=randomBytes(32).toString('hex'),expiresAt=new Date(Date.now()+Number(process.env.INVITATION_TTL_HOURS||48)*3600000);
-    const result=await this.db.$transaction(async tx=>{
-      const tenant=await tx.tenant.create({data:{name:company,slug,responsibleName:ownerName,phone:data.phone||null,contactEmail:email,plan:data.plan,planPeriod:data.period,subscriptionExpiresAt:trialEnd}});
-      await tx.subscription.create({data:{tenantId:tenant.id,plan:data.plan,period:data.period,amountCents,status:'trial',startsAt:now,expiresAt:trialEnd}});
-      const invitation=await tx.userInvitation.create({data:{tenantId:tenant.id,name:ownerName,email,role:'owner',tokenHash:this.invitationHash(token),expiresAt},select:{id:true,email:true,name:true,expiresAt:true}});
-      return {tenant,invitation};
-    });
-    const inviteUrl=this.invitationUrl(token);let delivery:any={sent:false,reason:'not_configured'};
+    let result=null;
+    for(let attempt=0;attempt<3&&!result;attempt++){
+      try{
+        result=await this.db.$transaction(async tx=>{
+          if(await tx.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já possui acesso ao LuviePro');
+          const pending=await tx.userInvitation.findFirst({where:{email,status:'pending',expiresAt:{gt:new Date()}}});
+          if(pending)throw new ConflictException('Já existe um convite pendente para este e-mail');
+          const limit=await tx.planLimit.findUnique({where:{plan:data.plan}});
+          if(!limit?.active)throw new BadRequestException('Plano indisponível');
+          const amountCents=periodPrice(limit,data.period);
+          const tenant=await tx.tenant.create({data:{name:company,slug,responsibleName:ownerName,phone:data.phone||null,contactEmail:email,plan:data.plan,planPeriod:data.period,subscriptionExpiresAt:trialEnd}});
+          await tx.subscription.create({data:{tenantId:tenant.id,plan:data.plan,period:data.period,amountCents,status:'trial',startsAt:now,expiresAt:trialEnd}});
+          const invitation=await tx.userInvitation.create({data:{tenantId:tenant.id,name:ownerName,email,role:'owner',tokenHash:this.invitationHash(token),expiresAt},select:{id:true,email:true,name:true,expiresAt:true}});
+          return {tenant,invitation};
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        const code=(error as {code?:string})?.code;
+        if(code==='P2034'&&attempt<2)continue;
+        if(code==='P2002')throw new ConflictException('Este e-mail ou empresa já foi cadastrado por outra operação');
+        throw error;
+      }
+    }
+    if(!result)throw new ConflictException('O cadastro da empresa foi alterado por outra operação. Tente novamente.');
+    const inviteUrl=this.invitationUrl(token);let delivery:{sent:boolean;reason?:string}={sent:false,reason:'not_configured'};
     try{delivery=await this.mail.sendUserInvitation({to:email,name:ownerName,tenantName:company,roleLabel:'Proprietário',inviteUrl,expiresAt});}catch{delivery={sent:false,reason:'send_failed'};}
-    await this.audit(result.tenant.id,'platform_create_tenant','tenant',result.tenant.id,{platformAdminId,plan:data.plan,period:data.period,email,delivery:delivery.sent?'sent':delivery.reason});
-    return {tenant:result.tenant,invitation:{...result.invitation,delivery,inviteUrl}};
+    await this.audit(result.tenant.id,'platform_create_tenant','tenant',result.tenant.id,{platformAdminId,plan:data.plan,period:data.period,ownerEmail:email,delivery:delivery.sent?'sent':delivery.reason});
+    return {...result.tenant,invitation:{...result.invitation,delivery,inviteUrl}};
   }
 
   async updateTenant(id:string,data:PlatformTenantDto){
@@ -214,9 +243,23 @@ export class PlatformAdminService {
   }
 
   async updatePlan(plan:string,data:PlatformPlanDto){
-    const current=await this.db.planLimit.findUnique({where:{plan}});if(!current)throw new NotFoundException('Plano não encontrado');
-    if(data.active===false){const scheduled=await this.db.subscription.count({where:{plan,status:'scheduled'}});if(scheduled)throw new ConflictException('Cancele as alterações agendadas deste plano antes de inativá-lo');}
-    return this.db.planLimit.update({where:{plan},data});
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        return await this.db.$transaction(async tx=>{
+          const current=await tx.planLimit.findUnique({where:{plan}});
+          if(!current)throw new NotFoundException('Plano não encontrado');
+          if(data.active===false){
+            const scheduled=await tx.subscription.count({where:{plan,status:'scheduled'}});
+            if(scheduled)throw new ConflictException('Cancele as alterações agendadas deste plano antes de inativá-lo');
+          }
+          return tx.planLimit.update({where:{plan},data});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    throw new ConflictException('O plano foi alterado por outra operação. Atualize a lista e tente novamente.');
   }
 
   async createPlan(data:PlatformCreatePlanDto){

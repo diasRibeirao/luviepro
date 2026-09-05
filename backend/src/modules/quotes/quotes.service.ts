@@ -216,8 +216,27 @@ export class QuotesService {
     const discountBps=Math.max(0,Math.min(10000,Number(data.discountBps??0)));
     const finalTotalCents=Math.round(totalCents*(10000-discountBps)/10000);
     const year=new Date().getFullYear();
-    const seq=await this.db.quoteSequence.upsert({where:{tenantId_year:{tenantId,year}},create:{tenantId,year,lastNumber:1},update:{lastNumber:{increment:1}}});
-    const quote=await this.db.quote.create({data:{tenantId,clientId:client.id,number:this.documentNumber(this.documentPrefix(items.length,productItems.length),year,seq.lastNumber),totalCents,discountBps,finalTotalCents,validityDays:Number(data.validityDays??30),notes:data.notes,paymentLinkUrl:data.paymentLinkUrl?.trim()||null,items:{create:items},productItems:{create:productItems}},include:{client:true,items:{include:{stages:true}},productItems:true}});
+    let quote=null;
+    for(let attempt=0;attempt<3&&!quote;attempt++){
+      try{
+        quote=await this.db.$transaction(async tx=>{
+          const tenant=await tx.tenant.findUnique({where:{id:tenantId}});
+          if(!tenant)throw new NotFoundException('Tenant não encontrada');
+          const limit=await tx.planLimit.findUnique({where:{plan:tenant.plan}});
+          if(limit){
+            const month=new Date();month.setDate(1);month.setHours(0,0,0,0);
+            const used=await tx.quote.count({where:{tenantId,createdAt:{gte:month}}});
+            if(capacityReached(limit.maxQuotesPerMonth<0?null:limit.maxQuotesPerMonth,used))throw new BadRequestException('Limite mensal de orçamentos atingido');
+          }
+          const seq=await tx.quoteSequence.upsert({where:{tenantId_year:{tenantId,year}},create:{tenantId,year,lastNumber:1},update:{lastNumber:{increment:1}}});
+          return tx.quote.create({data:{tenantId,clientId:client.id,number:this.documentNumber(this.documentPrefix(items.length,productItems.length),year,seq.lastNumber),totalCents,discountBps,finalTotalCents,validityDays:Number(data.validityDays??30),notes:data.notes,paymentLinkUrl:data.paymentLinkUrl?.trim()||null,items:{create:items},productItems:{create:productItems}},include:{client:true,items:{include:{stages:true}},productItems:true}});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    if(!quote)throw new ConflictException('A criação do orçamento sofreu concorrência. Tente novamente.');
     await this.audit(tenantId,actorUserId,'create','quote',quote.id,{number:quote.number,finalTotalCents});
     return quote;
   }
@@ -228,7 +247,12 @@ export class QuotesService {
     if(quote.clientDecision)throw new BadRequestException('A decisão registrada pelo cliente não pode ser reaberta');
     if(!isQuoteStatus(quote.status)||!isQuoteStatus(status)||quote.status==='approved'||!QUOTE_TRANSITIONS[quote.status].includes(status))throw new BadRequestException(`Não é possível alterar orçamento ${quote.status} para ${status}`);
     const now=new Date(),validUntil=status==='sent'?new Date(now.getTime()+quote.validityDays*86400000):quote.validUntil;
-    const updated=await this.db.$transaction(async tx=>{if(status==='rejected')await this.releaseProducts(tx,tenantId,id);return tx.quote.update({where:{id},data:{status,sentAt:status==='sent'?now:quote.sentAt,validUntil:status==='sent'?validUntil:quote.validUntil}})});
+    const updated=await this.db.$transaction(async tx=>{
+      if(status==='rejected')await this.releaseProducts(tx,tenantId,id);
+      const claimed=await tx.quote.updateMany({where:{id,tenantId,status:quote.status,clientDecision:null},data:{status,sentAt:status==='sent'?now:quote.sentAt,validUntil:status==='sent'?validUntil:quote.validUntil}});
+      if(claimed.count!==1)throw new ConflictException('O orçamento foi alterado por outra operação. Atualize a proposta e tente novamente');
+      return tx.quote.findUniqueOrThrow({where:{id}});
+    });
     await this.audit(tenantId,actorUserId,'change_status','quote',id,{from:quote.status,to:status});
     return updated;
   }
