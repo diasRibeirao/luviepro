@@ -39,7 +39,7 @@ export default function Platform(){
  if(loading&&!data)return <View style={s.loading}><ActivityIndicator color={theme.gold}/><Text style={s.muted}>Carregando console administrativo...</Text></View>;
  const activeTab=PLATFORM_TABS.find(item=>item.key===tab)!;
  return <SafeAreaView style={[s.page,compact&&s.pageCompact]} edges={['top','left','right']}><PlatformSidebar compact={compact} active={tab} onSelect={selectTab} onLogout={signOut}/>
- <ScrollView style={s.main} contentContainerStyle={[s.content,compact&&s.contentCompact,{paddingBottom:compact?96+insets.bottom:30}]} keyboardShouldPersistTaps="handled"><View style={[s.header,compact&&s.headerCompact]}><View style={s.headerTitle}><Text style={s.eyebrow}>LUVIEPRO · PLATFORM</Text><Text style={s.title}>{activeTab.label}</Text><Text style={s.muted}>{activeTab.subtitle}</Text></View><View style={[s.headerActions,compact&&s.headerActionsCompact]}>{tab==='companies'?<Pressable onPress={()=>setCreatingTenant(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Nova empresa</Text></Pressable>:tab==='plans'?<Pressable onPress={()=>setCreatingPlan(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Novo plano</Text></Pressable>:null}<Pressable accessibilityRole="button" accessibilityLabel="Conta do administrador" accessibilityState={{expanded:accountOpen}} onPress={()=>setAccountOpen(true)} style={({pressed})=>[s.admin,pressed&&s.adminPressed]}><View style={s.adminAvatar}><Text style={s.adminInitial}>LM</Text></View>{!compact&&<View style={s.adminText}><Text style={s.strong}>LuviePro Master</Text><Text style={s.small}>Administrador da plataforma</Text></View>}<Ionicons name="chevron-down" size={15} color={theme.muted}/></Pressable></View></View>
+ <ScrollView style={s.main} contentContainerStyle={[s.content,compact&&s.contentCompact,{paddingBottom:compact?104+insets.bottom:30}]} keyboardShouldPersistTaps="handled"><View style={[s.header,compact&&s.headerCompact]}><View style={s.headerTitle}><Text style={s.eyebrow}>LUVIEPRO · PLATFORM</Text><Text style={s.title}>{activeTab.label}</Text><Text style={s.muted}>{activeTab.subtitle}</Text></View><View style={[s.headerActions,compact&&s.headerActionsCompact]}>{tab==='companies'?<Pressable onPress={()=>setCreatingTenant(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Nova empresa</Text></Pressable>:tab==='plans'?<Pressable onPress={()=>setCreatingPlan(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Novo plano</Text></Pressable>:null}<Pressable accessibilityRole="button" accessibilityLabel="Conta do administrador" accessibilityState={{expanded:accountOpen}} onPress={()=>setAccountOpen(true)} style={({pressed})=>[s.admin,pressed&&s.adminPressed]}><View style={s.adminAvatar}><Text style={s.adminInitial}>LM</Text></View>{!compact&&<View style={s.adminText}><Text style={s.strong}>LuviePro Master</Text><Text style={s.small}>Administrador da plataforma</Text></View>}<Ionicons name="chevron-down" size={15} color={theme.muted}/></Pressable></View></View>
  {tab==='overview'?<Overview data={data} companies={companies} users={users} payments={payments} onTab={selectTab}/>:tab==='email'?<PlatformEmailSettings/>:tab==='maintenance'?<PlatformMaintenance onOpenClientUsers={()=>selectTab('users')}/>:<>
   <PlatformSearch compact={phone} value={query} total={tab==='plans'?filtered.length:pageMeta.total} onChange={value=>{setQuery(value);setPage(1)}}/>
   {tab!=='plans'?<PlatformFilterBar compact={phone}>
@@ -53,12 +53,14 @@ export default function Platform(){
   {tab!=='plans'&&!listLoading?<PlatformPagination page={page} totalPages={pageMeta.totalPages} onChange={setPage}/>:null}
  </>}
  </ScrollView>
- <Modal visible={accountOpen} transparent animationType="fade" onRequestClose={()=>setAccountOpen(false)}>
+ <Modal visible={accountOpen} transparent animationType={phone?'slide':'fade'} onRequestClose={()=>setAccountOpen(false)}>
   <Pressable style={[s.accountOverlay,phone&&s.accountOverlayPhone]} onPress={()=>setAccountOpen(false)}>
-   <Pressable onPress={()=>{}} style={[s.accountMenu,phone&&s.accountMenuPhone,{paddingBottom:phone?Math.max(12,insets.bottom+8):8}]}>
-    <View style={s.accountMenuProfile}><View style={s.adminAvatar}><Text style={s.adminInitial}>LM</Text></View><View style={s.adminText}><Text style={s.strong}>LuviePro Master</Text><Text style={s.small}>Administrador da plataforma</Text></View></View>
+   <Pressable onPress={()=>{}} style={[s.accountMenu,phone&&s.accountMenuPhone,{paddingBottom:phone?Math.max(18,insets.bottom+10):8}]}>
+    {phone?<><View style={s.accountHandle}/><View style={s.accountPhoneHeader}><View><Text style={s.accountPhoneTitle}>Minha conta</Text><Text style={s.accountPhoneSubtitle}>Perfil e sessão administrativa</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Fechar menu" onPress={()=>setAccountOpen(false)} style={s.accountClose}><Ionicons name="close" size={20} color={theme.muted}/></Pressable></View></>:null}
+    <View style={[s.accountMenuProfile,phone&&s.accountMenuProfilePhone]}><View style={[s.adminAvatar,phone&&s.adminAvatarPhone]}><Text style={s.adminInitial}>LM</Text></View><View style={[s.adminText,phone&&s.accountProfileText]}><Text numberOfLines={1} style={s.strong}>LuviePro Master</Text><Text numberOfLines={1} style={s.small}>Administrador da plataforma</Text></View></View>
     <View style={s.accountMenuDivider}/>
-    <Pressable accessibilityRole="button" accessibilityLabel="Sair da conta" onPress={signOut} style={({pressed})=>[s.accountMenuItem,pressed&&s.accountMenuItemPressed]}><Ionicons name="log-out-outline" size={18} color={theme.danger}/><Text style={s.accountMenuLogout}>Sair da conta</Text></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel="Sair da conta" onPress={signOut} style={({pressed})=>[s.accountMenuItem,phone&&s.accountMenuItemPhone,pressed&&s.accountMenuItemPressed]}><Ionicons name="log-out-outline" size={19} color={theme.danger}/><Text style={s.accountMenuLogout}>Sair da conta</Text></Pressable>
+    {phone?<Text style={s.accountVersion}>LuviePro · Administração SaaS</Text>:null}
    </Pressable>
   </Pressable>
  </Modal>
@@ -83,12 +85,22 @@ const s=StyleSheet.create({
  adminText:{minWidth:0},
  accountOverlay:{flex:1,backgroundColor:'rgba(8,20,14,.08)',alignItems:'flex-end',paddingTop:82,paddingRight:30},accountOverlayPhone:{justifyContent:'flex-end',paddingTop:0,paddingRight:0},
  accountMenu:{width:245,backgroundColor:'#fff',borderWidth:1,borderColor:theme.border,borderRadius:14,padding:8,shadowColor:'#000',shadowOpacity:.12,shadowRadius:18,shadowOffset:{width:0,height:6},elevation:20},
- accountMenuPhone:{width:'100%',borderBottomLeftRadius:0,borderBottomRightRadius:0,borderTopLeftRadius:18,borderTopRightRadius:18},
+ accountMenuPhone:{width:'100%',borderBottomLeftRadius:0,borderBottomRightRadius:0,borderTopLeftRadius:22,borderTopRightRadius:22,paddingHorizontal:16,paddingTop:9},
+ accountHandle:{width:38,height:4,borderRadius:2,backgroundColor:'#D7DEDA',alignSelf:'center',marginBottom:11},
+ accountPhoneHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:12},
+ accountPhoneTitle:{fontFamily:'serif',fontSize:23,fontWeight:'800',color:theme.ink},
+ accountPhoneSubtitle:{fontSize:11,color:theme.muted,marginTop:2},
+ accountClose:{width:36,height:36,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:'#F4F7F5'},
  accountMenuProfile:{flexDirection:'row',alignItems:'center',gap:9,padding:9},
- accountMenuDivider:{height:1,backgroundColor:theme.border,marginVertical:4},
+ accountMenuProfilePhone:{padding:12,borderWidth:1,borderColor:theme.border,borderRadius:14,backgroundColor:'#FAFCFB'},
+ accountProfileText:{flex:1,minWidth:0},
+ accountMenuDivider:{height:1,backgroundColor:theme.border,marginVertical:10},
  accountMenuItem:{height:42,borderRadius:9,paddingHorizontal:10,flexDirection:'row',alignItems:'center',gap:9},
+ accountMenuItemPhone:{minHeight:48,paddingHorizontal:12},
  accountMenuItemPressed:{backgroundColor:'#FBECEC'},
  accountMenuLogout:{fontSize:12,fontWeight:'800',color:theme.danger},
+ accountVersion:{fontSize:9,fontWeight:'700',color:'#9AA8A1',textAlign:'center',marginTop:8},
  adminAvatar:{width:35,height:35,borderRadius:18,backgroundColor:theme.green2,alignItems:'center',justifyContent:'center'},
+ adminAvatarPhone:{width:40,height:40,borderRadius:20},
  adminInitial:{fontSize:11,fontWeight:'900',color:theme.gold}
 });
