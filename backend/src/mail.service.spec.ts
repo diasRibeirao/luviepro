@@ -19,4 +19,29 @@ describe('MailService',()=>{
     await expect(new MailService().sendTest({to:'a@b.com',name:'A'})).resolves.toEqual({sent:true});
     expect(fetchMock).toHaveBeenCalledWith('https://api.resend.com/emails',expect.objectContaining({method:'POST',headers:expect.objectContaining({Authorization:'Bearer re_test'})}));
   });
+
+  it('adds the LuviePro display name when SMTP_FROM is only an email address',()=>{
+    process.env.MAIL_PROVIDER='smtp';
+    process.env.SMTP_HOST='smtp.example.com';
+    process.env.SMTP_FROM='no-reply@example.com';
+    delete process.env.MAIL_FROM_NAME;
+    expect(new MailService().status().from).toBe('LuviePro <no-reply@example.com>');
+  });
+
+  it('uses MAIL_FROM_NAME when the sender is configured as a bare email',()=>{
+    process.env.MAIL_PROVIDER='resend';
+    process.env.RESEND_API_KEY='re_test';
+    process.env.RESEND_FROM='no-reply@example.com';
+    process.env.MAIL_FROM_NAME='LuviePro HML';
+    expect(new MailService().status().from).toBe('LuviePro HML <no-reply@example.com>');
+  });
+
+  it('preserves an explicitly formatted sender',()=>{
+    process.env.MAIL_PROVIDER='resend';
+    process.env.RESEND_API_KEY='re_test';
+    process.env.RESEND_FROM='Equipe LuviePro <contato@example.com>';
+    process.env.MAIL_FROM_NAME='Outro nome';
+    expect(new MailService().status().from).toBe('Equipe LuviePro <contato@example.com>');
+  });
+
 });

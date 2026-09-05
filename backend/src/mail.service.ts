@@ -35,19 +35,27 @@ export class MailService {
     return process.env.RESEND_API_KEY?.trim()?'resend':'smtp';
   }
 
+  private formatFrom(raw:string){
+    const value=raw.trim();
+    if(!value)return '';
+    if(value.includes('<')&&value.includes('>'))return value;
+    const name=(process.env.MAIL_FROM_NAME||'LuviePro').trim();
+    return name?`${name} <${value}>`:value;
+  }
+
   private smtpConfig(){
     const host=process.env.SMTP_HOST?.trim()||'';
     const port=Number(process.env.SMTP_PORT||587);
     const secure=process.env.SMTP_SECURE==='true'||port===465;
     const user=process.env.SMTP_USER?.trim()||'';
     const pass=process.env.SMTP_PASS||'';
-    const from=(process.env.SMTP_FROM||user||'').trim();
+    const from=this.formatFrom(process.env.SMTP_FROM||user||'');
     return {host,port,secure,user,pass,from};
   }
 
   private resendConfig(){
     const apiKey=process.env.RESEND_API_KEY?.trim()||'';
-    const from=(process.env.RESEND_FROM||process.env.MAIL_FROM||'').trim();
+    const from=this.formatFrom(process.env.RESEND_FROM||process.env.MAIL_FROM||'');
     return {apiKey,from};
   }
 
