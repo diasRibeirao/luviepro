@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '../../../../generated-prisma';
 import { PrismaService } from '../../prisma.service';
 import { CreatePurchaseDto, CreatePurchasePaymentDto, CreateSupplierDto, ReceivePurchaseDto, UpdatePurchaseDto, UpdateSupplierDto } from './dto/purchases.dto';
 
@@ -66,11 +67,22 @@ export class PurchasesService {
     const products=await this.db.product.findMany({where:{tenantId,id:{in:ids},active:true}});
     if(products.length!==ids.length)throw new BadRequestException('Há produto inválido ou inativo na compra');
     const map=new Map(products.map(p=>[p.id,p]));
-    const count=await this.db.purchaseOrder.count({where:{tenantId}});
-    const number=`COMP-${String(count+1).padStart(5,'0')}`;
     const items=b.items.map(i=>{const p=map.get(i.productId)!;return {productId:p.id,productName:p.name,sku:p.sku,unit:p.unit,quantity:i.quantity,unitCostCents:i.unitCostCents,totalCents:i.quantity*i.unitCostCents}});
     const totalCents=items.reduce((s,i)=>s+i.totalCents,0);
-    const row=await this.db.purchaseOrder.create({data:{tenantId,supplierId:supplier.id,number,totalCents,expectedAt:b.expectedAt?new Date(b.expectedAt):null,paymentDueAt:b.paymentDueAt?new Date(b.paymentDueAt):null,notes:b.notes?.trim()||null,items:{create:items}},include:includePurchase});
+    let row:any=null;
+    let number='';
+    for(let attempt=0;attempt<5&&!row;attempt++){
+      const latest=await this.db.purchaseOrder.findFirst({where:{tenantId,number:{startsWith:'COMP-'}},select:{number:true},orderBy:{number:'desc'}});
+      const currentSeq=latest?.number?.match(/^COMP-(\d+)$/)?.[1];
+      number=`COMP-${String((currentSeq?Number(currentSeq):0)+1).padStart(5,'0')}`;
+      try{
+        row=await this.db.purchaseOrder.create({data:{tenantId,supplierId:supplier.id,number,totalCents,expectedAt:b.expectedAt?new Date(b.expectedAt):null,paymentDueAt:b.paymentDueAt?new Date(b.paymentDueAt):null,notes:b.notes?.trim()||null,items:{create:items}},include:includePurchase});
+      }catch(error){
+        const isNumberCollision=error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002';
+        if(!isNumberCollision||attempt===4)throw error;
+      }
+    }
+    if(!row)throw new ConflictException('Não foi possível gerar o número da compra. Tente novamente.');
     await this.audit(tenantId,actor,'create',row.id,{number,totalCents});
     return row;
   }

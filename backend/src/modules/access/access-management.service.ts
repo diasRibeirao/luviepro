@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { hash } from 'bcryptjs';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../../../generated-prisma';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma.service';
 import { MailService } from '../../mail.service';
@@ -10,7 +10,7 @@ import { CreateAccessProfileDto, CreateUserDto, UpdateAccessProfileDto, UpdateUs
 
 @Injectable()
 export class AccessManagementService {
-  private readonly permissionCatalog=['dashboard.read','clients.read','clients.write','services.read','services.write','quotes.read','quotes.write','projects.read','projects.write','calendar.read','calendar.write','finance.read','finance.write','settings.manage','users.manage','audit.read'];
+  private readonly permissionCatalog=['dashboard.read','clients.read','clients.write','services.read','services.write','quotes.read','quotes.write','orders.read','orders.write','purchases.read','purchases.write','projects.read','projects.write','calendar.read','calendar.write','finance.read','finance.write','settings.manage','users.manage','audit.read'];
   constructor(private readonly db:PrismaService,private readonly mail:MailService,private readonly sessions:AuthSessionService){}
 
   private audit(tenantId:string,actorUserId:string|undefined,action:string,entity:string,entityId?:string,metadata?:any){

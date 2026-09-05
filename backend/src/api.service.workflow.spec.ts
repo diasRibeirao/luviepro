@@ -42,7 +42,8 @@ describe('ApiService workflows',()=>{
     const task={id:'x',tenantId:'t1',projectId:'p1',status:'pending',title:'Entrega',completedAt:null,dueDate:null,description:null};
     const db:any={
       projectTask:{findFirst:jest.fn().mockResolvedValue(task),update:jest.fn().mockResolvedValue({...task,status:'completed'}) ,count:jest.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(2)},
-      project:{update:jest.fn().mockResolvedValue({})}, auditLog:{create:jest.fn().mockResolvedValue({})}
+      project:{update:jest.fn().mockResolvedValue({})}, auditLog:{create:jest.fn().mockResolvedValue({})},
+      $transaction:jest.fn().mockImplementation(async(fn:any)=>fn(db))
     };
     const service=new ApiService(db,jwt,mail);
     await service.updateProjectTask('t1','p1','x',{status:'completed'},'u1');

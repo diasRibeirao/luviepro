@@ -11,12 +11,14 @@ describe('ProjectsService', () => {
     projectNote: { create: jest.fn() },
     user: { findFirst: jest.fn() },
     auditLog: { create: jest.fn() },
+    $transaction: jest.fn(),
   };
   let service: ProjectsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
     db.auditLog.create.mockResolvedValue({});
+    db.$transaction.mockImplementation(async (fn:any) => fn(db));
     service = new ProjectsService(db);
   });
 

@@ -5,7 +5,7 @@ describe('QuotesService',()=>{
   const db:any={
     tenant:{findUnique:jest.fn()},
     planLimit:{findUnique:jest.fn()},
-    quote:{findMany:jest.fn(),findFirst:jest.fn(),findUnique:jest.fn(),count:jest.fn(),create:jest.fn(),update:jest.fn()},
+    quote:{findMany:jest.fn(),findFirst:jest.fn(),findUnique:jest.fn(),count:jest.fn(),create:jest.fn(),update:jest.fn(),updateMany:jest.fn()},
     quoteSequence:{upsert:jest.fn()},
     quoteVersion:{findMany:jest.fn(),create:jest.fn()},
     quoteItem:{deleteMany:jest.fn(),findMany:jest.fn()},
@@ -14,7 +14,7 @@ describe('QuotesService',()=>{
     client:{findFirst:jest.fn()},
     project:{upsert:jest.fn()},
     projectTask:{findMany:jest.fn(),createMany:jest.fn()},
-    product:{findFirst:jest.fn(),update:jest.fn()},
+    product:{findFirst:jest.fn(),update:jest.fn(),updateMany:jest.fn()},
     stockReservation:{findMany:jest.fn(),findUnique:jest.fn(),create:jest.fn(),update:jest.fn()},
     order:{create:jest.fn()},
     auditLog:{create:jest.fn(),findMany:jest.fn()},
@@ -29,6 +29,8 @@ describe('QuotesService',()=>{
     db.quoteItem.findMany.mockResolvedValue([]);
     db.projectTask.findMany.mockResolvedValue([]);
     db.projectTask.createMany.mockResolvedValue({count:0});
+    db.quote.updateMany.mockResolvedValue({count:1});
+    db.product.updateMany.mockResolvedValue({count:1});
     db.$transaction.mockImplementation(async(fn:any)=>fn(db));
     service=new QuotesService(db);
   });
@@ -59,7 +61,7 @@ describe('QuotesService',()=>{
     db.project.upsert.mockResolvedValue({id:'p1'});
     await expect(service.decidePublicProposal('token','approved',' Maria ')).resolves.toEqual({ok:true,status:'approved'});
     expect(db.project.upsert).toHaveBeenCalledWith({where:{quoteId:'q1'},update:{},create:{tenantId:'t1',clientId:'c1',quoteId:'q1',name:'OSO-1 — Cliente'}});
-    expect(db.quote.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:'q1'},data:expect.objectContaining({clientDecision:'approved',clientDecisionName:'Maria'})}));
+    expect(db.quote.updateMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({id:'q1',status:'sent',clientDecision:null}),data:expect.objectContaining({clientDecision:'approved',clientDecisionName:'Maria'})}));
   });
 
   it('reuses an existing public token instead of generating another share identity',async()=>{
@@ -126,13 +128,13 @@ describe('QuotesService',()=>{
     const tx:any={
       quoteProductItem:{findMany:jest.fn().mockResolvedValue([{productId:'p1',productName:'Colmeia',quantity:2,unit:'un'}])},
       stockReservation:{findUnique:jest.fn().mockResolvedValue(null),create:jest.fn().mockResolvedValue({}),update:jest.fn()},
-      product:{findFirst:jest.fn().mockResolvedValue({id:'p1',stockQuantity:10,reservedQuantity:0}),update:jest.fn().mockResolvedValue({id:'p1',stockQuantity:10,reservedQuantity:2})},
+      product:{findFirst:jest.fn().mockResolvedValue({id:'p1',stockQuantity:10,reservedQuantity:0}),update:jest.fn().mockResolvedValue({id:'p1',stockQuantity:10,reservedQuantity:2}),updateMany:jest.fn().mockResolvedValue({count:1})},
     };
 
     await (service as any).reserveProducts(tx,'t1','q1');
 
     expect(tx.quoteProductItem.findMany).toHaveBeenCalledWith({where:{tenantId:'t1',quoteId:'q1'}});
-    expect(tx.product.update).toHaveBeenCalledWith({where:{id:'p1'},data:{reservedQuantity:{increment:2}}});
+    expect(tx.product.updateMany).toHaveBeenCalledWith({where:{id:'p1',tenantId:'t1',reservedQuantity:0},data:{reservedQuantity:{increment:2}}});
     expect(tx.stockReservation.create).toHaveBeenCalledWith({data:expect.objectContaining({tenantId:'t1',quoteId:'q1',productId:'p1',quantity:2,status:'active'})});
   });
 
