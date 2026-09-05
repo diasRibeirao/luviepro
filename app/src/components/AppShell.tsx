@@ -78,7 +78,7 @@ export function AppShell({title,subtitle,action,children,backHref}:{title:string
         <Pressable accessibilityRole="button" accessibilityLabel={tr('Menu da conta')} accessibilityState={{expanded:accountMenuOpen}} onPress={()=>setAccountMenuOpen(v=>!v)} style={({pressed})=>[s.accountCardHeader,pressed&&s.accountCardPressed]}>
           <View style={s.avatar}><Text style={s.avatarText}>{session.name.split(' ').slice(0,2).map(n=>n[0]).join('')}</Text></View>
           <View style={s.userInfo}><Text numberOfLines={1} style={s.userName}>{session.name}</Text><Text numberOfLines={1} style={s.userEmail}>{session.email}</Text></View>
-          <Ionicons name={accountMenuOpen?'chevron-up':'chevron-down'} size={18} color="rgba(255,255,255,.55)"/>
+          <Ionicons name={accountMenuOpen?'chevron-down':'chevron-up'} size={18} color="rgba(255,255,255,.55)"/>
         </Pressable>
         {accountMenuOpen&&<>
           <Pressable accessibilityRole="button" accessibilityLabel={`Plano ${plan}. ${clients} de ${maxClients<0?'clientes ilimitados':maxClients+' clientes'} utilizados`} accessibilityHint={tr('Abre a comparação de planos')} onPress={()=>router.push('/plans')} style={({pressed})=>[s.accountPlanBox,pressed&&s.accountCardPressed]}>
