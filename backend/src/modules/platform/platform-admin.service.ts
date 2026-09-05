@@ -87,13 +87,34 @@ export class PlatformAdminService {
   }
 
   async updateMaster(id:string,data:PlatformMasterUpdateDto,currentAdminId:string){
-    const master=await this.db.platformAdmin.findUnique({where:{id}});
-    if(!master)throw new NotFoundException('Usuário Master não encontrado');
     if(id===currentAdminId&&data.active===false)throw new BadRequestException('Você não pode inativar o próprio usuário Master');
-    if(data.active===false&&master.active){const active=await this.db.platformAdmin.count({where:{active:true}});if(active<=1)throw new BadRequestException('A plataforma precisa manter pelo menos um usuário Master ativo');}
     const email=data.email?.trim().toLowerCase();
-    if(email&&email!==master.email){if(await this.db.platformAdmin.findUnique({where:{email}}))throw new ConflictException('Este e-mail já é utilizado por outro Master');if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já pertence a um usuário de empresa');}
-    const updated=await this.db.$transaction(async tx=>{const value=await tx.platformAdmin.update({where:{id},data:{...(data.name!==undefined&&{name:data.name.trim()}),...(email&&{email}),...(data.active!==undefined&&{active:data.active})},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,updatedAt:true}});if(data.active===false)await tx.authSession.updateMany({where:{platformAdminId:id,revokedAt:null},data:{revokedAt:new Date(),revokedReason:'platform_admin_deactivated'}});return value;});
+    let updated:any=null;
+    for(let attempt=0;attempt<3&&!updated;attempt++){
+      try{
+        updated=await this.db.$transaction(async tx=>{
+          const master=await tx.platformAdmin.findUnique({where:{id}});
+          if(!master)throw new NotFoundException('Usuário Master não encontrado');
+          if(data.active===false&&master.active){
+            const active=await tx.platformAdmin.count({where:{active:true}});
+            if(active<=1)throw new BadRequestException('A plataforma precisa manter pelo menos um usuário Master ativo');
+          }
+          if(email&&email!==master.email){
+            if(await tx.platformAdmin.findUnique({where:{email}}))throw new ConflictException('Este e-mail já é utilizado por outro Master');
+            if(await tx.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já pertence a um usuário de empresa');
+          }
+          const value=await tx.platformAdmin.update({where:{id},data:{...(data.name!==undefined&&{name:data.name.trim()}),...(email&&{email}),...(data.active!==undefined&&{active:data.active})},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,updatedAt:true}});
+          if(data.active===false)await tx.authSession.updateMany({where:{platformAdminId:id,revokedAt:null},data:{revokedAt:new Date(),revokedReason:'platform_admin_deactivated'}});
+          return value;
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        const code=(error as {code?:string})?.code;
+        if(code==='P2034'&&attempt<2)continue;
+        if(code==='P2002')throw new ConflictException('Este e-mail já é utilizado por outro Master');
+        throw error;
+      }
+    }
+    if(!updated)throw new ConflictException('O usuário Master foi alterado por outra operação. Atualize a lista e tente novamente');
     return {...updated,current:id===currentAdminId};
   }
 
@@ -200,8 +221,20 @@ export class PlatformAdminService {
 
   async createPlan(data:PlatformCreatePlanDto){
     const plan=data.plan.trim().toLowerCase();
-    if(await this.db.planLimit.findUnique({where:{plan}}))throw new ConflictException('Já existe um plano com este código');
-    const maxOrder=await this.db.planLimit.aggregate({_max:{sortOrder:true}});
-    return this.db.planLimit.create({data:{...data,plan,name:data.name.trim(),description:data.description?.trim()||null,active:data.active??true,sortOrder:data.sortOrder??(maxOrder._max.sortOrder??0)+10}});
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        return await this.db.$transaction(async tx=>{
+          if(await tx.planLimit.findUnique({where:{plan}}))throw new ConflictException('Já existe um plano com este código');
+          const sortOrder=data.sortOrder??((await tx.planLimit.aggregate({_max:{sortOrder:true}}))._max.sortOrder??0)+10;
+          return tx.planLimit.create({data:{...data,plan,name:data.name.trim(),description:data.description?.trim()||null,active:data.active??true,sortOrder}});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        const code=(error as {code?:string})?.code;
+        if(code==='P2034'&&attempt<2)continue;
+        if(code==='P2002')throw new ConflictException('Já existe um plano com este código');
+        throw error;
+      }
+    }
+    throw new ConflictException('O catálogo de planos foi alterado por outra operação. Tente novamente.');
   }
 }

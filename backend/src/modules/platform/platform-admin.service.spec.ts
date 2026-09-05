@@ -6,8 +6,10 @@ describe('PlatformAdminService',()=>{
     tenant:{create:jest.fn(),update:jest.fn()},
     subscription:{create:jest.fn(),findFirst:jest.fn(),update:jest.fn()},
     userInvitation:{create:jest.fn()},
-    user:{update:jest.fn()},
+    user:{update:jest.fn(),findUnique:jest.fn()},
     authSession:{updateMany:jest.fn()},
+    planLimit:{findUnique:jest.fn(),aggregate:jest.fn(),create:jest.fn()},
+    platformAdmin:{findUnique:jest.fn(),count:jest.fn(),update:jest.fn()},
   };
   const db:any={
     tenant:{count:jest.fn(),findMany:jest.fn(),findUnique:jest.fn()},
@@ -106,4 +108,122 @@ describe('PlatformAdminService',()=>{
     db.planLimit.findUnique.mockResolvedValue(null);
     await expect(service.updatePlan('enterprise',{})).rejects.toBeInstanceOf(NotFoundException);
   });
+  it('creates a plan with automatic sortOrder inside a serializable transaction',async()=>{
+    tx.planLimit.findUnique.mockResolvedValue(null);
+    tx.planLimit.aggregate.mockResolvedValue({_max:{sortOrder:30}});
+    tx.planLimit.create.mockImplementation(({data}:any)=>Promise.resolve(data));
+
+    const result:any=await service.createPlan({
+      plan:' Enterprise ',
+      name:' Enterprise ',
+      maxClients:100,
+      maxQuotesPerMonth:1000,
+      maxUsers:20,
+      monthlyPriceCents:29990,
+      quarterlyPriceCents:80973,
+      semiannualPriceCents:152949,
+      annualPriceCents:287904,
+    } as any);
+
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function),{isolationLevel:'Serializable'});
+    expect(tx.planLimit.aggregate).toHaveBeenCalledWith({_max:{sortOrder:true}});
+    expect(tx.planLimit.create).toHaveBeenCalledWith({data:expect.objectContaining({
+      plan:'enterprise',name:'Enterprise',sortOrder:40,
+    })});
+    expect(result.sortOrder).toBe(40);
+  });
+
+  it('retries plan sortOrder allocation after P2034',async()=>{
+    let attempts=0;
+    db.$transaction.mockImplementation(async(fn:any,options:any)=>{
+      expect(options).toEqual({isolationLevel:'Serializable'});
+      attempts++;
+      if(attempts===1)throw {code:'P2034'};
+      return fn(tx);
+    });
+    tx.planLimit.findUnique.mockResolvedValue(null);
+    tx.planLimit.aggregate.mockResolvedValue({_max:{sortOrder:40}});
+    tx.planLimit.create.mockImplementation(({data}:any)=>Promise.resolve(data));
+
+    const result:any=await service.createPlan({
+      plan:'pro-plus',name:'Pro Plus',
+      maxClients:100,maxQuotesPerMonth:1000,maxUsers:20,
+      monthlyPriceCents:29990,quarterlyPriceCents:80973,
+      semiannualPriceCents:152949,annualPriceCents:287904,
+    } as any);
+
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
+    expect(result.sortOrder).toBe(50);
+  });
+
+  it('maps a concurrent duplicate plan insert to ConflictException',async()=>{
+    db.$transaction.mockRejectedValue({code:'P2002'});
+    await expect(service.createPlan({
+      plan:'pro',name:'Pro',
+      maxClients:100,maxQuotesPerMonth:1000,maxUsers:20,
+      monthlyPriceCents:29990,quarterlyPriceCents:80973,
+      semiannualPriceCents:152949,annualPriceCents:287904,
+    } as any)).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('preserves explicit plan sortOrder without aggregate',async()=>{
+    tx.planLimit.findUnique.mockResolvedValue(null);
+    tx.planLimit.create.mockImplementation(({data}:any)=>Promise.resolve(data));
+
+    const result:any=await service.createPlan({
+      plan:'enterprise',name:'Enterprise',sortOrder:25,
+      maxClients:100,maxQuotesPerMonth:1000,maxUsers:20,
+      monthlyPriceCents:29990,quarterlyPriceCents:80973,
+      semiannualPriceCents:152949,annualPriceCents:287904,
+    } as any);
+
+    expect(tx.planLimit.aggregate).not.toHaveBeenCalled();
+    expect(result.sortOrder).toBe(25);
+  });
+
+  it('keeps the last active platform master protected inside a serializable transaction',async()=>{
+    tx.platformAdmin.findUnique.mockResolvedValue({id:'pa2',email:'two@example.com',active:true});
+    tx.platformAdmin.count.mockResolvedValue(1);
+
+    await expect(service.updateMaster('pa2',{active:false},'pa1')).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function),{isolationLevel:'Serializable'});
+    expect(tx.platformAdmin.count).toHaveBeenCalledWith({where:{active:true}});
+    expect(tx.platformAdmin.update).not.toHaveBeenCalled();
+  });
+
+  it('retries a concurrent platform master deactivation after P2034',async()=>{
+    let attempts=0;
+    db.$transaction.mockImplementation(async(fn:any,options:any)=>{
+      expect(options).toEqual({isolationLevel:'Serializable'});
+      attempts++;
+      if(attempts===1)throw {code:'P2034'};
+      return fn(tx);
+    });
+    tx.platformAdmin.findUnique.mockResolvedValue({id:'pa2',email:'two@example.com',active:true});
+    tx.platformAdmin.count.mockResolvedValue(2);
+    tx.platformAdmin.update.mockResolvedValue({
+      id:'pa2',name:'Two',email:'two@example.com',role:'platform_admin',active:false,
+      lastLoginAt:null,createdAt:new Date(),updatedAt:new Date(),
+    });
+    tx.authSession.updateMany.mockResolvedValue({count:1});
+
+    const result:any=await service.updateMaster('pa2',{active:false},'pa1');
+
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
+    expect(tx.platformAdmin.count).toHaveBeenCalledTimes(1);
+    expect(tx.authSession.updateMany).toHaveBeenCalledWith({
+      where:{platformAdminId:'pa2',revokedAt:null},
+      data:expect.objectContaining({revokedReason:'platform_admin_deactivated'}),
+    });
+    expect(result.active).toBe(false);
+  });
+
+  it('maps a concurrent duplicate platform master email to ConflictException',async()=>{
+    db.$transaction.mockRejectedValue({code:'P2002'});
+
+    await expect(service.updateMaster('pa2',{email:'duplicate@example.com'},'pa1'))
+      .rejects.toBeInstanceOf(ConflictException);
+  });
+
 });
