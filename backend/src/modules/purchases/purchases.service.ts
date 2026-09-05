@@ -124,10 +124,12 @@ export class PurchasesService {
     if(b.amountCents>remaining)throw new BadRequestException('O pagamento excede o saldo em aberto');
     const paidAt=b.paidAt?new Date(b.paidAt):new Date();
     const result=await this.db.$transaction(async tx=>{
-      await tx.purchasePayment.create({data:{tenantId,purchaseOrderId:id,amountCents:b.amountCents,method:b.method||null,notes:b.notes?.trim()||null,actorUserId:actor,paidAt}});
       const amountPaidCents=current.amountPaidCents+b.amountCents;
       const paymentStatus=amountPaidCents>=current.totalCents?'paid':'partial';
-      return tx.purchaseOrder.update({where:{id},data:{amountPaidCents,paymentStatus,paidAt:paymentStatus==='paid'?paidAt:null},include:includePurchase});
+      const claimed=await tx.purchaseOrder.updateMany({where:{id,tenantId,amountPaidCents:current.amountPaidCents,status:{not:'canceled'}},data:{amountPaidCents,paymentStatus,paidAt:paymentStatus==='paid'?paidAt:null}});
+      if(claimed.count!==1)throw new BadRequestException('O saldo desta compra foi alterado por outra operação. Atualize a compra e tente novamente.');
+      await tx.purchasePayment.create({data:{tenantId,purchaseOrderId:id,amountCents:b.amountCents,method:b.method||null,notes:b.notes?.trim()||null,actorUserId:actor,paidAt}});
+      return tx.purchaseOrder.findUniqueOrThrow({where:{id},include:includePurchase});
     });
     await this.audit(tenantId,actor,'payment',id,{amountCents:b.amountCents,paymentStatus:result.paymentStatus});
     return result;
