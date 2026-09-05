@@ -164,12 +164,12 @@ export function CasaNovaScreen(){
       <Pressable
        disabled={guests<=2||busy}
        onPress={()=>void changeGuests(guests-1)}
-       style={({pressed})=>[s.round,s.roundSecondary,(guests<=2||busy)&&s.roundDisabled,pressed&&guests>2&&!busy&&s.roundPressed]}
+       style={({pressed})=>[s.guestCircleButton,s.guestCircleButtonSecondary,(guests<=2||busy)&&s.roundDisabled,pressed&&guests>2&&!busy&&s.roundPressed]}
       >
        <Ionicons name="remove" size={22} color={guests<=2?theme.muted:theme.green}/>
       </Pressable>
 
-      <View style={s.guestInputWrap}>
+      <View style={s.guestNumberArea}>
        <View style={s.guestInputBox}>
         <TextInput
          value={guestInput}
@@ -184,7 +184,7 @@ export function CasaNovaScreen(){
          placeholder="2"
          style={s.guestInput}
         />
-        <View style={s.editIcon}><Ionicons name="create-outline" size={15} color={theme.green}/></View>
+        <Ionicons name="create-outline" size={15} color={theme.green}/>
        </View>
        <Text style={s.guestEditHint}>Toque no número para editar</Text>
       </View>
@@ -192,7 +192,7 @@ export function CasaNovaScreen(){
       <Pressable
        disabled={guests>=999999||busy}
        onPress={()=>void changeGuests(guests+1)}
-       style={({pressed})=>[s.round,s.roundActive,(guests>=999999||busy)&&s.roundDisabled,pressed&&guests<999999&&!busy&&s.roundPressed]}
+       style={({pressed})=>[s.guestCircleButton,s.guestCircleButtonPrimary,(guests>=999999||busy)&&s.roundDisabled,pressed&&guests<999999&&!busy&&s.roundPressed]}
       >
        <Ionicons name="add" size={22} color={theme.white}/>
       </Pressable>
@@ -250,21 +250,20 @@ function Summary({icon,label,value,tone}:{icon:any;label:string;value:string;ton
 function Field({label,value,onChange,placeholder,keyboard}:{label:string;value:string;onChange:(v:string)=>void;placeholder?:string;keyboard?:'numeric'}){return <View style={s.field}><Text style={s.fieldLabel}>{label}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType={keyboard} style={s.input}/></View>}
 
 const s=StyleSheet.create({
- page:{gap:18},hero:{backgroundColor:theme.green,borderRadius:20,padding:28,flexDirection:'row',gap:24,alignItems:'center'},heroCompact:{flexDirection:'column',alignItems:'stretch'},heroText:{flex:1},kicker:{fontSize:10,fontWeight:'900',letterSpacing:1.5,color:theme.goldLight},heroTitle:{fontFamily:'serif',fontSize:30,fontWeight:'800',lineHeight:36,color:theme.white,marginTop:8,maxWidth:620},heroDesc:{fontSize:13,lineHeight:20,color:'rgba(255,255,255,.72)',marginTop:10,maxWidth:620},guestCard:{minWidth:260,borderRadius:16,backgroundColor:theme.white,padding:18},guestLabel:{fontSize:12,fontWeight:'800',color:theme.ink},guestRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:12},round:{width:42,height:42,borderRadius:21,alignItems:'center',justifyContent:'center',backgroundColor:theme.green50},roundActive:{backgroundColor:theme.green2},roundDisabled:{opacity:.38},guestHeader:{flexDirection:'row',alignItems:'center',gap:10,marginBottom:18},
+ page:{gap:18},hero:{backgroundColor:theme.green,borderRadius:20,padding:28,flexDirection:'row',gap:24,alignItems:'center'},heroCompact:{flexDirection:'column',alignItems:'stretch'},heroText:{flex:1},kicker:{fontSize:10,fontWeight:'900',letterSpacing:1.5,color:theme.goldLight},heroTitle:{fontFamily:'serif',fontSize:30,fontWeight:'800',lineHeight:36,color:theme.white,marginTop:8,maxWidth:620},heroDesc:{fontSize:13,lineHeight:20,color:'rgba(255,255,255,.72)',marginTop:10,maxWidth:620},guestCard:{minWidth:260,borderRadius:16,backgroundColor:theme.white,padding:18},guestLabel:{fontSize:12,fontWeight:'800',color:theme.ink},guestRow:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:12,marginTop:12},guestCircleButton:{width:42,height:42,borderRadius:21,alignItems:'center',justifyContent:'center',flexShrink:0},guestCircleButtonSecondary:{backgroundColor:'#F1F5F2',borderWidth:1,borderColor:theme.border},guestCircleButtonPrimary:{backgroundColor:theme.green2},round:{width:42,height:42,borderRadius:21,alignItems:'center',justifyContent:'center',backgroundColor:theme.green50},roundActive:{backgroundColor:theme.green2},roundDisabled:{opacity:.38},guestHeader:{flexDirection:'row',alignItems:'center',gap:10,marginBottom:18},
 guestHeaderIcon:{width:34,height:34,borderRadius:17,backgroundColor:'#F5EFE1',alignItems:'center',justifyContent:'center'},
 guestHeaderText:{flex:1},
 guestSubtitle:{fontSize:10,lineHeight:15,color:theme.muted,marginTop:2},
-guestInputWrap:{alignItems:'center',flex:1,minWidth:138,maxWidth:190},
-guestInputBox:{width:'100%',minHeight:54,borderWidth:1.5,borderColor:theme.green2,borderRadius:14,backgroundColor:theme.white,paddingLeft:14,paddingRight:8,flexDirection:'row',alignItems:'center'},
-guestInput:{flex:1,paddingVertical:7,fontFamily:'serif',fontSize:30,fontWeight:'800',color:theme.ink,textAlign:'center'},
-editIcon:{width:28,height:28,borderRadius:14,backgroundColor:'#EEF4F0',alignItems:'center',justifyContent:'center'},
+guestNumberArea:{alignItems:'center',width:150,flexShrink:0},
+guestInputBox:{width:150,height:54,borderWidth:1.5,borderColor:theme.green2,borderRadius:14,backgroundColor:theme.white,paddingHorizontal:10,flexDirection:'row',alignItems:'center',justifyContent:'center'},
+guestInput:{width:104,height:50,paddingHorizontal:4,paddingVertical:0,fontFamily:'serif',fontSize:28,fontWeight:'800',color:theme.ink,textAlign:'center'},
 guestEditHint:{fontSize:8,fontWeight:'700',color:theme.muted,textAlign:'center',marginTop:6},
 guestMetaRow:{marginTop:16,paddingTop:13,borderTopWidth:1,borderTopColor:theme.border,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10,flexWrap:'wrap'},
 guestMetaItem:{flexDirection:'row',alignItems:'center',gap:4},
 guestMetaText:{fontSize:9,color:theme.muted,fontWeight:'600'},
 guestMetaStrong:{color:theme.ink,fontWeight:'800'},
 guestMetaDivider:{width:1,height:14,backgroundColor:theme.borderStrong},
-roundSecondary:{backgroundColor:'#F1F5F2',borderWidth:1,borderColor:theme.border},
+
 roundPressed:{opacity:.8,transform:[{scale:.97}]},
  summary:{flexDirection:'row',gap:12},summaryCompact:{flexDirection:'column'},sumCard:{flex:1,borderRadius:15,borderWidth:1,borderColor:theme.border,backgroundColor:theme.white,padding:18,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},sumDark:{backgroundColor:theme.green,borderColor:theme.green},sumGold:{backgroundColor:theme.goldPale,borderColor:'#EAD99B'},sumLabel:{fontSize:11,fontWeight:'700',color:theme.muted},sumValue:{fontFamily:'serif',fontSize:27,fontWeight:'800',color:theme.ink,marginTop:4},sumDarkText:{color:theme.white},
  body:{flexDirection:'row',alignItems:'flex-start',gap:18},bodyCompact:{flexDirection:'column'},listCol:{flex:1,minWidth:0,width:'100%'},listHeader:{flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:12,flexWrap:'wrap'},headerActions:{flexDirection:'row',gap:8,flexWrap:'wrap'},addItemShortcut:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:theme.green2,borderRadius:999,paddingHorizontal:14,paddingVertical:10},addItemShortcutText:{fontSize:11,fontWeight:'900',color:theme.white},eyebrow:{fontSize:10,fontWeight:'900',letterSpacing:1.3,color:theme.gold},sectionTitle:{fontFamily:'serif',fontSize:22,fontWeight:'800',color:theme.ink,marginTop:4},essentialBtn:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:theme.green2,borderRadius:999,paddingHorizontal:14,paddingVertical:10},essentialText:{fontSize:11,fontWeight:'900',color:theme.white},exportBtn:{flexDirection:'row',alignItems:'center',gap:6,borderWidth:1,borderColor:theme.borderStrong,backgroundColor:theme.white,borderRadius:999,paddingHorizontal:14,paddingVertical:10},exportText:{fontSize:11,fontWeight:'900',color:theme.green2},
