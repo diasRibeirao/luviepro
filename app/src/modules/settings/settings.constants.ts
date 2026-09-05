@@ -9,5 +9,6 @@ export const permissionGroups=[
   ['Orçamentos',[['quotes.read','Visualizar'],['quotes.write','Criar, editar e enviar']]],
   ['Projetos',[['projects.read','Visualizar'],['projects.write','Criar e atualizar']]],
   ['Agenda',[['calendar.read','Visualizar'],['calendar.write','Criar e cancelar compromissos']]],
+  ['Financeiro',[['finance.read','Visualizar'],['finance.write','Criar e alterar']]],
   ['Administração',[['settings.manage','Alterar configurações'],['audit.read','Consultar auditoria']]],
 ] as const;
