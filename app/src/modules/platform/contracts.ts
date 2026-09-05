@@ -72,13 +72,29 @@ export type PlatformPayment = {
   id: string;
   provider: string;
   providerPaymentId?: string | null;
+  providerPreferenceId?: string | null;
+  externalReference?: string | null;
   plan: string;
   period: string;
   amountCents: number;
   status: string;
   paymentMethod?: string | null;
+  providerStatus?: string | null;
+  providerStatusDetail?: string | null;
   paidAt?: string | null;
   createdAt: string;
+  updatedAt?: string;
+  _count?: { webhookEvents?: number };
+  lastWebhook?: {
+    id: string;
+    status: string;
+    eventType?: string | null;
+    attempts: number;
+    lastError?: string | null;
+    processedAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
   tenant?: Pick<PlatformCompany, 'id' | 'name' | 'slug'>;
 };
 
