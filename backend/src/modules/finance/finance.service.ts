@@ -177,11 +177,31 @@ export class FinanceService {
   async payEntry(tenantId:string,id:string,b:PayFinancialEntryDto,actorUserId?:string){
     await this.validatePaymentMethod(tenantId,b.method);
     const current=await this.db.financialEntry.findFirst({where:{id,tenantId}});if(!current)throw new NotFoundException('Lançamento financeiro não encontrado');if(current.status==='canceled')throw new BadRequestException('Lançamento cancelado não pode ser pago');if(current.status==='paid')return current;
-    const entry=await this.db.financialEntry.update({where:{id},data:{status:'paid',paidAt:b.paidAt?new Date(b.paidAt):new Date(),method:b.method||null,notes:b.notes?.trim()||current.notes}});
+    const paidAt=b.paidAt?new Date(b.paidAt):new Date();
+    const entry=await this.db.$transaction(async tx=>{
+      const changed=await tx.financialEntry.updateMany({where:{id,tenantId,status:'pending'},data:{status:'paid',paidAt,method:b.method||null,notes:b.notes?.trim()||current.notes}});
+      if(changed.count!==1){
+        const latest=await tx.financialEntry.findFirst({where:{id,tenantId}});
+        if(latest?.status==='paid')return latest;
+        if(latest?.status==='canceled')throw new BadRequestException('Lançamento cancelado não pode ser pago');
+        throw new BadRequestException('O lançamento foi alterado por outra operação. Atualize e tente novamente.');
+      }
+      return tx.financialEntry.findUniqueOrThrow({where:{id}});
+    });
     await this.db.auditLog.create({data:{tenantId,actorUserId:actorUserId??null,action:'payment',entity:'financial_entry',entityId:id,metadata:{amountCents:entry.amountCents,type:entry.type}}}).catch(()=>undefined);return entry;
   }
   async cancelEntry(tenantId:string,id:string,actorUserId?:string){
-    const current=await this.db.financialEntry.findFirst({where:{id,tenantId}});if(!current)throw new NotFoundException('Lançamento financeiro não encontrado');if(current.status==='paid')throw new BadRequestException('Lançamento já realizado não pode ser cancelado');
-    const entry=await this.db.financialEntry.update({where:{id},data:{status:'canceled'}});await this.db.auditLog.create({data:{tenantId,actorUserId:actorUserId??null,action:'cancel',entity:'financial_entry',entityId:id}}).catch(()=>undefined);return entry;
+    const current=await this.db.financialEntry.findFirst({where:{id,tenantId}});if(!current)throw new NotFoundException('Lançamento financeiro não encontrado');if(current.status==='paid')throw new BadRequestException('Lançamento já realizado não pode ser cancelado');if(current.status==='canceled')return current;
+    const entry=await this.db.$transaction(async tx=>{
+      const changed=await tx.financialEntry.updateMany({where:{id,tenantId,status:'pending'},data:{status:'canceled'}});
+      if(changed.count!==1){
+        const latest=await tx.financialEntry.findFirst({where:{id,tenantId}});
+        if(latest?.status==='canceled')return latest;
+        if(latest?.status==='paid')throw new BadRequestException('Lançamento já realizado não pode ser cancelado');
+        throw new BadRequestException('O lançamento foi alterado por outra operação. Atualize e tente novamente.');
+      }
+      return tx.financialEntry.findUniqueOrThrow({where:{id}});
+    });
+    await this.db.auditLog.create({data:{tenantId,actorUserId:actorUserId??null,action:'cancel',entity:'financial_entry',entityId:id}}).catch(()=>undefined);return entry;
   }
 }
