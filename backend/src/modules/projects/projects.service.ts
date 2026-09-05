@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '../../../../generated-prisma';
 import { PrismaService } from '../../prisma.service';
 import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
 import { clampInteger, nullableTrimmed } from '../../validation/patch';
@@ -252,29 +253,48 @@ export class ProjectsService {
   }
 
   async updateProjectTask(tenantId: string, projectId: string, taskId: string, data: UpdateProjectTaskDto, actorUserId?: string) {
-    const task = await this.db.projectTask.findFirst({ where: { id: taskId, projectId, tenantId } });
-    if (!task) throw new NotFoundException('Tarefa não encontrada');
-    const status = data.status ?? task.status;
     const assigneeUserId = await this.assigneeId(tenantId, data.assigneeUserId);
-    const updated = await this.db.projectTask.update({
-      where: { id: taskId },
-      data: {
-        title: data.title ?? task.title,
-        description: data.description ?? task.description,
-        status,
-        priority: data.priority ?? task.priority,
-        dueDate: data.dueDate ? parseDateOrThrow(data.dueDate,'Prazo') : task.dueDate,
-        completedAt: status === 'completed' ? (task.completedAt ?? new Date()) : null,
-        ...(assigneeUserId !== undefined ? { assigneeUserId } : {}),
-      },
-      include: { assignee: { select: { id: true, name: true, email: true } } },
-    });
-    const [total, done] = await Promise.all([
-      this.db.projectTask.count({ where: { projectId, tenantId } }),
-      this.db.projectTask.count({ where: { projectId, tenantId, status: 'completed' } }),
-    ]);
-    if (total > 0) await this.db.project.update({ where: { id: projectId }, data: { progress: Math.round(done * 100 / total), status: done === total ? 'completed' : 'in_progress' } });
-    await this.audit(tenantId, actorUserId, 'update', 'project_task', taskId, { projectId, status });
+    let updated: any;
+    let finalStatus = data.status;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        updated = await this.db.$transaction(async tx => {
+          const task = await tx.projectTask.findFirst({ where: { id: taskId, projectId, tenantId } });
+          if (!task) throw new NotFoundException('Tarefa não encontrada');
+
+          const status = data.status ?? task.status;
+          finalStatus = status;
+          const changed = await tx.projectTask.update({
+            where: { id: taskId },
+            data: {
+              title: data.title ?? task.title,
+              description: data.description ?? task.description,
+              status,
+              priority: data.priority ?? task.priority,
+              dueDate: data.dueDate ? parseDateOrThrow(data.dueDate,'Prazo') : task.dueDate,
+              completedAt: status === 'completed' ? (task.completedAt ?? new Date()) : null,
+              ...(assigneeUserId !== undefined ? { assigneeUserId } : {}),
+            },
+            include: { assignee: { select: { id: true, name: true, email: true } } },
+          });
+
+          const [total, done] = await Promise.all([
+            tx.projectTask.count({ where: { projectId, tenantId } }),
+            tx.projectTask.count({ where: { projectId, tenantId, status: 'completed' } }),
+          ]);
+          if (total > 0) await tx.project.update({ where: { id: projectId }, data: { progress: Math.round(done * 100 / total), status: done === total ? 'completed' : 'in_progress' } });
+          return changed;
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        break;
+      } catch (error) {
+        const retryable = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+        if (!retryable || attempt === 2) throw error;
+      }
+    }
+
+    if (!updated) throw new ConflictException('O projeto foi alterado por outra operação. Atualize e tente novamente.');
+    await this.audit(tenantId, actorUserId, 'update', 'project_task', taskId, { projectId, status: finalStatus });
     return updated;
   }
 }
