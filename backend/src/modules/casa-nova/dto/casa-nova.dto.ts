@@ -1,6 +1,6 @@
 import {ArrayMaxSize,ArrayMinSize,IsArray,IsBoolean,IsIn,IsInt,IsOptional,IsString,Max,MaxLength,Min,MinLength} from 'class-validator';
 export const CASA_NOVA_CATEGORIES=['Cozinha e mesa','Eletrodomésticos','Mercado','Hortifruti','Cama e banho'] as const;
-export class UpdateCasaNovaListDto{@IsInt() @Min(2) @Max(12) guests!:number}
+export class UpdateCasaNovaListDto{@IsInt() @Min(2) @Max(999999) guests!:number}
 export class CreateCasaNovaItemDto{
   @IsString() @MinLength(2) @MaxLength(80) itemName!:string;
   @IsIn(CASA_NOVA_CATEGORIES) category!:string;

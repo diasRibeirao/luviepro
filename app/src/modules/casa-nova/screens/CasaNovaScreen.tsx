@@ -26,6 +26,7 @@ export function CasaNovaScreen(){
  const {width}=useWindowDimensions();
  const compact=width<980;
  const[guests,setGuests]=useState(2);
+ const[guestInput,setGuestInput]=useState('2');
  const[items,setItems]=useState<CasaNovaItem[]>([]);
  const[loading,setLoading]=useState(true);
  const[busy,setBusy]=useState(false);
@@ -43,7 +44,7 @@ export function CasaNovaScreen(){
  const[deleteConfirmId,setDeleteConfirmId]=useState<string|null>(null);
  const[message,setMessage]=useState('');
 
- const load=async()=>{setLoading(true);try{const data=await casaNovaApi.get();setGuests(data.guests);setItems(data.items);setSelectedIds(ids=>ids.filter(id=>data.items.some(item=>item.id===id)))}catch(error){setMessage(errorMessage(error))}finally{setLoading(false)}};
+ const load=async()=>{setLoading(true);try{const data=await casaNovaApi.get();setGuests(data.guests);setGuestInput(String(data.guests));setItems(data.items);setSelectedIds(ids=>ids.filter(id=>data.items.some(item=>item.id===id)))}catch(error){setMessage(errorMessage(error))}finally{setLoading(false)}};
  useEffect(()=>{void load()},[]);
 
  const visible=useMemo(()=>filter==='Todos'?items:items.filter(x=>x.category===filter),[items,filter]);
@@ -52,10 +53,17 @@ export function CasaNovaScreen(){
  const allVisibleSelected=visible.length>0&&visible.every(item=>selectedIds.includes(item.id));
 
  const changeGuests=async(next:number)=>{
-  if(next<2||next>12||busy)return;
+  if(busy)return;
+  const normalized=Math.min(999999,Math.max(2,Math.trunc(next)));
   const previous=guests;
-  setGuests(next);
-  try{await casaNovaApi.updateGuests(next)}catch(error){setGuests(previous);setMessage(errorMessage(error))}
+  setGuests(normalized);
+  setGuestInput(String(normalized));
+  try{await casaNovaApi.updateGuests(normalized)}catch(error){setGuests(previous);setGuestInput(String(previous));setMessage(errorMessage(error))}
+ };
+ const commitGuestInput=()=>{
+  const parsed=Number(guestInput.replace(/\D/g,''));
+  if(!Number.isFinite(parsed)||parsed<2){setGuestInput(String(guests));setMessage('Informe no mínimo 2 pessoas.');return}
+  void changeGuests(parsed);
  };
 
  const toggle=async(item:CasaNovaItem)=>{
@@ -139,11 +147,30 @@ export function CasaNovaScreen(){
   }catch(error){setMessage(error instanceof Error?error.message:'Não foi possível exportar a lista.')}
  };
 
- return <AppShell title="Casa Nova" subtitle="Lista inteligente para montar uma casa pronta para receber de 2 a 12 pessoas.">
+ return <AppShell title="Casa Nova" subtitle="Lista inteligente para montar uma casa pronta para receber qualquer quantidade de pessoas.">
   {loading?<AsyncState loading/>:<View style={s.page}>
    <View style={[s.hero,compact&&s.heroCompact]}>
     <View style={s.heroText}><Text style={s.kicker}>LISTA CASA NOVA</Text><Text style={s.heroTitle}>Sua casa pronta para todo encontro especial.</Text><Text style={s.heroDesc}>A lista padrão é criada por conta. Ajuste pessoas, quantidades e itens sem misturar dados entre clientes ou empresas.</Text></View>
-    <View style={s.guestCard}><Text style={s.guestLabel}>Quantas pessoas estarão à mesa?</Text><View style={s.guestRow}><Pressable disabled={guests<=2||busy} onPress={()=>void changeGuests(guests-1)} style={[s.round,(guests<=2||busy)&&s.roundDisabled]}><Ionicons name="remove" size={20} color={guests<=2?theme.muted:theme.green}/></Pressable><View><Text style={s.guestNumber}>{guests}</Text><Text style={s.guestWord}>pessoas</Text></View><Pressable disabled={guests>=12||busy} onPress={()=>void changeGuests(guests+1)} style={[s.round,s.roundActive,(guests>=12||busy)&&s.roundDisabled]}><Ionicons name="add" size={20} color={theme.white}/></Pressable></View><Text style={s.minGuests}>Mínimo: 2 pessoas</Text><View style={s.dots}>{Array.from({length:12},(_,i)=><View key={i} style={[s.dot,i<guests&&s.dotOn]}/>)}</View></View>
+    <View style={s.guestCard}><Text style={s.guestLabel}>Quantas pessoas estarão à mesa?</Text><View style={s.guestRow}><Pressable disabled={guests<=2||busy} onPress={()=>void changeGuests(guests-1)} style={[s.round,(guests<=2||busy)&&s.roundDisabled]}><Ionicons name="remove" size={20} color={guests<=2?theme.muted:theme.green}/></Pressable><View style={s.guestInputWrap}>
+  <View style={s.guestInputBox}>
+   <TextInput
+    value={guestInput}
+    onChangeText={value=>setGuestInput(value.replace(/[^0-9]/g,'').slice(0,6))}
+    onBlur={commitGuestInput}
+    onSubmitEditing={commitGuestInput}
+    keyboardType="number-pad"
+    inputMode="numeric"
+    maxLength={6}
+    selectTextOnFocus
+    returnKeyType="done"
+    placeholder="2"
+    style={s.guestInput}
+   />
+   <Ionicons name="create-outline" size={16} color={theme.muted}/>
+  </View>
+  <Text style={s.guestEditHint}>Toque no número para editar</Text>
+  <Text style={s.guestWord}>pessoas</Text>
+ </View><Pressable disabled={guests>=999999||busy} onPress={()=>void changeGuests(guests+1)} style={[s.round,s.roundActive,(guests>=999999||busy)&&s.roundDisabled]}><Ionicons name="add" size={20} color={theme.white}/></Pressable></View><Text style={s.minGuests}>Mínimo: 2 pessoas · máximo técnico: 999.999</Text></View>
    </View>
 
    <View style={[s.summary,compact&&s.summaryCompact]}><Summary icon="list-outline" label="Itens na lista" value={String(items.length)} tone="dark"/><Summary icon="checkmark-circle-outline" label="Já comprados" value={String(done)}/><Summary icon="sparkles-outline" label="Lista concluída" value={`${progress}%`} tone="gold"/></View>
@@ -190,7 +217,12 @@ function Summary({icon,label,value,tone}:{icon:any;label:string;value:string;ton
 function Field({label,value,onChange,placeholder,keyboard}:{label:string;value:string;onChange:(v:string)=>void;placeholder?:string;keyboard?:'numeric'}){return <View style={s.field}><Text style={s.fieldLabel}>{label}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType={keyboard} style={s.input}/></View>}
 
 const s=StyleSheet.create({
- page:{gap:18},hero:{backgroundColor:theme.green,borderRadius:20,padding:28,flexDirection:'row',gap:24,alignItems:'center'},heroCompact:{flexDirection:'column',alignItems:'stretch'},heroText:{flex:1},kicker:{fontSize:10,fontWeight:'900',letterSpacing:1.5,color:theme.goldLight},heroTitle:{fontFamily:'serif',fontSize:30,fontWeight:'800',lineHeight:36,color:theme.white,marginTop:8,maxWidth:620},heroDesc:{fontSize:13,lineHeight:20,color:'rgba(255,255,255,.72)',marginTop:10,maxWidth:620},guestCard:{minWidth:260,borderRadius:16,backgroundColor:theme.white,padding:18},guestLabel:{fontSize:12,fontWeight:'800',color:theme.ink},guestRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:12},round:{width:42,height:42,borderRadius:21,alignItems:'center',justifyContent:'center',backgroundColor:theme.green50},roundActive:{backgroundColor:theme.green2},roundDisabled:{opacity:.38},guestNumber:{fontFamily:'serif',fontSize:30,fontWeight:'800',color:theme.ink,textAlign:'center'},guestWord:{fontSize:10,fontWeight:'800',color:theme.muted,textAlign:'center'},minGuests:{fontSize:9,fontWeight:'700',color:theme.muted,textAlign:'center',marginTop:7},dots:{flexDirection:'row',flexWrap:'wrap',gap:5,marginTop:10},dot:{width:8,height:8,borderRadius:4,backgroundColor:theme.borderStrong},dotOn:{backgroundColor:theme.gold},
+ page:{gap:18},hero:{backgroundColor:theme.green,borderRadius:20,padding:28,flexDirection:'row',gap:24,alignItems:'center'},heroCompact:{flexDirection:'column',alignItems:'stretch'},heroText:{flex:1},kicker:{fontSize:10,fontWeight:'900',letterSpacing:1.5,color:theme.goldLight},heroTitle:{fontFamily:'serif',fontSize:30,fontWeight:'800',lineHeight:36,color:theme.white,marginTop:8,maxWidth:620},heroDesc:{fontSize:13,lineHeight:20,color:'rgba(255,255,255,.72)',marginTop:10,maxWidth:620},guestCard:{minWidth:260,borderRadius:16,backgroundColor:theme.white,padding:18},guestLabel:{fontSize:12,fontWeight:'800',color:theme.ink},guestRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:12},round:{width:42,height:42,borderRadius:21,alignItems:'center',justifyContent:'center',backgroundColor:theme.green50},roundActive:{backgroundColor:theme.green2},roundDisabled:{opacity:.38},guestInputWrap:{alignItems:'center',minWidth:150},
+guestInputBox:{minWidth:132,maxWidth:170,minHeight:52,borderWidth:1.5,borderColor:theme.green2,borderRadius:12,backgroundColor:'#fff',paddingHorizontal:10,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6},
+guestInput:{minWidth:86,maxWidth:120,paddingVertical:6,fontFamily:'serif',fontSize:30,fontWeight:'800',color:theme.ink,textAlign:'center'},
+guestEditHint:{fontSize:8,fontWeight:'700',color:theme.muted,textAlign:'center',marginTop:4},
+guestWord:{fontSize:10,fontWeight:'800',color:theme.muted,textAlign:'center',marginTop:2},
+minGuests:{fontSize:9,fontWeight:'700',color:theme.muted,textAlign:'center',marginTop:9},
  summary:{flexDirection:'row',gap:12},summaryCompact:{flexDirection:'column'},sumCard:{flex:1,borderRadius:15,borderWidth:1,borderColor:theme.border,backgroundColor:theme.white,padding:18,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},sumDark:{backgroundColor:theme.green,borderColor:theme.green},sumGold:{backgroundColor:theme.goldPale,borderColor:'#EAD99B'},sumLabel:{fontSize:11,fontWeight:'700',color:theme.muted},sumValue:{fontFamily:'serif',fontSize:27,fontWeight:'800',color:theme.ink,marginTop:4},sumDarkText:{color:theme.white},
  body:{flexDirection:'row',alignItems:'flex-start',gap:18},bodyCompact:{flexDirection:'column'},listCol:{flex:1,minWidth:0,width:'100%'},listHeader:{flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:12,flexWrap:'wrap'},headerActions:{flexDirection:'row',gap:8,flexWrap:'wrap'},addItemShortcut:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:theme.green2,borderRadius:999,paddingHorizontal:14,paddingVertical:10},addItemShortcutText:{fontSize:11,fontWeight:'900',color:theme.white},eyebrow:{fontSize:10,fontWeight:'900',letterSpacing:1.3,color:theme.gold},sectionTitle:{fontFamily:'serif',fontSize:22,fontWeight:'800',color:theme.ink,marginTop:4},essentialBtn:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:theme.green2,borderRadius:999,paddingHorizontal:14,paddingVertical:10},essentialText:{fontSize:11,fontWeight:'900',color:theme.white},exportBtn:{flexDirection:'row',alignItems:'center',gap:6,borderWidth:1,borderColor:theme.borderStrong,backgroundColor:theme.white,borderRadius:999,paddingHorizontal:14,paddingVertical:10},exportText:{fontSize:11,fontWeight:'900',color:theme.green2},
  filters:{flexDirection:'row',gap:7,flexWrap:'wrap',marginVertical:14},filter:{borderWidth:1,borderColor:theme.borderStrong,borderRadius:999,paddingHorizontal:12,paddingVertical:8,backgroundColor:theme.white},filterOn:{backgroundColor:theme.green,borderColor:theme.green},filterText:{fontSize:11,fontWeight:'800',color:theme.green2},filterTextOn:{color:theme.white},
