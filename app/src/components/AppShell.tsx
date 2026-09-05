@@ -29,7 +29,7 @@ const items=[
   {href:'/project-statuses',key:'projectStatuses',icon:'options-outline',group:'administracao'},
 ] as const;
 const groupLabels={principal:'Principal',comercial:'Comercial',operacao:'Operação',administracao:'Administração'} as const;
-const itemPermissions:Record<string,string|undefined>={dashboard:'dashboard.read',calendar:'calendar.read',notifications:undefined,clients:'clients.read',services:'services.read',products:undefined,quotes:'quotes.read',orders:'quotes.read',purchases:'quotes.read',finance:'finance.read',projects:'projects.read',calculator:'quotes.write',casaNova:undefined,company:'settings.manage',settings:'settings.manage',projectStatuses:'settings.manage'};
+const itemPermissions:Record<string,string|undefined>={dashboard:'dashboard.read',calendar:'calendar.read',notifications:undefined,clients:'clients.read',services:'services.read',products:undefined,quotes:'quotes.read',orders:'orders.read',purchases:'purchases.read',finance:'finance.read',projects:'projects.read',calculator:'quotes.write',casaNova:undefined,company:'settings.manage',settings:'settings.manage',projectStatuses:'settings.manage'};
 type AccountSummary={tenant?:{plan?:string};usage?:{clients?:number};limit?:{maxClients?:number}};
 type UnreadCount={count?:number};
 type IoniconName=ComponentProps<typeof Ionicons>['name'];

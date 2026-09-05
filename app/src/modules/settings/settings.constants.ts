@@ -7,6 +7,8 @@ export const permissionGroups=[
   ['Clientes',[['clients.read','Visualizar'],['clients.write','Criar e editar']]],
   ['Serviços',[['services.read','Visualizar'],['services.write','Criar e editar']]],
   ['Orçamentos',[['quotes.read','Visualizar'],['quotes.write','Criar, editar e enviar']]],
+  ['Pedidos',[['orders.read','Visualizar'],['orders.write','Editar e registrar pagamentos']]],
+  ['Compras',[['purchases.read','Visualizar'],['purchases.write','Criar, editar, receber e pagar']]],
   ['Projetos',[['projects.read','Visualizar'],['projects.write','Criar e atualizar']]],
   ['Agenda',[['calendar.read','Visualizar'],['calendar.write','Criar e cancelar compromissos']]],
   ['Financeiro',[['finance.read','Visualizar'],['finance.write','Criar e alterar']]],
