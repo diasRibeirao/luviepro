@@ -98,7 +98,8 @@ export class PurchasesService {
     return this.db.$transaction(async tx=>{
       for(const [itemId,q] of requested){
         const item=current.items.find(i=>i.id===itemId)!;
-        await tx.purchaseOrderItem.update({where:{id:itemId},data:{receivedQuantity:{increment:q}}});
+        const updatedItem=await tx.purchaseOrderItem.updateMany({where:{id:itemId,purchaseOrderId:id,receivedQuantity:{lte:item.quantity-q}},data:{receivedQuantity:{increment:q}}});
+        if(updatedItem.count!==1)throw new BadRequestException(`O recebimento de ${item.productName} foi alterado por outra operação. Atualize a compra e tente novamente.`);
         const before=await tx.product.findUniqueOrThrow({where:{id:item.productId}});
         const oldQty=Math.max(0,before.stockQuantity);
         const newQty=oldQty+q;
