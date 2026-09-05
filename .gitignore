@@ -10,6 +10,9 @@ coverage/
 
 .git.zip
 
-*.sql
+# Prisma migrations precisam ser versionadas
+!backend/prisma/migrations/
+!backend/prisma/migrations/**/
+!backend/prisma/migrations/**/migration.sql
 
 luviepro-backup-*.sql
