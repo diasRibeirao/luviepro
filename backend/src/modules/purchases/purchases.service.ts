@@ -1,5 +1,4 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '../../../../generated-prisma';
 import { PrismaService } from '../../prisma.service';
 import { CreatePurchaseDto, CreatePurchasePaymentDto, CreateSupplierDto, ReceivePurchaseDto, UpdatePurchaseDto, UpdateSupplierDto } from './dto/purchases.dto';
 
@@ -78,7 +77,7 @@ export class PurchasesService {
       try{
         row=await this.db.purchaseOrder.create({data:{tenantId,supplierId:supplier.id,number,totalCents,expectedAt:b.expectedAt?new Date(b.expectedAt):null,paymentDueAt:b.paymentDueAt?new Date(b.paymentDueAt):null,notes:b.notes?.trim()||null,items:{create:items}},include:includePurchase});
       }catch(error){
-        const isNumberCollision=error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002';
+        const isNumberCollision=(error as {code?:string})?.code==='P2002';
         if(!isNumberCollision||attempt===4)throw error;
       }
     }

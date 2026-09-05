@@ -1,5 +1,4 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '../../../../generated-prisma';
 import { PrismaService } from '../../prisma.service';
 import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
 import { clampInteger, nullableTrimmed } from '../../validation/patch';
@@ -285,10 +284,10 @@ export class ProjectsService {
           ]);
           if (total > 0) await tx.project.update({ where: { id: projectId }, data: { progress: Math.round(done * 100 / total), status: done === total ? 'completed' : 'in_progress' } });
           return changed;
-        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        }, { isolationLevel: 'Serializable' });
         break;
       } catch (error) {
-        const retryable = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+        const retryable = (error as { code?: string })?.code === 'P2034';
         if (!retryable || attempt === 2) throw error;
       }
     }
