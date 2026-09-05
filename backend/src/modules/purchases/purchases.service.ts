@@ -106,24 +106,32 @@ export class PurchasesService {
       if(!item)throw new BadRequestException('Item inválido na compra');
       if(item.receivedQuantity+q>item.quantity)throw new BadRequestException(`Quantidade de ${item.productName} excede o saldo pendente`);
     }
-    return this.db.$transaction(async tx=>{
-      for(const [itemId,q] of requested){
-        const item=current.items.find(i=>i.id===itemId)!;
-        const updatedItem=await tx.purchaseOrderItem.updateMany({where:{id:itemId,purchaseOrderId:id,receivedQuantity:{lte:item.quantity-q}},data:{receivedQuantity:{increment:q}}});
-        if(updatedItem.count!==1)throw new BadRequestException(`O recebimento de ${item.productName} foi alterado por outra operação. Atualize a compra e tente novamente.`);
-        const before=await tx.product.findUniqueOrThrow({where:{id:item.productId}});
-        const oldQty=Math.max(0,before.stockQuantity);
-        const newQty=oldQty+q;
-        const weightedCost=newQty>0?Math.round(((oldQty*before.costCents)+(q*item.unitCostCents))/newQty):item.unitCostCents;
-        const p=await tx.product.update({where:{id:item.productId},data:{stockQuantity:{increment:q},costCents:weightedCost}});
-        await tx.stockMovement.create({data:{tenantId,productId:item.productId,type:'entry',quantity:q,balanceAfter:p.stockQuantity,unitCostCents:item.unitCostCents,reason:`Recebimento ${current.number}`,referenceType:'purchase',referenceId:current.id,actorUserId:actor}});
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        return await this.db.$transaction(async tx=>{
+          for(const [itemId,q] of requested){
+            const item=current.items.find(i=>i.id===itemId)!;
+            const updatedItem=await tx.purchaseOrderItem.updateMany({where:{id:itemId,purchaseOrderId:id,receivedQuantity:{lte:item.quantity-q}},data:{receivedQuantity:{increment:q}}});
+            if(updatedItem.count!==1)throw new BadRequestException(`O recebimento de ${item.productName} foi alterado por outra operação. Atualize a compra e tente novamente.`);
+            const before=await tx.product.findUniqueOrThrow({where:{id:item.productId}});
+            const oldQty=Math.max(0,before.stockQuantity);
+            const newQty=oldQty+q;
+            const weightedCost=newQty>0?Math.round(((oldQty*before.costCents)+(q*item.unitCostCents))/newQty):item.unitCostCents;
+            const p=await tx.product.update({where:{id:item.productId},data:{stockQuantity:{increment:q},costCents:weightedCost}});
+            await tx.stockMovement.create({data:{tenantId,productId:item.productId,type:'entry',quantity:q,balanceAfter:p.stockQuantity,unitCostCents:item.unitCostCents,reason:`Recebimento ${current.number}`,referenceType:'purchase',referenceId:current.id,actorUserId:actor}});
+          }
+          const after=await tx.purchaseOrder.findUniqueOrThrow({where:{id},include:includePurchase});
+          const complete=after.items.every(i=>i.receivedQuantity>=i.quantity);
+          const any=after.items.some(i=>i.receivedQuantity>0);
+          const status=complete?'received':any?'partially_received':'ordered';
+          return tx.purchaseOrder.update({where:{id},data:{status,receivedAt:complete?new Date():null},include:includePurchase});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
       }
-      const after=await tx.purchaseOrder.findUniqueOrThrow({where:{id},include:includePurchase});
-      const complete=after.items.every(i=>i.receivedQuantity>=i.quantity);
-      const any=after.items.some(i=>i.receivedQuantity>0);
-      const status=complete?'received':any?'partially_received':'ordered';
-      return tx.purchaseOrder.update({where:{id},data:{status,receivedAt:complete?new Date():null},include:includePurchase});
-    });
+    }
+    throw new BadRequestException('O estoque foi alterado por outra operação. Atualize a compra e tente novamente.');
   }
 
   async addPayment(tenantId:string,id:string,b:CreatePurchasePaymentDto,actor?:string){
