@@ -12,7 +12,7 @@ export interface PlanPriceSource {
 
 export function isPlanCode(value:string):value is PlanCode{return /^[a-z][a-z0-9-]{1,30}$/.test(value);}
 export function isBillingPeriod(value:string):value is BillingPeriod{return (BILLING_PERIODS as readonly string[]).includes(value);}
-export function planRank(plan:string){return ({starter:1,pro:2,business:3} as Record<string,number>)[plan]??0;}
+export function planRank(plan:string){return ({basic:1,starter:2,pro:3,business:4} as Record<string,number>)[plan]??0;}
 export function periodPrice(limit:PlanPriceSource,period:string){
   if(period==='annual')return limit.annualPriceCents;
   if(period==='semiannual')return limit.semiannualPriceCents;

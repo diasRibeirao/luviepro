@@ -1,7 +1,7 @@
 import {billingAction,isBillingPeriod,isPlanCode,periodEnd,periodPrice,planRank,subscriptionStatus} from './plan-policy';
 
 describe('plan policy',()=>{
-  it.each([['starter',1],['pro',2],['business',3],['other',0]])('rank %s', (plan,rank)=>expect(planRank(plan)).toBe(rank));
+  it.each([['basic',1],['starter',2],['pro',3],['business',4],['other',0]])('rank %s', (plan,rank)=>expect(planRank(plan)).toBe(rank));
   it('recognizes valid plans',()=>{expect(isPlanCode('starter')).toBe(true);expect(isPlanCode('enterprise')).toBe(true);});
   it('recognizes valid periods',()=>{expect(isBillingPeriod('annual')).toBe(true);expect(isBillingPeriod('weekly')).toBe(false);});
   const prices={monthlyPriceCents:1000,quarterlyPriceCents:2700,semiannualPriceCents:5100,annualPriceCents:9600};
