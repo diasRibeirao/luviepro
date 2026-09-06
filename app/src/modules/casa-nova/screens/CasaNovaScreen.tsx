@@ -133,6 +133,21 @@ export function CasaNovaScreen(){
   try{const result=await casaNovaApi.bulkUpdate({ids:selectedIds,...patch});await load();setMessage(`${result.updated} item(ns) atualizado(s) em massa.`)}catch(error){setMessage(errorMessage(error))}finally{setBusy(false)}
  };
 
+ const bulkQuantityMode=async(isScalable:boolean)=>{
+  if(!selectedIds.length||busy)return;
+  const selected=items.filter(item=>selectedIds.includes(item.id));
+  if(!selected.length)return;
+  setBusy(true);
+  try{
+   await Promise.all(selected.map(item=>casaNovaApi.updateItem(item.id,{
+    isScalable,
+    quantityOverride:isScalable?null:quantity(item,guests),
+   })));
+   await load();
+   setMessage(`${selected.length} item(ns) atualizado(s) em massa.`);
+  }catch(error){setMessage(errorMessage(error))}finally{setBusy(false)}
+ };
+
  const bulkRemove=async()=>{
   if(!selectedIds.length||busy)return;
   setBusy(true);
@@ -224,7 +239,7 @@ export function CasaNovaScreen(){
      {visible.length>0?<View style={s.bulkBar}>
       <Pressable onPress={toggleSelectAll} style={s.selectAll}><View style={[s.selectBox,allVisibleSelected&&s.selectBoxOn]}>{allVisibleSelected?<Ionicons name="checkmark" size={14} color={theme.white}/>:null}</View><Text style={s.selectAllText}>{allVisibleSelected?'Desmarcar tudo':'Selecionar tudo'}</Text></Pressable>
       <Text style={s.selectedCount}>{selectedIds.length} selecionado(s)</Text>
-      {selectedIds.length>0?<View style={s.bulkActions}><View style={s.bulkSelect}><SelectField label="Categoria em massa" value={bulkCategory} options={categoryOptions} onChange={v=>setBulkCategory(v as CasaNovaCategory)}/></View><Pressable disabled={busy} onPress={()=>void bulkUpdate({category:bulkCategory})} style={s.bulkButton}><Text style={s.bulkButtonText}>Aplicar categoria</Text></Pressable><View style={s.bulkSelect}><SelectField label="Unidade em massa" value={bulkUnit} options={unitOptions} onChange={setBulkUnit}/></View><Pressable disabled={busy} onPress={()=>void bulkUpdate({unit:bulkUnit})} style={s.bulkButton}><Text style={s.bulkButtonText}>Aplicar unidade</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkUpdate({checked:true})} style={s.bulkButton}><Text style={s.bulkButtonText}>Marcar comprados</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkUpdate({checked:false})} style={s.bulkButton}><Text style={s.bulkButtonText}>Desmarcar comprados</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkUpdate({isScalable:true})} style={s.bulkButton}><Text style={s.bulkButtonText}>Qtd. automática</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkUpdate({isScalable:false})} style={s.bulkButton}><Text style={s.bulkButtonText}>Qtd. fixa</Text></Pressable><Pressable disabled={busy} onPress={()=>setBulkDeleteConfirm(true)} style={s.bulkDanger}><Ionicons name="trash-outline" size={15} color={theme.white}/><Text style={s.bulkDangerText}>Excluir selecionados</Text></Pressable></View>:null}
+      {selectedIds.length>0?<View style={s.bulkActions}><View style={s.bulkSelect}><SelectField label="Categoria em massa" value={bulkCategory} options={categoryOptions} onChange={v=>setBulkCategory(v as CasaNovaCategory)}/></View><Pressable disabled={busy} onPress={()=>void bulkUpdate({category:bulkCategory})} style={s.bulkButton}><Text style={s.bulkButtonText}>Aplicar categoria</Text></Pressable><View style={s.bulkSelect}><SelectField label="Unidade em massa" value={bulkUnit} options={unitOptions} onChange={setBulkUnit}/></View><Pressable disabled={busy} onPress={()=>void bulkUpdate({unit:bulkUnit})} style={s.bulkButton}><Text style={s.bulkButtonText}>Aplicar unidade</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkUpdate({checked:true})} style={s.bulkButton}><Text style={s.bulkButtonText}>Marcar comprados</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkUpdate({checked:false})} style={s.bulkButton}><Text style={s.bulkButtonText}>Desmarcar comprados</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkQuantityMode(true)} style={s.bulkButton}><Text style={s.bulkButtonText}>Qtd. automática</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkQuantityMode(false)} style={s.bulkButton}><Text style={s.bulkButtonText}>Qtd. fixa</Text></Pressable><Pressable disabled={busy} onPress={()=>setBulkDeleteConfirm(true)} style={s.bulkDanger}><Ionicons name="trash-outline" size={15} color={theme.white}/><Text style={s.bulkDangerText}>Excluir selecionados</Text></Pressable></View>:null}
       {bulkDeleteConfirm?<View style={s.bulkConfirm}><Text style={s.bulkConfirmText}>Excluir {selectedIds.length} item(ns) selecionado(s)?</Text><Pressable onPress={()=>void bulkRemove()} style={s.deleteYes}><Text style={s.deleteYesText}>Confirmar exclusão</Text></Pressable><Pressable onPress={()=>setBulkDeleteConfirm(false)} style={s.deleteNo}><Text style={s.deleteNoText}>Cancelar</Text></Pressable></View>:null}
      </View>:null}
 

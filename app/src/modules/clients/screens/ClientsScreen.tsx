@@ -46,7 +46,28 @@ export function ClientsScreen(){
   };
   async function fillCep(value=form.zipCode,showIncompleteError=true){const formatted=formatCep(value);const digits=formatted.replace(/\D/g,'');if(!digits)return;if(digits.length<8){if(showIncompleteError)setErrors(e=>({...e,zipCode:'CEP deve ter 8 dígitos.'}));return}try{setCepBusy(true);const address=await lookupCep(formatted);setForm(current=>({...current,...address,zipCode:formatted}));setErrors(current=>({...current,zipCode:''}))}catch(e:unknown){setErrors(current=>({...current,zipCode:errorMessage(e)||'CEP não encontrado.'}))}finally{setCepBusy(false)}}
   function changeCep(value:string){const formatted=formatCep(value);change('zipCode',formatted);if(formatted.replace(/\D/g,'').length===8)void fillCep(formatted,false)}
-  async function save(){const next:Record<string,string>={};if(!form.name.trim())next.name=form.type==='company'?'Informe o nome fantasia ou nome comercial.':'Informe o nome completo do cliente.';if(!form.phone.replace(/\D/g,'').trim())next.phone='Informe um telefone para contato.';else if(form.phone.replace(/\D/g,'').length<10)next.phone='Informe um telefone válido com DDD.';const doc=documentMessage(form.document,form.type);if(doc)next.document=doc;if(!isValidEmail(form.email))next.email='Informe um e-mail válido.';const cep=cepMessage(form.zipCode);if(cep)next.zipCode=cep;setErrors(next);if(Object.keys(next).length)return;try{setSaving(true);await clientsApi.save(editing?.id,{...form,whatsapp:phoneIsWhatsapp?form.phone:'',name:form.name.trim(),state:form.state.trim().toUpperCase().slice(0,2)});setOpen(false);await load();notify({tone:'success',title:editing?'Cliente atualizado':'Cliente cadastrado',message:'Os dados cadastrais foram salvos.'})}catch(error:unknown){notify({tone:'error',title:'Não foi possível salvar',message:errorMessage(error)})}finally{setSaving(false)}}
+  async function save(){
+    const documentDigits=form.document.replace(/\D/g,'');
+    const effectiveType:ClientForm['type']=documentDigits.length===14?'company':documentDigits.length===11?'individual':form.type;
+    const next:Record<string,string>={};
+    if(!form.name.trim())next.name=effectiveType==='company'?'Informe o nome fantasia ou nome comercial.':'Informe o nome completo do cliente.';
+    if(!form.phone.replace(/\D/g,'').trim())next.phone='Informe um telefone para contato.';
+    else if(form.phone.replace(/\D/g,'').length<10)next.phone='Informe um telefone válido com DDD.';
+    const doc=documentMessage(form.document,effectiveType);if(doc)next.document=doc;
+    if(!isValidEmail(form.email))next.email='Informe um e-mail válido.';
+    const cep=cepMessage(form.zipCode);if(cep)next.zipCode=cep;
+    setErrors(next);
+    if(Object.keys(next).length)return;
+    try{
+      setSaving(true);
+      await clientsApi.save(editing?.id,{...form,type:effectiveType,whatsapp:phoneIsWhatsapp?form.phone:'',name:form.name.trim(),state:form.state.trim().toUpperCase().slice(0,2)});
+      setOpen(false);
+      await load();
+      notify({tone:'success',title:editing?'Cliente atualizado':'Cliente cadastrado',message:'Os dados cadastrais foram salvos.'});
+    }catch(error:unknown){
+      notify({tone:'error',title:'Não foi possível salvar',message:errorMessage(error)});
+    }finally{setSaving(false)}
+  }
 
   async function exportClients(){
     try{
