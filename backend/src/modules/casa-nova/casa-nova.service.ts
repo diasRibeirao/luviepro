@@ -52,7 +52,15 @@ type StandardItem=(typeof essentials)[number];
 
   private async ensureList(tenantId:string){
     let list=await this.db.casaNovaList.findUnique({where:{tenantId}});
-    if(!list)list=await this.db.casaNovaList.create({data:{tenantId,guests:2,defaultsInitialized:false}});
+    if(!list){
+      try{
+        list=await this.db.casaNovaList.create({data:{tenantId,guests:2,defaultsInitialized:false}});
+      }catch(error){
+        if((error as {code?:string})?.code!=='P2002')throw error;
+        list=await this.db.casaNovaList.findUnique({where:{tenantId}});
+        if(!list)throw error;
+      }
+    }
     if(!list.defaultsInitialized){
       await this.addMissingStandards(tenantId,list.id);
       list=await this.db.casaNovaList.update({where:{tenantId},data:{defaultsInitialized:true}});

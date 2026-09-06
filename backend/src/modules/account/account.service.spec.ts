@@ -33,31 +33,104 @@ describe('AccountService', () => {
     expect(result.entitlements.remaining.users).toBe(1);
   });
 
-  it('keeps direct plan changes gated', async () => {
+  it('keeps direct plan changes gated before touching the database', async () => {
     const old = process.env.ALLOW_DIRECT_PLAN_CHANGE;
     delete process.env.ALLOW_DIRECT_PLAN_CHANGE;
-    const db: any = {
-      planLimit: { findUnique: jest.fn().mockResolvedValue({ maxUsers: 3 }) },
-      user: { count: jest.fn().mockResolvedValue(1) },
-      userInvitation: { count: jest.fn().mockResolvedValue(0) },
-    };
+    const db: any = { $transaction: jest.fn() };
 
     await expect(
       new AccountService(db, {} as any).updatePlan('t1', 'pro', 'monthly'),
     ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(db.$transaction).not.toHaveBeenCalled();
 
     if (old === undefined) delete process.env.ALLOW_DIRECT_PLAN_CHANGE;
     else process.env.ALLOW_DIRECT_PLAN_CHANGE = old;
   });
 
-  it('rejects a configured plan that is unavailable', async () => {
-    const db: any = {
+  it('rejects a configured plan that is unavailable inside the transaction', async () => {
+    const old = process.env.ALLOW_DIRECT_PLAN_CHANGE;
+    process.env.ALLOW_DIRECT_PLAN_CHANGE = 'true';
+    const tx: any = {
       planLimit: { findUnique: jest.fn().mockResolvedValue(null) },
+    };
+    const db: any = {
+      $transaction: jest.fn(async (callback: any) => callback(tx)),
     };
 
     await expect(
       new AccountService(db, {} as any).updatePlan('t1', 'pro', 'monthly'),
     ).rejects.toBeInstanceOf(NotFoundException);
+
+    if (old === undefined) delete process.env.ALLOW_DIRECT_PLAN_CHANGE;
+    else process.env.ALLOW_DIRECT_PLAN_CHANGE = old;
+  });
+
+  it('changes plans only after rechecking capacity inside a serializable transaction', async () => {
+    const old = process.env.ALLOW_DIRECT_PLAN_CHANGE;
+    process.env.ALLOW_DIRECT_PLAN_CHANGE = 'true';
+    const tx: any = {
+      planLimit: { findUnique: jest.fn().mockResolvedValue({ maxUsers: 3 }) },
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({ id: 't1' }),
+        update: jest.fn().mockResolvedValue({ id: 't1', plan: 'pro', planPeriod: 'monthly' }),
+      },
+      user: { count: jest.fn().mockResolvedValue(1) },
+      userInvitation: { count: jest.fn().mockResolvedValue(1) },
+    };
+    const db: any = {
+      ...tx,
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn(async (callback: any, options: any) => {
+        expect(options).toEqual({ isolationLevel: 'Serializable' });
+        return callback(tx);
+      }),
+    };
+
+    await expect(
+      new AccountService(db, {} as any).updatePlan('t1', 'pro', 'monthly', 'u1'),
+    ).resolves.toEqual({ id: 't1', plan: 'pro', planPeriod: 'monthly' });
+
+    expect(tx.user.count).toHaveBeenCalledWith({ where: { tenantId: 't1', active: true } });
+    expect(tx.userInvitation.count).toHaveBeenCalled();
+    expect(tx.tenant.update).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { plan: 'pro', planPeriod: 'monthly' },
+    });
+
+    if (old === undefined) delete process.env.ALLOW_DIRECT_PLAN_CHANGE;
+    else process.env.ALLOW_DIRECT_PLAN_CHANGE = old;
+  });
+
+  it('retries a direct plan change after a serializable conflict', async () => {
+    const old = process.env.ALLOW_DIRECT_PLAN_CHANGE;
+    process.env.ALLOW_DIRECT_PLAN_CHANGE = 'true';
+    let attempts = 0;
+    const tx: any = {
+      planLimit: { findUnique: jest.fn().mockResolvedValue({ maxUsers: 3 }) },
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({ id: 't1' }),
+        update: jest.fn().mockResolvedValue({ id: 't1', plan: 'pro', planPeriod: 'monthly' }),
+      },
+      user: { count: jest.fn().mockResolvedValue(1) },
+      userInvitation: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const db: any = {
+      ...tx,
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn(async (callback: any) => {
+        attempts++;
+        if (attempts === 1) throw { code: 'P2034' };
+        return callback(tx);
+      }),
+    };
+
+    await expect(
+      new AccountService(db, {} as any).updatePlan('t1', 'pro', 'monthly'),
+    ).resolves.toEqual(expect.objectContaining({ plan: 'pro' }));
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
+
+    if (old === undefined) delete process.env.ALLOW_DIRECT_PLAN_CHANGE;
+    else process.env.ALLOW_DIRECT_PLAN_CHANGE = old;
   });
 
   it('does not hide database failures while removing a logo', async () => {
