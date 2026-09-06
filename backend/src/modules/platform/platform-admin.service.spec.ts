@@ -15,7 +15,7 @@ describe('PlatformAdminService',()=>{
       findMany:jest.fn(),findUnique:jest.fn(),aggregate:jest.fn(),create:jest.fn(),update:jest.fn(),
     },
     userInvitation:{findFirst:jest.fn(),create:jest.fn()},
-    platformAdmin:{findUnique:jest.fn(),count:jest.fn(),update:jest.fn()},
+    platformAdmin:{findUnique:jest.fn(),count:jest.fn(),create:jest.fn(),update:jest.fn()},
     authSession:{updateMany:jest.fn()},
     auditLog:{create:jest.fn()},
     $transaction:jest.fn(),
@@ -69,6 +69,56 @@ describe('PlatformAdminService',()=>{
     db.tenant.findUnique.mockResolvedValue({id:'t1',plan:'business',planPeriod:'monthly',subscriptionExpiresAt:new Date(Date.now()+86400000)});
     db.subscription.findFirst.mockResolvedValue({id:'already'});
     await expect(service.changeTenant('t1',{plan:'pro'})).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('creates a platform master inside a serializable transaction',async()=>{
+    db.platformAdmin.findUnique.mockResolvedValue(null);
+    db.user.findUnique.mockResolvedValue(null);
+    db.platformAdmin.create.mockResolvedValue({
+      id:'pa2',name:'Master Two',email:'master@example.com',role:'platform_admin',active:true,
+      lastLoginAt:null,createdAt:new Date(),updatedAt:new Date(),
+    });
+    auth.forgotPassword.mockResolvedValue({sent:true});
+
+    const result:any=await service.createMaster({name:' Master Two ',email:'MASTER@example.com'} as any);
+
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function),{isolationLevel:'Serializable'});
+    expect(db.platformAdmin.create).toHaveBeenCalledWith({
+      data:expect.objectContaining({name:'Master Two',email:'master@example.com',role:'platform_admin',active:true}),
+      select:expect.any(Object),
+    });
+    expect(auth.forgotPassword).toHaveBeenCalledWith('master@example.com');
+    expect(result.email).toBe('master@example.com');
+  });
+
+  it('retries platform master creation after a serializable conflict',async()=>{
+    let attempts=0;
+    db.$transaction.mockImplementation(async(fn:any,options:any)=>{
+      expect(options).toEqual({isolationLevel:'Serializable'});
+      attempts++;
+      if(attempts===1)throw {code:'P2034'};
+      return fn(tx);
+    });
+    db.platformAdmin.findUnique.mockResolvedValue(null);
+    db.user.findUnique.mockResolvedValue(null);
+    db.platformAdmin.create.mockResolvedValue({
+      id:'pa2',name:'Master',email:'master@example.com',role:'platform_admin',active:true,
+      lastLoginAt:null,createdAt:new Date(),updatedAt:new Date(),
+    });
+    auth.forgotPassword.mockResolvedValue({sent:true});
+
+    await expect(service.createMaster({name:'Master',email:'master@example.com'} as any)).resolves.toEqual(
+      expect.objectContaining({id:'pa2',email:'master@example.com'})
+    );
+
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('maps concurrent duplicate platform master creation to ConflictException',async()=>{
+    db.$transaction.mockRejectedValue({code:'P2002'});
+    await expect(service.createMaster({name:'Master',email:'master@example.com'} as any))
+      .rejects.toBeInstanceOf(ConflictException);
+    expect(auth.forgotPassword).not.toHaveBeenCalled();
   });
 
   it('creates a tenant with trial subscription and owner invitation',async()=>{

@@ -78,10 +78,23 @@ export class PlatformAdminService {
 
   async createMaster(data:PlatformMasterCreateDto){
     const email=String(data.email).trim().toLowerCase(),name=String(data.name).trim();
-    if(await this.db.platformAdmin.findUnique({where:{email}}))throw new ConflictException('Este e-mail já é um usuário Master');
-    if(await this.db.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já pertence a um usuário de empresa');
     const passwordHash=await hash(randomBytes(48).toString('hex'),12);
-    const master=await this.db.platformAdmin.create({data:{name,email,passwordHash,role:'platform_admin',active:true},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,updatedAt:true}});
+    let master=null;
+    for(let attempt=0;attempt<3&&!master;attempt++){
+      try{
+        master=await this.db.$transaction(async tx=>{
+          if(await tx.platformAdmin.findUnique({where:{email}}))throw new ConflictException('Este e-mail já é um usuário Master');
+          if(await tx.user.findUnique({where:{email}}))throw new ConflictException('Este e-mail já pertence a um usuário de empresa');
+          return tx.platformAdmin.create({data:{name,email,passwordHash,role:'platform_admin',active:true},select:{id:true,name:true,email:true,role:true,active:true,lastLoginAt:true,createdAt:true,updatedAt:true}});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        const code=(error as {code?:string})?.code;
+        if(code==='P2034'&&attempt<2)continue;
+        if(code==='P2002')throw new ConflictException('Este e-mail já é um usuário Master');
+        throw error;
+      }
+    }
+    if(!master)throw new ConflictException('O usuário Master foi criado ou alterado por outra operação. Atualize a lista e tente novamente');
     const delivery=await this.auth.forgotPassword(email);
     return {...master,current:false,firstAccessRequested:true,delivery};
   }
