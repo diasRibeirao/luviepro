@@ -20,5 +20,5 @@ export const quotesApi={
   proposalAccount:()=>api<AccountData>('/account'),
   proposal:(id:string)=>api<ProposalData>(`/quotes/${id}`),
   calculate:(payload:PricingRequest)=>api<PricingResult>('/pricing/calculate',{method:'POST',body:JSON.stringify(payload)}),
-  confirmSale:(id:string)=>api<{id:string;number:string;status:string;totalCents:number}>(`/quotes/${id}/confirm-sale`,{method:'POST'}),
+  confirmSale:(id:string,projectStatus?:string)=>api<{id:string;number:string;status:string;totalCents:number}>(`/quotes/${id}/confirm-sale`,{method:'POST',body:JSON.stringify(projectStatus?{projectStatus}:{})}),
 };

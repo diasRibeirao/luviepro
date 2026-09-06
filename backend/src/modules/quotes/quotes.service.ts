@@ -44,10 +44,10 @@ export class QuotesService {
     return total>0?Math.max(1,Math.ceil(total)):Math.max(1,fallback||1);
   }
 
-  private async ensureProjectFromQuote(tx:Prisma.TransactionClient,quote:{id:string;tenantId:string;clientId:string;number:string;client:{name:string}}){
+  private async ensureProjectFromQuote(tx:Prisma.TransactionClient,quote:{id:string;tenantId:string;clientId:string;number:string;client:{name:string}},projectStatus?:string){
     const items=await tx.quoteItem.findMany({where:{tenantId:quote.tenantId,quoteId:quote.id},include:{stages:{where:{tenantId:quote.tenantId},orderBy:{sequence:'asc'}}},orderBy:{id:'asc'}});
     if(!items.length)return null;
-    const project=await tx.project.upsert({where:{quoteId:quote.id},update:{},create:{tenantId:quote.tenantId,clientId:quote.clientId,quoteId:quote.id,name:`${quote.number} — ${quote.client.name}`}});
+    const project=await tx.project.upsert({where:{quoteId:quote.id},update:projectStatus?{status:projectStatus}:{},create:{tenantId:quote.tenantId,clientId:quote.clientId,quoteId:quote.id,name:`${quote.number} — ${quote.client.name}`,...(projectStatus?{status:projectStatus}:{})}});
     const existing=await tx.projectTask.findMany({where:{tenantId:quote.tenantId,projectId:project.id},select:{title:true}});
     const titles=new Set(existing.map(task=>task.title));
     const tasks=items.flatMap(item=>item.stages.map(stage=>({
@@ -257,14 +257,20 @@ export class QuotesService {
     return updated;
   }
 
-  async confirmSale(tenantId:string,id:string,actorUserId?:string){
-    const quote=await this.db.quote.findFirst({where:{id,tenantId},include:{productItems:true,order:true}});
+  async confirmSale(tenantId:string,id:string,actorUserId?:string,projectStatus?:string){
+    const quote=await this.db.quote.findFirst({where:{id,tenantId},include:{productItems:true,order:true,client:true}});
     if(!quote)throw new NotFoundException('Orçamento não encontrado');
     if(quote.status!=='approved')throw new BadRequestException('A venda só pode ser confirmada após a aprovação');
     if(quote.order)return quote.order;
     let order;
     try{
       order=await this.db.$transaction(async tx=>{
+        let selectedProjectStatus:string|undefined;
+        if(projectStatus){
+          const status=await tx.projectStatus.findFirst({where:{tenantId,key:projectStatus,active:true},select:{key:true}});
+          if(!status)throw new BadRequestException('Status de projeto inválido ou inativo');
+          selectedProjectStatus=status.key;
+        }
         const reservations=await tx.stockReservation.findMany({where:{tenantId,quoteId:id,status:'active'}});
         for(const item of quote.productItems){
           const r=reservations.find(x=>x.productId===item.productId);
@@ -280,6 +286,7 @@ export class QuotesService {
           await tx.stockReservation.update({where:{id:r.id},data:{status:'fulfilled',releasedAt:new Date()}});
           await tx.stockMovement.create({data:{tenantId,productId:item.productId,type:'sale',quantity:-item.quantity,balanceAfter:p.stockQuantity,unitCostCents:item.unitCostCents,reason:`Venda ${created.number}`,referenceType:'order',referenceId:created.id,actorUserId}});
         }
+        await this.ensureProjectFromQuote(tx,quote,selectedProjectStatus);
         return created;
       });
     }catch(error){

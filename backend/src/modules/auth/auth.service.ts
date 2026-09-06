@@ -129,12 +129,19 @@ export class AuthService {
     const company = String(data.company ?? '').trim();
     if (!email || !name || !company || password.length < AUTH_SECURITY.minPasswordLength) throw new BadRequestException(`Informe empresa, responsável, e-mail e senha com pelo menos ${AUTH_SECURITY.minPasswordLength} caracteres`);
     if (await this.db.user.findUnique({ where: { email } })) throw new ConflictException('Este e-mail já está cadastrado');
-    const planCandidate = data.plan ?? '';
+    const planCandidate = String(data.plan ?? '').trim().toLowerCase();
     const periodCandidate = data.period ?? '';
-    const plan: PlanCode = isPlanCode(planCandidate) ? planCandidate : 'starter';
     const period: BillingPeriod = isBillingPeriod(periodCandidate) ? periodCandidate : 'monthly';
-    const limit = await this.db.planLimit.findUnique({ where: { plan } });
-    if (!limit?.active) throw new BadRequestException('Plano indisponível');
+    let limit=null;
+    if(planCandidate){
+      if(!isPlanCode(planCandidate))throw new BadRequestException('Plano inválido');
+      limit=await this.db.planLimit.findFirst({where:{plan:planCandidate,active:true}});
+      if(!limit)throw new BadRequestException('Plano indisponível');
+    }else{
+      limit=await this.db.planLimit.findFirst({where:{active:true},orderBy:[{sortOrder:'asc'},{monthlyPriceCents:'asc'}]});
+      if(!limit)throw new BadRequestException('Nenhum plano está disponível para cadastro');
+    }
+    const plan: PlanCode = limit.plan;
     const amountCents = period === 'annual' ? limit.annualPriceCents : period === 'semiannual' ? limit.semiannualPriceCents : period === 'quarterly' ? limit.quarterlyPriceCents : limit.monthlyPriceCents;
     const now = new Date(); const trialEnd = new Date(now); trialEnd.setDate(trialEnd.getDate() + 14);
     const slug = `${company.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'empresa'}-${Date.now().toString(36)}`;

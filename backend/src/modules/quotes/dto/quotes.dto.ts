@@ -8,3 +8,5 @@ export class CreateQuoteDto { @IsString() clientId!:string; @IsArray() @Validate
 export class UpdateQuoteDto { @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>QuoteItemDto) items?: QuoteItemDto[]; @IsOptional() @IsArray() @ValidateNested({each:true}) @Type(()=>QuoteProductItemDto) productItems?: QuoteProductItemDto[]; @IsOptional() @IsInt() @Min(0) @Max(10000) discountBps?: number; @IsOptional() @IsInt() @Min(1) @Max(365) validityDays?: number; @IsOptional() @IsString() notes?: string; @IsOptional() @IsUrl({require_protocol:true}) paymentLinkUrl?: string; }
 export class QuoteStatusDto { @IsIn(['draft','sent','rejected']) status!: string; }
 export class PublicProposalDecisionDto { @IsIn(['approved','rejected']) decision!: string; @IsString() @MinLength(2) name!: string; }
+
+export class ConfirmSaleDto { @IsOptional() @IsString() projectStatus?:string; }
