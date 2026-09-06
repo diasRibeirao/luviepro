@@ -116,10 +116,20 @@ export class FinanceService {
   }
   async createCategory(tenantId:string,b:CreateFinancialCategoryDto){
     const name=b.name.trim();
-    const exists=await this.db.financialCategory.findFirst({where:{tenantId,type:b.type,name:{equals:name,mode:'insensitive'}}});
-    if(exists)return exists;
-    const max=await this.db.financialCategory.aggregate({where:{tenantId,type:b.type},_max:{sortOrder:true}});
-    return this.db.financialCategory.create({data:{tenantId,name,type:b.type,sortOrder:(max._max.sortOrder??0)+10}});
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        return await this.db.$transaction(async tx=>{
+          const exists=await tx.financialCategory.findFirst({where:{tenantId,type:b.type,name:{equals:name,mode:'insensitive'}}});
+          if(exists)return exists;
+          const max=await tx.financialCategory.aggregate({where:{tenantId,type:b.type},_max:{sortOrder:true}});
+          return tx.financialCategory.create({data:{tenantId,name,type:b.type,sortOrder:(max._max.sortOrder??0)+10}});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    throw new BadRequestException('A categoria financeira foi alterada por outra operação. Tente novamente.');
   }
   async updateCategory(tenantId:string,id:string,b:UpdateFinancialCategoryDto){
     const current=await this.db.financialCategory.findFirst({where:{id,tenantId}});if(!current)throw new NotFoundException('Categoria financeira não encontrada');
@@ -145,19 +155,44 @@ export class FinanceService {
     const name=b.name.trim();
     const base=(b.code||name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')).slice(0,40);
     if(!base)throw new BadRequestException('Informe um nome válido para a forma de pagamento');
-    const duplicateCode=await this.db.financialPaymentMethod.findFirst({where:{tenantId,code:base}});
-    if(duplicateCode)throw new BadRequestException('Já existe uma forma de pagamento com este código');
-    const duplicateName=await this.db.financialPaymentMethod.findFirst({where:{tenantId,name:{equals:name,mode:'insensitive'}}});
-    if(duplicateName)throw new BadRequestException('Já existe uma forma de pagamento com este nome');
-    const max=await this.db.financialPaymentMethod.aggregate({where:{tenantId},_max:{sortOrder:true}});
-    return this.db.financialPaymentMethod.create({data:{tenantId,code:base,name,sortOrder:(max._max.sortOrder??0)+10}});
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        return await this.db.$transaction(async tx=>{
+          const duplicateCode=await tx.financialPaymentMethod.findFirst({where:{tenantId,code:base}});
+          if(duplicateCode)throw new BadRequestException('Já existe uma forma de pagamento com este código');
+          const duplicateName=await tx.financialPaymentMethod.findFirst({where:{tenantId,name:{equals:name,mode:'insensitive'}}});
+          if(duplicateName)throw new BadRequestException('Já existe uma forma de pagamento com este nome');
+          const max=await tx.financialPaymentMethod.aggregate({where:{tenantId},_max:{sortOrder:true}});
+          return tx.financialPaymentMethod.create({data:{tenantId,code:base,name,sortOrder:(max._max.sortOrder??0)+10}});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    throw new BadRequestException('A forma de pagamento foi alterada por outra operação. Tente novamente.');
   }
   async updatePaymentMethod(tenantId:string,id:string,b:UpdateFinancialPaymentMethodDto){
-    const current=await this.db.financialPaymentMethod.findFirst({where:{id,tenantId}});if(!current)throw new NotFoundException('Forma de pagamento não encontrada');
-    const name=(b.name??current.name).trim();
-    const duplicate=await this.db.financialPaymentMethod.findFirst({where:{tenantId,name:{equals:name,mode:'insensitive'},id:{not:id}}});if(duplicate)throw new BadRequestException('Já existe uma forma de pagamento com este nome');
-    if(current.active&&b.active===false){const activeCount=await this.db.financialPaymentMethod.count({where:{tenantId,active:true}});if(activeCount<=1)throw new BadRequestException('Mantenha ao menos uma forma de pagamento ativa')}
-    return this.db.financialPaymentMethod.update({where:{id},data:{name,active:b.active??current.active}});
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        return await this.db.$transaction(async tx=>{
+          const current=await tx.financialPaymentMethod.findFirst({where:{id,tenantId}});
+          if(!current)throw new NotFoundException('Forma de pagamento não encontrada');
+          const name=(b.name??current.name).trim();
+          const duplicate=await tx.financialPaymentMethod.findFirst({where:{tenantId,name:{equals:name,mode:'insensitive'},id:{not:id}}});
+          if(duplicate)throw new BadRequestException('Já existe uma forma de pagamento com este nome');
+          if(current.active&&b.active===false){
+            const activeCount=await tx.financialPaymentMethod.count({where:{tenantId,active:true}});
+            if(activeCount<=1)throw new BadRequestException('Mantenha ao menos uma forma de pagamento ativa');
+          }
+          return tx.financialPaymentMethod.update({where:{id},data:{name,active:b.active??current.active}});
+        },{isolationLevel:'Serializable'});
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    throw new BadRequestException('As formas de pagamento foram alteradas por outra operação. Atualize a lista e tente novamente.');
   }
   private async validatePaymentMethod(tenantId:string,method?:string){
     if(!method)return;

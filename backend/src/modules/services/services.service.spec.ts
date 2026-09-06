@@ -6,7 +6,7 @@ describe('ServicesService',()=>{
     serviceTeamMember:{deleteMany:jest.fn()},
     serviceCost:{deleteMany:jest.fn()},
     serviceStage:{deleteMany:jest.fn()},
-    service:{update:jest.fn()},
+    service:{findFirst:jest.fn(),update:jest.fn(),aggregate:jest.fn(),create:jest.fn()},
   };
   const db:any={
     service:{findMany:jest.fn(),findFirst:jest.fn(),create:jest.fn(),aggregate:jest.fn()},
@@ -23,6 +23,11 @@ describe('ServicesService',()=>{
     tx.serviceCost.deleteMany.mockResolvedValue({});
     tx.serviceStage.deleteMany.mockResolvedValue({});
     db.$transaction.mockImplementation((fn:any)=>fn(tx));
+    tx.service.findFirst.mockReset();
+    tx.service.update.mockReset();
+    tx.service.aggregate.mockReset();
+    tx.service.create.mockReset();
+    tx.service.aggregate.mockResolvedValue({_max:{sortOrder:null}});
     service=new ServicesService(db);
   });
 
@@ -40,7 +45,7 @@ describe('ServicesService',()=>{
   });
 
   it('derives rates and costs from structured team and cost data',async()=>{
-    db.service.create.mockImplementation(({data}:any)=>Promise.resolve({
+    tx.service.create.mockImplementation(({data}:any)=>Promise.resolve({
       id:'s1',...data,team:data.team.create,costs:data.costs.create,stages:data.stages.create,
     }));
     const result:any=await service.create('t1',{
@@ -83,7 +88,7 @@ describe('ServicesService',()=>{
   });
 
   it('persists variable cost mode and margin base',async()=>{
-    db.service.create.mockImplementation(({data}:any)=>Promise.resolve({id:'s2',...data}));
+    tx.service.create.mockImplementation(({data}:any)=>Promise.resolve({id:'s2',...data}));
     const result:any=await service.create('t1',{
       name:'Consultoria',billingUnit:'daily',dailyRateCents:1000,defaultDays:1,people:1,
       variableCostCents:0,fixedCostCents:0,safetyMarginBps:1000,
@@ -92,4 +97,105 @@ describe('ServicesService',()=>{
     expect(result.variableCostMode).toBe('per_person_day');
     expect(result.marginBase).toBe('subtotal');
   });
+  it('reorders inside a serializable transaction and swaps the neighbor atomically',async()=>{
+    tx.service.findFirst
+      .mockResolvedValueOnce({id:'s2',tenantId:'t1',active:true,sortOrder:20})
+      .mockResolvedValueOnce({id:'s1',tenantId:'t1',active:true,sortOrder:10});
+    tx.service.update.mockResolvedValue({});
+    db.service.findMany.mockResolvedValue([]);
+
+    await service.reorder('t1','s2','up','u1');
+
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function),{isolationLevel:'Serializable'});
+    expect(tx.service.findFirst).toHaveBeenNthCalledWith(1,{where:{id:'s2',tenantId:'t1'}});
+    expect(tx.service.findFirst).toHaveBeenNthCalledWith(2,{
+      where:{tenantId:'t1',id:{not:'s2'},active:true,sortOrder:{lt:20}},
+      orderBy:{sortOrder:'desc'},
+    });
+    expect(tx.service.update).toHaveBeenNthCalledWith(1,{where:{id:'s2'},data:{sortOrder:10}});
+    expect(tx.service.update).toHaveBeenNthCalledWith(2,{where:{id:'s1'},data:{sortOrder:20}});
+  });
+
+  it('retries a serialization conflict before reordering',async()=>{
+    let attempts=0;
+    db.$transaction.mockImplementation(async(fn:any,options:any)=>{
+      expect(options).toEqual({isolationLevel:'Serializable'});
+      attempts++;
+      if(attempts===1)throw {code:'P2034'};
+      return fn(tx);
+    });
+    tx.service.findFirst
+      .mockResolvedValueOnce({id:'s2',tenantId:'t1',active:true,sortOrder:20})
+      .mockResolvedValueOnce({id:'s1',tenantId:'t1',active:true,sortOrder:10});
+    tx.service.update.mockResolvedValue({});
+    db.service.findMany.mockResolvedValue([]);
+
+    await service.reorder('t1','s2','up','u1');
+
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
+    expect(tx.service.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not audit when there is no neighbor to reorder',async()=>{
+    tx.service.findFirst
+      .mockResolvedValueOnce({id:'s1',tenantId:'t1',active:true,sortOrder:10})
+      .mockResolvedValueOnce(null);
+    db.service.findMany.mockResolvedValue([]);
+
+    await service.reorder('t1','s1','up','u1');
+
+    expect(tx.service.update).not.toHaveBeenCalled();
+    expect(db.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('assigns automatic sortOrder inside a serializable transaction',async()=>{
+    tx.service.aggregate.mockResolvedValue({_max:{sortOrder:30}});
+    tx.service.create.mockImplementation(({data}:any)=>Promise.resolve({id:'s4',...data}));
+
+    const result:any=await service.create('t1',{
+      name:'Novo serviço',billingUnit:'daily',dailyRateCents:1000,defaultDays:1,people:1,
+      variableCostCents:0,fixedCostCents:0,safetyMarginBps:1000,
+    },'u1');
+
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function),{isolationLevel:'Serializable'});
+    expect(tx.service.aggregate).toHaveBeenCalledWith({where:{tenantId:'t1'},_max:{sortOrder:true}});
+    expect(tx.service.create).toHaveBeenCalledWith(expect.objectContaining({
+      data:expect.objectContaining({tenantId:'t1',sortOrder:40}),
+    }));
+    expect(result.sortOrder).toBe(40);
+  });
+
+  it('retries automatic sortOrder allocation after P2034',async()=>{
+    let attempts=0;
+    db.$transaction.mockImplementation(async(fn:any,options:any)=>{
+      expect(options).toEqual({isolationLevel:'Serializable'});
+      attempts++;
+      if(attempts===1)throw {code:'P2034'};
+      return fn(tx);
+    });
+    tx.service.aggregate.mockResolvedValue({_max:{sortOrder:40}});
+    tx.service.create.mockImplementation(({data}:any)=>Promise.resolve({id:'s5',...data}));
+
+    const result:any=await service.create('t1',{
+      name:'Concorrente',billingUnit:'daily',dailyRateCents:1000,defaultDays:1,people:1,
+      variableCostCents:0,fixedCostCents:0,safetyMarginBps:1000,
+    },'u1');
+
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
+    expect(tx.service.aggregate).toHaveBeenCalledTimes(1);
+    expect(result.sortOrder).toBe(50);
+  });
+
+  it('preserves an explicit sortOrder without reading the catalog maximum',async()=>{
+    tx.service.create.mockImplementation(({data}:any)=>Promise.resolve({id:'s6',...data}));
+
+    const result:any=await service.create('t1',{
+      name:'Posicionado',billingUnit:'daily',dailyRateCents:1000,defaultDays:1,people:1,
+      variableCostCents:0,fixedCostCents:0,safetyMarginBps:1000,sortOrder:25,
+    } as any,'u1');
+
+    expect(tx.service.aggregate).not.toHaveBeenCalled();
+    expect(result.sortOrder).toBe(25);
+  });
+
 });

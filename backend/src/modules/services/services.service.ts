@@ -70,17 +70,33 @@ export class ServicesService {
   }
 
   async create(tenantId:string,data:CreateServiceDto,actorUserId?:string){
-    const n=this.normalize(tenantId,data);
-    if(!n.sortOrder){const max=await this.db.service.aggregate({where:{tenantId},_max:{sortOrder:true}});n.sortOrder=(max._max.sortOrder??0)+10;}
-    const service=await this.db.service.create({
-      data:{
-        tenantId,name:n.name,code:n.code,description:n.description,category:n.category,billingUnit:n.billingUnit,
-        dailyRateCents:n.dailyRateCents,defaultDays:n.defaultDays,people:n.people,variableCostCents:n.variableCostCents,
-        fixedCostCents:n.fixedCostCents,safetyMarginBps:n.safetyMarginBps,variableCostMode:n.variableCostMode,
-        marginBase:n.marginBase,active:n.active,sortOrder:n.sortOrder,team:{create:n.team},costs:{create:n.costs},stages:{create:n.stages},
-      },
-      include:{team:true,costs:true,stages:{orderBy:{sequence:'asc'}}},
-    });
+    const normalized=this.normalize(tenantId,data);
+    let service:any;
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        service=await this.db.$transaction(async tx=>{
+          const n={...normalized};
+          if(!n.sortOrder){
+            const max=await tx.service.aggregate({where:{tenantId},_max:{sortOrder:true}});
+            n.sortOrder=(max._max.sortOrder??0)+10;
+          }
+          return tx.service.create({
+            data:{
+              tenantId,name:n.name,code:n.code,description:n.description,category:n.category,billingUnit:n.billingUnit,
+              dailyRateCents:n.dailyRateCents,defaultDays:n.defaultDays,people:n.people,variableCostCents:n.variableCostCents,
+              fixedCostCents:n.fixedCostCents,safetyMarginBps:n.safetyMarginBps,variableCostMode:n.variableCostMode,
+              marginBase:n.marginBase,active:n.active,sortOrder:n.sortOrder,team:{create:n.team},costs:{create:n.costs},stages:{create:n.stages},
+            },
+            include:{team:true,costs:true,stages:{orderBy:{sequence:'asc'}}},
+          });
+        },{isolationLevel:'Serializable'});
+        break;
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    if(!service)throw new Error('Falha ao criar serviço após tentativas de concorrência');
     await this.audit(tenantId,actorUserId,'create',service.id,{name:service.name});
     return service;
   }
@@ -113,18 +129,28 @@ export class ServicesService {
     return service;
   }
   async reorder(tenantId:string,id:string,direction:'up'|'down',actorUserId?:string){
-    const current=await this.db.service.findFirst({where:{id,tenantId}});
-    if(!current)throw new NotFoundException('Serviço não encontrado');
-    const neighbor=await this.db.service.findFirst({
-      where:{tenantId,id:{not:id},active:current.active,sortOrder:direction==='up'?{lt:current.sortOrder}:{gt:current.sortOrder}},
-      orderBy:{sortOrder:direction==='up'?'desc':'asc'},
-    });
-    if(!neighbor)return this.list(tenantId);
-    await this.db.$transaction([
-      this.db.service.update({where:{id:current.id},data:{sortOrder:neighbor.sortOrder}}),
-      this.db.service.update({where:{id:neighbor.id},data:{sortOrder:current.sortOrder}}),
-    ]);
-    await this.audit(tenantId,actorUserId,'reorder',id,{direction});
+    let changed=false;
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        changed=await this.db.$transaction(async tx=>{
+          const current=await tx.service.findFirst({where:{id,tenantId}});
+          if(!current)throw new NotFoundException('Serviço não encontrado');
+          const neighbor=await tx.service.findFirst({
+            where:{tenantId,id:{not:id},active:current.active,sortOrder:direction==='up'?{lt:current.sortOrder}:{gt:current.sortOrder}},
+            orderBy:{sortOrder:direction==='up'?'desc':'asc'},
+          });
+          if(!neighbor)return false;
+          await tx.service.update({where:{id:current.id},data:{sortOrder:neighbor.sortOrder}});
+          await tx.service.update({where:{id:neighbor.id},data:{sortOrder:current.sortOrder}});
+          return true;
+        },{isolationLevel:'Serializable'});
+        break;
+      }catch(error){
+        if((error as {code?:string})?.code==='P2034'&&attempt<2)continue;
+        throw error;
+      }
+    }
+    if(changed)await this.audit(tenantId,actorUserId,'reorder',id,{direction});
     return this.list(tenantId);
   }
 
