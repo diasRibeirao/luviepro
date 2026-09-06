@@ -39,4 +39,9 @@ describe('Invitation acceptance concurrency safeguards', () => {
     expect(source).toContain("status:{in:['pending','expired']},updatedAt:invitation.updatedAt");
     expect(source).toContain("if(claimed.count!==1)throw new ConflictException('Este convite foi alterado por outra operação.");
   });
+
+  it('expires invitations with compare-and-set instead of overwriting a concurrent change',()=>{
+    expect(source).toContain("updateMany({where:{id:invitation.id,status:'pending',updatedAt:invitation.updatedAt}");
+    expect(source).toContain("if(expired.count!==1)throw new ConflictException('Este convite foi alterado por outra operação.");
+  });
 });
