@@ -22,6 +22,7 @@ export default function Platform(){
  const {width}=useWindowDimensions();
  const compact=width<860;
  const phone=width<620;
+ const narrow=width<520;
  const insets=useSafeAreaInsets();
  const {confirm}=useFeedback();
  const unauthorized=useCallback(()=>router.replace('/'),[]);
@@ -39,7 +40,7 @@ export default function Platform(){
  if(loading&&!data)return <View style={s.loading}><ActivityIndicator color={theme.gold}/><Text style={s.muted}>Carregando console administrativo...</Text></View>;
  const activeTab=PLATFORM_TABS.find(item=>item.key===tab)!;
  return <SafeAreaView style={[s.page,compact&&s.pageCompact]} edges={['top','left','right']}><PlatformSidebar compact={compact} active={tab} onSelect={selectTab} onLogout={signOut}/>
- <ScrollView style={s.main} contentContainerStyle={[s.content,compact&&s.contentCompact,{paddingBottom:compact?104+insets.bottom:30}]} keyboardShouldPersistTaps="handled"><View style={[s.header,compact&&s.headerCompact]}><View style={s.headerTitle}><Text style={s.eyebrow}>LUVIEPRO · PLATFORM</Text><Text style={s.title}>{activeTab.label}</Text><Text style={s.muted}>{activeTab.subtitle}</Text></View><View style={[s.headerActions,compact&&s.headerActionsCompact]}>{tab==='companies'?<Pressable onPress={()=>setCreatingTenant(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Nova empresa</Text></Pressable>:tab==='plans'?<Pressable onPress={()=>setCreatingPlan(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Novo plano</Text></Pressable>:null}<Pressable accessibilityRole="button" accessibilityLabel="Conta do administrador" accessibilityState={{expanded:accountOpen}} onPress={()=>setAccountOpen(true)} style={({pressed})=>[s.admin,pressed&&s.adminPressed]}><View style={s.adminAvatar}><Text style={s.adminInitial}>LM</Text></View>{!compact&&<View style={s.adminText}><Text style={s.strong}>LuviePro Master</Text><Text style={s.small}>Administrador da plataforma</Text></View>}<Ionicons name="chevron-down" size={15} color={theme.muted}/></Pressable></View></View>
+ <ScrollView style={s.main} contentContainerStyle={[s.content,compact&&s.contentCompact,narrow&&s.contentNarrow,{paddingBottom:compact?104+insets.bottom:30}]} keyboardShouldPersistTaps="handled"><View style={[s.header,compact&&s.headerCompact]}><View style={s.headerTitle}><Text style={s.eyebrow}>LUVIEPRO · PLATFORM</Text><Text style={s.title}>{activeTab.label}</Text><Text style={s.muted}>{activeTab.subtitle}</Text></View><View style={[s.headerActions,compact&&s.headerActionsCompact,narrow&&s.headerActionsNarrow]}>{tab==='companies'?<Pressable onPress={()=>setCreatingTenant(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Nova empresa</Text></Pressable>:tab==='plans'?<Pressable onPress={()=>setCreatingPlan(true)} style={s.primaryAction}><Ionicons name="add-circle-outline" size={18} color="#fff"/><Text style={s.primaryActionText}>Novo plano</Text></Pressable>:null}<Pressable accessibilityRole="button" accessibilityLabel="Conta do administrador" accessibilityState={{expanded:accountOpen}} onPress={()=>setAccountOpen(true)} style={({pressed})=>[s.admin,pressed&&s.adminPressed]}><View style={s.adminAvatar}><Text style={s.adminInitial}>LM</Text></View>{!compact&&<View style={s.adminText}><Text style={s.strong}>LuviePro Master</Text><Text style={s.small}>Administrador da plataforma</Text></View>}<Ionicons name="chevron-down" size={15} color={theme.muted}/></Pressable></View></View>
  {tab==='overview'?<Overview data={data} companies={companies} users={users} payments={payments} onTab={selectTab}/>:tab==='email'?<PlatformEmailSettings/>:tab==='maintenance'?<PlatformMaintenance onOpenClientUsers={()=>selectTab('users')}/>:<>
   <PlatformSearch compact={phone} value={query} total={tab==='plans'?filtered.length:pageMeta.total} onChange={value=>{setQuery(value);setPage(1)}}/>
   {tab!=='plans'?<PlatformFilterBar compact={phone}>
@@ -69,12 +70,12 @@ export default function Platform(){
 
 const s=StyleSheet.create({
  page:{flex:1,flexDirection:'row',backgroundColor:'#F3F6F4'},pageCompact:{flexDirection:'column'},
- main:{flex:1},content:{padding:30,width:'100%',alignSelf:'center'},contentCompact:{padding:16},
+ main:{flex:1},content:{padding:30,width:'100%',alignSelf:'center'},contentCompact:{padding:16},contentNarrow:{paddingHorizontal:12},
  loading:{flex:1,alignItems:'center',justifyContent:'center',gap:12},
  listLoading:{minHeight:160,padding:24,alignItems:'center',justifyContent:'center',gap:10},
  header:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:24,gap:14},headerCompact:{alignItems:'stretch',flexDirection:'column',marginBottom:18},headerTitle:{flex:1,minWidth:0},
- headerActions:{flexDirection:'row',alignItems:'center',gap:10},headerActionsCompact:{justifyContent:'space-between',flexWrap:'wrap'},
- primaryAction:{height:42,borderRadius:10,backgroundColor:theme.green2,paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:7},
+ headerActions:{flexDirection:'row',alignItems:'center',gap:10},headerActionsCompact:{justifyContent:'space-between',flexWrap:'wrap'},headerActionsNarrow:{flexDirection:'column',alignItems:'stretch'},
+ primaryAction:{minHeight:42,borderRadius:10,backgroundColor:theme.green2,paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:7},
  primaryActionText:{fontSize:11,fontWeight:'900',color:'#fff'},
  eyebrow:{fontSize:10,fontWeight:'900',letterSpacing:1.4,color:theme.gold},
  title:{fontFamily:'serif',fontSize:30,fontWeight:'800',color:theme.ink,marginTop:5},

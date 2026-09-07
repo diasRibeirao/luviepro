@@ -1,5 +1,5 @@
 import { createElement,useCallback,useState } from 'react';
-import { Image,Platform,Pressable,ScrollView,StyleSheet,View } from 'react-native';
+import { Image,Platform,Pressable,ScrollView,StyleSheet,useWindowDimensions,View } from 'react-native';
 import { Text } from '../../../i18n';
 import { router,useFocusEffect,useLocalSearchParams } from 'expo-router';
 import { ApiError,money } from '../../../api';
@@ -56,6 +56,9 @@ const printCss = `
 
 export default function QuoteProposalScreen(){
   const{id}=useLocalSearchParams<{id:string}>();
+  const {width}=useWindowDimensions();
+  const compact=width<640;
+  const tablet=width>=640&&width<900;
   const[data,setData]=useState<ProposalData>();
   const[account,setAccount]=useState<AccountData>();
   const[error,setError]=useState('');
@@ -87,7 +90,7 @@ export default function QuoteProposalScreen(){
   return <View nativeID="proposal-screen" style={s.screen}>
     {webPrintStyle}
 
-    <View nativeID="proposal-actions" style={s.actions}>
+    <View nativeID="proposal-actions" style={[s.actions,tablet&&s.actionsTablet,compact&&s.actionsCompact]}>
       <Pressable onPress={()=>router.back()} style={s.backButton}>
         <Text style={s.backText}>← Voltar ao orçamento</Text>
       </Pressable>
@@ -97,13 +100,13 @@ export default function QuoteProposalScreen(){
       </Pressable>}
     </View>
 
-    <ScrollView nativeID="proposal-scroll" contentContainerStyle={s.scrollContent}>
-      <View nativeID="proposal-page" style={s.paper}>
-        <View style={s.header}>
-          <View style={s.companyBlock}><View style={s.brandRow}>{tenant.logoUrl?<Image source={{uri:tenant.logoUrl}} style={s.logo}/>:null}<View style={{flex:1}}><Text style={s.brand}>{tenant.name}</Text><Text style={s.sub}>{[tenant.document,tenant.contactEmail,tenant.phone].filter(Boolean).join(' · ')}</Text><Text style={s.sub}>{[[tenant.addressLine,tenant.addressNumber].filter(Boolean).join(', '),tenant.city&&tenant.state?`${tenant.city}/${tenant.state}`:tenant.city].filter(Boolean).join(' · ')}</Text></View></View></View>
-          <View style={s.quoteBlock}>
-            <Text style={s.number}>{data.number}</Text>
-            <Text style={s.date}>{new Date(data.createdAt).toLocaleDateString('pt-BR')}</Text>
+    <ScrollView nativeID="proposal-scroll" contentContainerStyle={[s.scrollContent,tablet&&s.scrollContentTablet,compact&&s.scrollContentCompact]}>
+      <View nativeID="proposal-page" style={[s.paper,tablet&&s.paperTablet,compact&&s.paperCompact]}>
+        <View style={[s.header,compact&&s.headerCompact]}>
+          <View style={s.companyBlock}><View style={[s.brandRow,compact&&s.brandRowCompact]}>{tenant.logoUrl?<Image source={{uri:tenant.logoUrl}} style={s.logo}/>:null}<View style={{flex:1}}><Text style={s.brand}>{tenant.name}</Text><Text style={s.sub}>{[tenant.document,tenant.contactEmail,tenant.phone].filter(Boolean).join(' · ')}</Text><Text style={s.sub}>{[[tenant.addressLine,tenant.addressNumber].filter(Boolean).join(', '),tenant.city&&tenant.state?`${tenant.city}/${tenant.state}`:tenant.city].filter(Boolean).join(' · ')}</Text></View></View></View>
+          <View style={[s.quoteBlock,compact&&s.quoteBlockCompact]}>
+            <Text style={[s.number,compact&&s.textLeft]}>{data.number}</Text>
+            <Text style={[s.date,compact&&s.textLeft]}>{new Date(data.createdAt).toLocaleDateString('pt-BR')}</Text>
           </View>
         </View>
 
@@ -113,27 +116,27 @@ export default function QuoteProposalScreen(){
         <Text style={s.intro}>{tenant.proposalText||'Preparamos esta proposta com os serviços, condições e investimento para a realização do seu projeto.'}</Text>
 
         {data.items.length>0&&<Text style={s.section}>Serviços</Text>}
-        {data.items.map(item=><View key={item.id} style={s.row}>
+        {data.items.map(item=><View key={item.id} style={[s.row,compact&&s.rowCompact]}>
           <View style={s.itemContent}>
             <Text style={s.item}>{item.serviceName}</Text>
             <Text style={s.meta}>{item.days} dia(s) · {item.people} pessoa(s)</Text>
           </View>
-          <Text style={s.value}>{money(item.totalCents)}</Text>
+          <Text style={[s.value,compact&&s.valueCompact]}>{money(item.totalCents)}</Text>
         </View>)}
 
         {!!data.productItems?.length&&<>
           <Text style={s.section}>Produtos</Text>
-          {data.productItems.map((item,index)=><View key={item.id??`${item.productId??item.sku}-${index}`} style={s.row}><View style={s.itemContent}><Text style={s.item}>{item.productName}</Text><Text style={s.meta}>{item.sku} · {item.quantity} {item.unit} × {money(item.unitPriceCents)}</Text></View><Text style={s.value}>{money(item.totalCents)}</Text></View>)}
+          {data.productItems.map((item,index)=><View key={item.id??`${item.productId??item.sku}-${index}`} style={[s.row,compact&&s.rowCompact]}><View style={s.itemContent}><Text style={s.item}>{item.productName}</Text><Text style={s.meta}>{item.sku} · {item.quantity} {item.unit} × {money(item.unitPriceCents)}</Text></View><Text style={[s.value,compact&&s.valueCompact]}>{money(item.totalCents)}</Text></View>)}
         </>}
 
-        <View style={s.totalBox}>
+        <View style={[s.totalBox,compact&&s.totalBoxCompact]}>
           <View>
             <Text style={s.totalLabel}>Investimento total</Text>
             <Text style={s.validity}>Validade: {data.validityDays} dias</Text>
           {tenant.proposalPaymentTerms?<Text style={s.meta}>Pagamento: {tenant.proposalPaymentTerms}</Text>:null}
           {tenant.pixKey?<Text style={s.meta}>PIX: {tenant.pixKey}</Text>:null}
           </View>
-          <Text style={s.total}>{money(proposalTotal)}</Text>
+          <Text style={[s.total,compact&&s.totalCompact]}>{money(proposalTotal)}</Text>
         </View>
 
 
@@ -164,33 +167,33 @@ export default function QuoteProposalScreen(){
 const s=StyleSheet.create({
   statePage:{flex:1,backgroundColor:theme.cream,alignItems:'center',justifyContent:'center',padding:24},
   screen:{flex:1,minHeight:'100%',backgroundColor:'#ECEBE7'},
-  actions:{width:'100%',maxWidth:900,alignSelf:'center',paddingHorizontal:20,paddingTop:18,paddingBottom:14,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  actions:{width:'100%',maxWidth:900,alignSelf:'center',paddingHorizontal:20,paddingTop:18,paddingBottom:14,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},actionsTablet:{paddingHorizontal:24},actionsCompact:{paddingHorizontal:16,paddingTop:12,paddingBottom:10,alignItems:'stretch',flexDirection:'column'},
   backButton:{paddingVertical:10,paddingHorizontal:4},
   backText:{fontSize:14,fontWeight:'700',color:theme.green},
   print:{backgroundColor:theme.gold,borderRadius:9,paddingHorizontal:16,paddingVertical:11},
   printText:{fontWeight:'800',fontSize:12,color:theme.g900},
-  scrollContent:{paddingHorizontal:20,paddingBottom:40},
-  paper:{maxWidth:794,width:'100%',minHeight:1123,alignSelf:'center',backgroundColor:theme.white,paddingHorizontal:54,paddingVertical:48,borderRadius:4},
-  header:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-start',gap:20,paddingBottom:24,borderBottomWidth:1,borderBottomColor:theme.border},
-  companyBlock:{flex:1},brandRow:{flexDirection:'row',alignItems:'center',gap:12},logo:{width:48,height:48,borderRadius:8,resizeMode:'contain'},
-  quoteBlock:{minWidth:130,alignItems:'flex-end'},
+  scrollContent:{paddingHorizontal:20,paddingBottom:40},scrollContentTablet:{paddingHorizontal:24},scrollContentCompact:{paddingHorizontal:0,paddingBottom:24},
+  paper:{maxWidth:794,width:'100%',minHeight:1123,alignSelf:'center',backgroundColor:theme.white,paddingHorizontal:54,paddingVertical:48,borderRadius:4},paperTablet:{paddingHorizontal:36,paddingVertical:38,minHeight:0},paperCompact:{maxWidth:'100%',minHeight:0,paddingHorizontal:18,paddingVertical:24,borderRadius:0},
+  header:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-start',gap:20,paddingBottom:24,borderBottomWidth:1,borderBottomColor:theme.border},headerCompact:{flexDirection:'column',gap:14,paddingBottom:18},
+  companyBlock:{flex:1,width:'100%'},brandRow:{flexDirection:'row',alignItems:'center',gap:12},brandRowCompact:{alignItems:'flex-start'},logo:{width:48,height:48,borderRadius:8,resizeMode:'contain'},
+  quoteBlock:{minWidth:130,alignItems:'flex-end'},quoteBlockCompact:{minWidth:0,width:'100%',alignItems:'flex-start'},
   brand:{fontFamily:'serif',fontSize:26,fontWeight:'800',color:theme.green},
   sub:{fontSize:11,color:theme.muted,marginTop:5},
-  number:{fontWeight:'800',color:theme.ink,textAlign:'right'},
+  number:{fontWeight:'800',color:theme.ink,textAlign:'right'},textLeft:{textAlign:'left'},
   date:{fontSize:11,color:theme.muted,textAlign:'right',marginTop:4},
   kicker:{fontSize:11,fontWeight:'900',letterSpacing:2,color:theme.gold,marginTop:32},
   title:{fontFamily:'serif',fontSize:28,fontWeight:'700',color:theme.ink,marginTop:8},
-  clientMeta:{fontSize:11,color:theme.muted,marginTop:7},intro:{fontSize:14,lineHeight:20,color:theme.muted,maxWidth:650,marginTop:12},
+  clientMeta:{fontSize:11,color:theme.muted,marginTop:7},intro:{fontSize:14,lineHeight:20,color:theme.muted,width:'100%',marginTop:12},
   section:{fontFamily:'serif',fontSize:18,fontWeight:'700',color:theme.ink,marginTop:28,marginBottom:10},
-  row:{flexDirection:'row',alignItems:'center',paddingVertical:13,borderBottomWidth:1,borderBottomColor:theme.border,gap:16},
+  row:{flexDirection:'row',alignItems:'center',paddingVertical:13,borderBottomWidth:1,borderBottomColor:theme.border,gap:16},rowCompact:{flexDirection:'column',alignItems:'stretch',gap:8},
   itemContent:{flex:1},
   item:{fontWeight:'800',color:theme.ink},
   meta:{fontSize:11,color:theme.muted,marginTop:4},
-  value:{fontWeight:'800',color:theme.green},
-  totalBox:{marginTop:24,backgroundColor:theme.green,padding:20,borderRadius:10,flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:20},
+  value:{fontWeight:'800',color:theme.green},valueCompact:{alignSelf:'flex-start'},
+  totalBox:{marginTop:24,backgroundColor:theme.green,padding:20,borderRadius:10,flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:20},totalBoxCompact:{flexDirection:'column',alignItems:'stretch',gap:14},
   totalLabel:{fontSize:12,color:'rgba(255,255,255,.7)'},
   validity:{fontSize:11,color:'rgba(255,255,255,.5)',marginTop:5},
-  total:{fontFamily:'serif',fontSize:26,fontWeight:'800',color:theme.goldLight},
+  total:{fontFamily:'serif',fontSize:26,fontWeight:'800',color:theme.goldLight},totalCompact:{fontSize:24,alignSelf:'flex-start'},
   discount:{fontSize:11,color:theme.muted,textAlign:'right',marginTop:7},paymentPlan:{marginTop:18,borderWidth:1,borderColor:theme.border,borderRadius:10,padding:16,backgroundColor:'#FAF7EE'},paymentTitle:{fontFamily:'serif',fontSize:18,fontWeight:'800',color:theme.gold,marginBottom:8},paymentLine:{fontSize:13,lineHeight:20,color:theme.ink,marginTop:3},paymentStrong:{fontWeight:'900',color:theme.ink},paymentNote:{fontSize:11,lineHeight:16,color:theme.muted,marginTop:7},
   body:{fontSize:13,lineHeight:18,color:theme.muted},
   footer:{marginTop:42,paddingTop:20,borderTopWidth:1,borderTopColor:theme.border},

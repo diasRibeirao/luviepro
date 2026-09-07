@@ -13,7 +13,7 @@ export function PlatformPagination({page,totalPages,onChange}:{page:number;total
 }
 
 const styles=StyleSheet.create({
-  row:{flexDirection:'row',alignItems:'center',justifyContent:'flex-end',gap:10,marginTop:14},
+  row:{flexDirection:'row',flexWrap:'wrap',alignItems:'center',justifyContent:'flex-end',gap:10,marginTop:14},
   action:{height:32,borderWidth:1,borderColor:theme.border,borderRadius:8,paddingHorizontal:9,flexDirection:'row',alignItems:'center',gap:5},
   actionText:{fontSize:9,fontWeight:'800',color:theme.green2},
   count:{fontSize:10,fontWeight:'700',color:theme.muted},

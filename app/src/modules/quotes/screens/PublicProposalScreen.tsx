@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { LanguageSwitch, Text, TextInput } from "../../../i18n";
@@ -74,6 +75,8 @@ const errorMessage = (error: unknown) => {
   return "Erro inesperado";
 };
 export default function PublicProposal() {
+  const { width } = useWindowDimensions();
+  const compact = width < 640;
   const { token } = useLocalSearchParams<{ token: string }>();
   const [data, setData] = useState<PublicProposalData>(),
     [error, setError] = useState(""),
@@ -154,13 +157,13 @@ export default function PublicProposal() {
     ? "CONFERÊNCIA DE PRODUTOS ORGANIZADORES UTILIZADOS EM PROJETO"
     : "ORDEM DE SERVIÇO PARA ORGANIZAÇÃO";
   return (
-    <ScrollView style={s.page} contentContainerStyle={s.wrap}>
+    <ScrollView style={s.page} contentContainerStyle={[s.wrap, compact && s.wrapCompact]}>
       <View style={s.language}>
         <LanguageSwitch compact />
       </View>
-      <View style={s.paper}>
-        <View style={s.header}>
-          <View style={s.brandRow}>
+      <View style={[s.paper, compact && s.paperCompact]}>
+        <View style={[s.header, compact && s.headerCompact]}>
+          <View style={[s.brandRow, compact && s.brandRowCompact]}>
             {data.tenant.logoUrl ? (
               <Image source={{ uri: data.tenant.logoUrl }} style={s.logo} />
             ) : null}
@@ -176,7 +179,7 @@ export default function PublicProposal() {
               </Text>
             </View>
           </View>
-          <View style={s.number}>
+          <View style={[s.number, compact && s.numberCompact]}>
             <Text style={s.numberText}>{data.number}</Text>
             <Text style={s.muted}>
               {data.validUntil
@@ -215,7 +218,7 @@ export default function PublicProposal() {
         </Text>
         {data.items.length > 0 && <Text style={s.section}>Serviços</Text>}
         {data.items.map((x, i) => (
-          <View key={i} style={s.item}>
+          <View key={i} style={[s.item, compact && s.itemCompact]}>
             <View style={{ flex: 1 }}>
               <Text style={s.itemName}>{x.serviceName}</Text>
               <Text style={s.muted}>
@@ -227,26 +230,26 @@ export default function PublicProposal() {
                 </Text>
               )}
             </View>
-            <Text style={s.itemValue}>{money(x.totalCents)}</Text>
+            <Text style={[s.itemValue, compact && s.itemValueCompact]}>{money(x.totalCents)}</Text>
           </View>
         ))}
         {!!data.productItems?.length && (
           <>
             <Text style={s.section}>Produtos</Text>
             {data.productItems.map((x, i) => (
-              <View key={`${x.productId}-${i}`} style={s.item}>
+              <View key={`${x.productId}-${i}`} style={[s.item, compact && s.itemCompact]}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.itemName}>{x.productName}</Text>
                   <Text style={s.muted}>
                     {x.sku} · {x.quantity} {x.unit} × {money(x.unitPriceCents)}
                   </Text>
                 </View>
-                <Text style={s.itemValue}>{money(x.totalCents)}</Text>
+                <Text style={[s.itemValue, compact && s.itemValueCompact]}>{money(x.totalCents)}</Text>
               </View>
             ))}
           </>
         )}
-        <View style={s.totalRow}>
+        <View style={[s.totalRow, compact && s.totalRowCompact]}>
           <Text style={s.totalLabel}>Investimento total</Text>
           <Text style={s.total}>{money(proposalTotal)}</Text>
         </View>
@@ -300,7 +303,7 @@ export default function PublicProposal() {
         {decided ? (
           <View
             style={[
-              s.decision,
+              s.decision, compact && s.decisionCompact,
               data.status === "approved" ? s.approved : s.rejected,
             ]}
           >
@@ -328,7 +331,7 @@ export default function PublicProposal() {
             </View>
           </View>
         ) : expired ? (
-          <View style={s.decision}>
+          <View style={[s.decision, compact && s.decisionCompact]}>
             <Text style={s.decisionTitle}>Esta proposta está vencida</Text>
             <Text style={s.muted}>
               Entre em contato com {data.tenant.name} para solicitar uma nova
@@ -336,7 +339,7 @@ export default function PublicProposal() {
             </Text>
           </View>
         ) : (
-          <View style={s.acceptBox}>
+          <View style={[s.acceptBox, compact && s.acceptBoxCompact]}>
             <Text style={s.acceptTitle}>Responder proposta</Text>
             <Text style={s.muted}>
               Informe seu nome para registrar formalmente sua decisão.
@@ -348,18 +351,18 @@ export default function PublicProposal() {
               style={s.input}
             />
             {error ? <Text style={s.inlineError}>{error}</Text> : null}
-            <View style={s.actions}>
+            <View style={[s.actions, compact && s.actionsCompact]}>
               <Pressable
                 disabled={busy}
                 onPress={() => decide("rejected")}
-                style={s.rejectBtn}
+                style={[s.rejectBtn, compact && s.actionButtonCompact]}
               >
                 <Text style={s.rejectText}>Recusar</Text>
               </Pressable>
               <Pressable
                 disabled={busy}
                 onPress={() => decide("approved")}
-                style={s.approveBtn}
+                style={[s.approveBtn, compact && s.actionButtonCompact]}
               >
                 <Ionicons name="checkmark" size={17} color={theme.white} />
                 <Text style={s.approveText}>
@@ -385,14 +388,22 @@ export default function PublicProposal() {
 const s = StyleSheet.create({
   language: { position: "absolute", top: 18, right: 18, zIndex: 20 },
   page: { flex: 1, backgroundColor: "#EEEAE2" },
-  wrap: { padding: 20, paddingVertical: 34 },
+  wrap: { paddingHorizontal: 20, paddingVertical: 34 },
+  wrapCompact: { paddingHorizontal: 0, paddingVertical: 0 },
   paper: {
     width: "100%",
     maxWidth: 760,
     alignSelf: "center",
     backgroundColor: theme.white,
-    borderRadius: 4,
+    borderRadius: 12,
     padding: 42,
+  },
+  paperCompact: {
+    maxWidth: "100%",
+    borderRadius: 0,
+    paddingHorizontal: 18,
+    paddingTop: 74,
+    paddingBottom: 30,
   },
   center: {
     flex: 1,
@@ -403,9 +414,11 @@ const s = StyleSheet.create({
     padding: 30,
   },
   error: { color: theme.danger, fontSize: 13, textAlign: "center" },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1 },
+  brandRowCompact: { alignItems: "flex-start" },
   logo: { width: 42, height: 42, borderRadius: 8, resizeMode: "contain" },
   header: { flexDirection: "row", justifyContent: "space-between", gap: 20 },
+  headerCompact: { flexDirection: "column", gap: 14 },
   brand: {
     fontFamily: "serif",
     fontSize: 23,
@@ -413,6 +426,7 @@ const s = StyleSheet.create({
     color: theme.ink,
   },
   number: { alignItems: "flex-end" },
+  numberCompact: { alignItems: "flex-start" },
   numberText: { fontSize: 14, fontWeight: "900", color: theme.ink },
   validBadge: {
     fontSize: 11,
@@ -464,8 +478,10 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
   },
+  itemCompact: { flexDirection: "column", gap: 8 },
   itemName: { fontSize: 14, fontWeight: "800", color: theme.ink },
   itemValue: { fontSize: 14, fontWeight: "900", color: theme.ink },
+  itemValueCompact: { alignSelf: "flex-start" },
   stage: { fontSize: 11, lineHeight: 13, color: theme.muted, marginTop: 6 },
   totalRow: {
     flexDirection: "row",
@@ -473,6 +489,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 25,
   },
+  totalRowCompact: { flexDirection: "column", alignItems: "flex-start", gap: 6 },
   totalLabel: { fontSize: 12, color: theme.muted },
   total: {
     fontFamily: "serif",
@@ -503,6 +520,7 @@ const s = StyleSheet.create({
     borderTopColor: theme.border,
     paddingTop: 22,
   },
+  acceptBoxCompact: { marginTop: 24 },
   acceptTitle: {
     fontFamily: "serif",
     fontSize: 18,
@@ -525,6 +543,8 @@ const s = StyleSheet.create({
     gap: 10,
     marginTop: 12,
   },
+  actionsCompact: { flexDirection: "column-reverse", alignItems: "stretch" },
+  actionButtonCompact: { width: "100%", justifyContent: "center", alignItems: "center" },
   rejectBtn: {
     borderWidth: 1,
     borderColor: "#DEC9C4",
@@ -555,6 +575,7 @@ const s = StyleSheet.create({
     gap: 10,
     backgroundColor: theme.cream,
   },
+  decisionCompact: { alignItems: "flex-start" },
   approved: { borderColor: "#C8DCCF", backgroundColor: theme.green50 },
   rejected: { borderColor: "#E6CFC9", backgroundColor: "#FFF8F6" },
   decisionTitle: { fontSize: 13, fontWeight: "800", color: theme.ink },
