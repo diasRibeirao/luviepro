@@ -77,10 +77,10 @@ export default function Notifications(){
 
 function PreferencesModal({visible,prefs,narrow,onClose,onToggle}:{visible:boolean;prefs?:NotificationPreferences;narrow:boolean;onClose:()=>void;onToggle:(key:string,value:boolean)=>Promise<void>}){
  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-  <View style={s.modalRoot}>
+  <View style={[s.modalRoot,narrow&&s.modalRootNarrow]}>
    <Pressable accessibilityRole="button" accessibilityLabel="Fechar preferências" style={s.backdrop} onPress={onClose}/>
    <View style={[s.modalCard,narrow&&s.modalCardNarrow]}>
-    <View style={s.modalHead}>
+    <View style={[s.modalHead,narrow&&s.modalHeadNarrow]}>
      <View style={s.modalHeading}>
       <View style={s.modalIcon}><Ionicons name="options-outline" size={20} color={theme.green2}/></View>
       <View style={s.modalHeadingText}>
@@ -93,14 +93,14 @@ function PreferencesModal({visible,prefs,narrow,onClose,onToggle}:{visible:boole
      </Pressable>
     </View>
 
-    <ScrollView style={s.modalScroll} contentContainerStyle={s.modalContent} showsVerticalScrollIndicator={false}>
+    <ScrollView style={s.modalScroll} contentContainerStyle={[s.modalContent,narrow&&s.modalContentNarrow]} showsVerticalScrollIndicator={false}>
      {prefs?<View style={s.preferenceList}>
-      <Toggle label="Lembretes da agenda" description="Receba avisos relacionados a compromissos e eventos da agenda." value={prefs.agendaReminders} onValueChange={(v:boolean)=>void onToggle('agendaReminders',v)}/>
-      <Toggle label="Prazos de projetos" description="Avise quando projetos estiverem próximos do prazo definido." value={prefs.projectDeadlines} onValueChange={(v:boolean)=>void onToggle('projectDeadlines',v)}/>
-      <Toggle label="Prazos de tarefas" description="Receba alertas sobre tarefas que precisam de atenção." value={prefs.taskDeadlines} onValueChange={(v:boolean)=>void onToggle('taskDeadlines',v)}/>
-      <Toggle label="Validade de propostas" description="Acompanhe propostas próximas do vencimento." value={prefs.quoteExpirations} onValueChange={(v:boolean)=>void onToggle('quoteExpirations',v)}/>
+      <Toggle compact={narrow} label="Lembretes da agenda" description="Receba avisos relacionados a compromissos e eventos da agenda." value={prefs.agendaReminders} onValueChange={(v:boolean)=>void onToggle('agendaReminders',v)}/>
+      <Toggle compact={narrow} label="Prazos de projetos" description="Avise quando projetos estiverem próximos do prazo definido." value={prefs.projectDeadlines} onValueChange={(v:boolean)=>void onToggle('projectDeadlines',v)}/>
+      <Toggle compact={narrow} label="Prazos de tarefas" description="Receba alertas sobre tarefas que precisam de atenção." value={prefs.taskDeadlines} onValueChange={(v:boolean)=>void onToggle('taskDeadlines',v)}/>
+      <Toggle compact={narrow} label="Validade de propostas" description="Acompanhe propostas próximas do vencimento." value={prefs.quoteExpirations} onValueChange={(v:boolean)=>void onToggle('quoteExpirations',v)}/>
       <View style={s.preferenceDivider}/>
-      <Toggle label="Receber também por e-mail" description="Além do aplicativo, envie os avisos habilitados para o seu e-mail." value={prefs.emailEnabled} onValueChange={(v:boolean)=>void onToggle('emailEnabled',v)}/>
+      <Toggle compact={narrow} label="Receber também por e-mail" description="Além do aplicativo, envie os avisos habilitados para o seu e-mail." value={prefs.emailEnabled} onValueChange={(v:boolean)=>void onToggle('emailEnabled',v)}/>
      </View>:<View style={s.modalLoading}><Text style={s.muted}>Carregando preferências...</Text></View>}
     </ScrollView>
 
@@ -117,7 +117,7 @@ function PreferencesModal({visible,prefs,narrow,onClose,onToggle}:{visible:boole
 
 function FilterPill({label,active,onPress}:{label:string;active:boolean;onPress:()=>void}){return <Pressable accessibilityRole="button" onPress={onPress} style={[s.filter,active&&s.filterActive]}><Text style={[s.filterText,active&&s.filterTextActive]}>{label}</Text></Pressable>}
 
-function Toggle({label,description,value,onValueChange}:ToggleProps){return <View style={s.preferenceRow}>
+function Toggle({label,description,value,onValueChange,compact=false}:ToggleProps&{compact?:boolean}){return <View style={[s.preferenceRow,compact&&s.preferenceRowCompact]}>
  <View style={s.preferenceCopy}><Text style={s.toggleLabel}>{label}</Text><Text style={s.toggleDescription}>{description}</Text></View>
  <Switch accessibilityLabel={label} value={value} onValueChange={onValueChange} trackColor={{true:theme.green3,false:theme.border}} thumbColor={value?theme.white:theme.white}/>
 </View>}
@@ -156,27 +156,31 @@ const s=StyleSheet.create({
  emptyTitle:{fontFamily:'serif',fontSize:19,fontWeight:'800',color:theme.ink,marginTop:8},
 
  modalRoot:{flex:1,alignItems:'center',justifyContent:'center',padding:20},
+ modalRootNarrow:{paddingHorizontal:10,paddingVertical:10},
  backdrop:{...StyleSheet.absoluteFillObject,backgroundColor:'rgba(12,29,23,0.48)'},
  modalCard:{width:'100%',maxWidth:560,maxHeight:'86%',backgroundColor:theme.white,borderRadius:20,borderWidth:1,borderColor:theme.border,overflow:'hidden'},
- modalCardNarrow:{maxHeight:'92%',borderRadius:16},
+ modalCardNarrow:{maxHeight:'96%',borderRadius:16},
  modalHead:{padding:20,flexDirection:'row',alignItems:'flex-start',justifyContent:'space-between',gap:14,borderBottomWidth:1,borderBottomColor:theme.border},
  modalHeading:{flex:1,minWidth:0,flexDirection:'row',alignItems:'flex-start',gap:12},
  modalHeadingText:{flex:1,minWidth:0},
+ modalHeadNarrow:{paddingHorizontal:16,paddingVertical:14,gap:10},
  modalIcon:{width:40,height:40,borderRadius:12,alignItems:'center',justifyContent:'center',backgroundColor:theme.green50},
  modalTitle:{fontFamily:'serif',fontSize:20,fontWeight:'800',color:theme.ink},
  modalSubtitle:{fontSize:12,lineHeight:17,color:theme.muted,marginTop:4},
  closeButton:{width:38,height:38,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:theme.cream},
  modalScroll:{flexShrink:1},
  modalContent:{padding:20},
+ modalContentNarrow:{paddingHorizontal:14,paddingVertical:14},
  preferenceList:{gap:10},
  preferenceRow:{minHeight:70,borderWidth:1,borderColor:theme.border,borderRadius:12,paddingHorizontal:14,paddingVertical:12,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,backgroundColor:theme.cream},
+ preferenceRowCompact:{minHeight:62,paddingHorizontal:12,paddingVertical:9,gap:10},
  preferenceCopy:{flex:1,minWidth:0},
  toggleLabel:{fontSize:12,fontWeight:'900',color:theme.ink},
  toggleDescription:{fontSize:11,lineHeight:16,color:theme.muted,marginTop:3},
  preferenceDivider:{height:1,backgroundColor:theme.border,marginVertical:3},
  modalLoading:{paddingVertical:24,alignItems:'center'},
  modalFooter:{padding:16,paddingHorizontal:20,borderTopWidth:1,borderTopColor:theme.border,backgroundColor:theme.cream,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:14},
- modalFooterNarrow:{flexDirection:'column',alignItems:'stretch'},
+ modalFooterNarrow:{flexDirection:'column',alignItems:'stretch',paddingHorizontal:14,paddingVertical:12,gap:10},
  modalHint:{flex:1,fontSize:10.5,lineHeight:15,color:theme.muted},
  doneButton:{minWidth:112,minHeight:42,borderRadius:10,backgroundColor:theme.green,alignItems:'center',justifyContent:'center',paddingHorizontal:18},
  doneButtonNarrow:{width:'100%'},

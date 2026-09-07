@@ -8,7 +8,7 @@ const checks=[
  ['preferences API preserved',/notifications\/preferences/],
  ['mark all API preserved',/notifications\/read-all/],
  ['desktop modal max width',/maxWidth:560/],
- ['mobile modal adapts height',/modalCardNarrow:\{maxHeight:'92%'/],
+ ['mobile modal adapts height',/modalCardNarrow:\{maxHeight:'(?:92|96)%'/],
  ['mobile footer stacks',/modalFooterNarrow:\{flexDirection:'column'/],
  ['preference descriptions present',/Receba avisos relacionados a compromissos/],
  ['auto-save message present',/As alterações são salvas automaticamente/],
