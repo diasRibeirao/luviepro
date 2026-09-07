@@ -1,4 +1,4 @@
-export type PlatformTab = 'overview' | 'companies' | 'users' | 'plans' | 'subs' | 'payments' | 'email' | 'maintenance';
+export type PlatformTab = 'overview' | 'companies' | 'users' | 'plans' | 'subs' | 'payments' | 'email' | 'maintenance' | 'health';
 
 export type PlatformPage<T> = {
   items: T[];

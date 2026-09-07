@@ -2,13 +2,16 @@ import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/c
 import { Roles } from '../../roles.guard';
 import { PlatformRequest } from '../../request-user';
 import { PlatformAdminService } from './platform-admin.service';
+import { PlatformHealthService } from './platform-health.service';
+import type { RequestWithId } from '../../http/request-context.middleware';
 import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformListQueryDto, PlatformMasterCreateDto, PlatformMasterUpdateDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
 
 @Roles('platform_admin')
 @Controller('platform')
 export class PlatformController {
-  constructor(private platform: PlatformAdminService) {}
+  constructor(private platform: PlatformAdminService, private health: PlatformHealthService) {}
   @Get('overview') overview(){return this.platform.overview()}
+  @Get('health') healthDiagnostic(@Req() request:RequestWithId){return this.health.diagnostic(request.requestId)}
   @Get('tenants') tenants(@Query() query:PlatformListQueryDto){return this.platform.tenants(query)}
   @Get('subscriptions') subscriptions(@Query() query:PlatformListQueryDto){return this.platform.subscriptions(query)}
   @Get('payments') payments(@Query() query:PlatformListQueryDto){return this.platform.payments(query)}

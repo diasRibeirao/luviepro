@@ -20,10 +20,31 @@ function apiBase(){
 }
 const base=apiBase();
 const requestTimeoutMs=Math.max(5000,Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS??20000));
+
+type ApiDiagnosticEvent={at:number;durationMs:number;status:number;networkFailure:boolean;method:string};
+const apiDiagnosticEvents:ApiDiagnosticEvent[]=[];
+const apiDiagnosticLimit=600;
+function recordApiDiagnostic(event:ApiDiagnosticEvent){apiDiagnosticEvents.push(event);if(apiDiagnosticEvents.length>apiDiagnosticLimit)apiDiagnosticEvents.splice(0,apiDiagnosticEvents.length-apiDiagnosticLimit);}
+export type ApiDiagnosticSnapshot={requests:number;operationalFailures:number;failureRate:number;responses4xx:number;networkFailures:number;errors5xx:number;averageLatencyMs:number;maxLatencyMs:number;slowRequests:number;networkState:'online'|'offline'|'unknown'};
+export function apiDiagnosticsSnapshot(windowMs?:number):ApiDiagnosticSnapshot{
+  const cutoff=windowMs?Date.now()-windowMs:0;
+  const events=apiDiagnosticEvents.filter(event=>event.at>=cutoff);
+  const requests=events.length;
+  const operationalFailures=events.filter(event=>event.networkFailure||event.status>=500||event.status===429).length;
+  const responses4xx=events.filter(event=>event.status>=400&&event.status<500&&event.status!==429).length;
+  const networkFailures=events.filter(event=>event.networkFailure).length;
+  const errors5xx=events.filter(event=>event.status>=500).length;
+  const averageLatencyMs=requests?Math.round(events.reduce((sum,event)=>sum+event.durationMs,0)/requests):0;
+  const maxLatencyMs=requests?Math.round(Math.max(...events.map(event=>event.durationMs))):0;
+  const slowRequests=events.filter(event=>event.durationMs>=1500).length;
+  const webOnline=Platform.OS==='web'&&typeof navigator!=='undefined'?navigator.onLine:undefined;
+  const recentNetworkFailure=events.length?events[events.length-1].networkFailure:false;
+  return {requests,operationalFailures,failureRate:requests?Number(((operationalFailures/requests)*100).toFixed(1)):0,responses4xx,networkFailures,errors5xx,averageLatencyMs,maxLatencyMs,slowRequests,networkState:webOnline===false?'offline':webOnline===true?'online':recentNetworkFailure?'offline':'unknown'};
+}
 async function request(url:string,init:RequestInit={}){
-  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),requestTimeoutMs);
-  try{return await fetch(url,{...init,credentials:Platform.OS==='web'?'include':init.credentials,signal:controller.signal});}
-  catch(error){if(controller.signal.aborted)throw new ApiError('O servidor demorou para responder. Tente novamente.',0);throw error;}
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),requestTimeoutMs);const started=Date.now();const method=String(init.method??'GET').toUpperCase();
+  try{const response=await fetch(url,{...init,credentials:Platform.OS==='web'?'include':init.credentials,signal:controller.signal});recordApiDiagnostic({at:Date.now(),durationMs:Date.now()-started,status:response.status,networkFailure:false,method});return response;}
+  catch(error){recordApiDiagnostic({at:Date.now(),durationMs:Date.now()-started,status:0,networkFailure:true,method});if(controller.signal.aborted)throw new ApiError('O servidor demorou para responder. Tente novamente.',0);throw error;}
   finally{clearTimeout(timer);}
 }
 let token='';
