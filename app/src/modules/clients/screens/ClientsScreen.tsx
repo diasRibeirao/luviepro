@@ -54,13 +54,13 @@ export function ClientsScreen(){
     if(!form.phone.replace(/\D/g,'').trim())next.phone='Informe um telefone para contato.';
     else if(form.phone.replace(/\D/g,'').length<10)next.phone='Informe um telefone válido com DDD.';
     const doc=documentMessage(form.document,effectiveType);if(doc)next.document=doc;
-    if(!isValidEmail(form.email))next.email='Informe um e-mail válido.';
+    if(form.email.trim()&&!isValidEmail(form.email))next.email='Informe um e-mail válido.';
     const cep=cepMessage(form.zipCode);if(cep)next.zipCode=cep;
     setErrors(next);
     if(Object.keys(next).length)return;
     try{
       setSaving(true);
-      await clientsApi.save(editing?.id,{...form,type:effectiveType,whatsapp:phoneIsWhatsapp?form.phone:'',name:form.name.trim(),state:form.state.trim().toUpperCase().slice(0,2)});
+      await clientsApi.save(editing?.id,{...form,email:form.email.trim()||undefined,type:effectiveType,whatsapp:phoneIsWhatsapp?form.phone:'',name:form.name.trim(),state:form.state.trim().toUpperCase().slice(0,2)});
       setOpen(false);
       await load();
       notify({tone:'success',title:editing?'Cliente atualizado':'Cliente cadastrado',message:'Os dados cadastrais foram salvos.'});

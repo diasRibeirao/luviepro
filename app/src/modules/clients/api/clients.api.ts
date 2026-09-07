@@ -1,8 +1,8 @@
 import {api} from '../../../api';
 import type {ClientForm,ClientRecord} from '../types/client.types';
 
-export type SaveClientPayload=ClientForm;
-export type UpdateClientPayload=Partial<ClientForm>&{active?:boolean};
+export type SaveClientPayload=Omit<ClientForm,'email'>&{email?:string};
+export type UpdateClientPayload=Partial<Omit<ClientForm,'email'>>&{email?:string;active?:boolean};
 
 export const clientsApi={
   list:()=>api<ClientRecord[]>('/clients'),

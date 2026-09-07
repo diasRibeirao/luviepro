@@ -69,7 +69,7 @@ export default function QuoteWizard({embedded=false,onClose,onSaved}:{embedded?:
       return {
         serviceId:id,name:service.name,code:service.code??undefined,
         days:String(projectDaysFromStages(service.stages,service.defaultDays??1)),people:String(service.people??1),margin:String((service.safetyMarginBps??0)/100),minimumDailyCents:service.dailyRateCents||0,
-        team:hasResponsible?mapped:[{label:'P.O. responsável',value:'0'},...mapped],
+        team:hasResponsible?mapped:[{label:'P.O. responsável',value:toReais(service.dailyRateCents||0)},...mapped],
         variable:variableCosts.length?variableCosts.map(x=>({label:x.description,value:toReais(x.amountCents)})):(service.variableCostCents?[{label:'Despesas por dia',value:toReais(service.variableCostCents)}]:[]),
         fixed:fixedCosts.length?fixedCosts.map(x=>({label:x.description,value:toReais(x.amountCents)})):(service.fixedCostCents?[{label:'Custo do projeto',value:toReais(service.fixedCostCents)}]:[]),
         stages:(service.stages??[]).filter(x=>x.description?.trim()).map(x=>({description:x.description!.trim(),duration:x.duration}))
@@ -80,7 +80,7 @@ export default function QuoteWizard({embedded=false,onClose,onSaved}:{embedded?:
   useEffect(()=>{
     if(!serviceItems.length){setResults([]);return;}
     const timer=setTimeout(()=>Promise.all(serviceItems.map(item=>quotesApi.calculate({
-      dailyRateCents:Math.max(item.minimumDailyCents,item.team.reduce((sum,line)=>sum+toCents(line.value),0)),
+      dailyRateCents:item.team.length?item.team.reduce((sum,line)=>sum+toCents(line.value),0):item.minimumDailyCents,
       days:Number(item.days)||1,people:Number(item.people)||1,
       variableCostCents:item.variable.reduce((sum,line)=>sum+toCents(line.value),0),
       fixedCostCents:item.fixed.reduce((sum,line)=>sum+toCents(line.value),0),
@@ -141,7 +141,7 @@ export default function QuoteWizard({embedded=false,onClose,onSaved}:{embedded?:
       setBusy(true);
       await quotesApi.create({
         clientId,discountBps,validityDays,notes,paymentLinkUrl:paymentLinkUrl.trim()||undefined,
-        items:serviceItems.map(item=>({serviceId:item.serviceId,days:Number(item.days)||1,people:Number(item.people)||1,dailyRateCents:Math.max(item.minimumDailyCents,item.team.reduce((sum,line)=>sum+toCents(line.value),0)),variableCostCents:item.variable.reduce((sum,line)=>sum+toCents(line.value),0),fixedCostCents:item.fixed.reduce((sum,line)=>sum+toCents(line.value),0),safetyMarginBps:Math.round((Number(item.margin)||0)*100),stages:item.stages.map(stage=>({description:stage.description.trim(),duration:stage.duration?.trim()||undefined}))})),
+        items:serviceItems.map(item=>({serviceId:item.serviceId,days:Number(item.days)||1,people:Number(item.people)||1,dailyRateCents:item.team.length?item.team.reduce((sum,line)=>sum+toCents(line.value),0):item.minimumDailyCents,variableCostCents:item.variable.reduce((sum,line)=>sum+toCents(line.value),0),fixedCostCents:item.fixed.reduce((sum,line)=>sum+toCents(line.value),0),safetyMarginBps:Math.round((Number(item.margin)||0)*100),stages:item.stages.map(stage=>({description:stage.description.trim(),duration:stage.duration?.trim()||undefined}))})),
         productItems:productItems.map(item=>({productId:item.productId,quantity:Number(item.quantity)||1,unitPriceCents:toCents(item.unitPrice),discountBps:Math.round((Number(item.discount)||0)*100)}))
       });
       notify({tone:'success',title:'Orçamento criado',message:'Serviços e produtos foram salvos na proposta.'});
