@@ -16,7 +16,7 @@ export class AccessManagementService {
     return this.db.auditLog.create({data:{tenantId,actorUserId,action,entity,entityId,metadata}});
   }
   private invitationHash(token:string){return createHash('sha256').update(token).digest('hex');}
-  private invitationUrl(token:string){const base=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');return `${base}/invite/${encodeURIComponent(token)}`;}
+  private invitationUrl(token:string){const base=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');return `${base}/first-access?token=${encodeURIComponent(token)}`;}
   private normalizePermissions(values:any){const set=new Set(Array.isArray(values)?values.map(String):[]);return this.permissionCatalog.filter(code=>set.has(code));}
   private roleLabel(role:string){return ({admin:'Administrador',commercial:'Comercial',operational:'Operacional',finance:'Financeiro'} as Record<string,string>)[role]??role;}
 
