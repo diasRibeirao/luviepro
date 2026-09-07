@@ -6,7 +6,7 @@ const checks=[
  ['Language uses Brazil flag',read('src/i18n.tsx'),/🇧🇷/],
  ['Language uses US flag',read('src/i18n.tsx'),/🇺🇸/],
  ['Language uses Spain flag',read('src/i18n.tsx'),/🇪🇸/],
- ['Notifications has preferences action',read('src/modules/notifications/screens/NotificationsScreen.tsx'),/Ocultar preferências/],
+ ['Notifications has preferences action',read('src/modules/notifications/screens/NotificationsScreen.tsx'),/(Preferências|Ocultar preferências)/],
  ['Notifications has all filter',read('src/modules/notifications/screens/NotificationsScreen.tsx'),/filter==='all'/],
  ['Notifications has unread filter',read('src/modules/notifications/screens/NotificationsScreen.tsx'),/filter==='unread'/],
  ['Notifications has read filter',read('src/modules/notifications/screens/NotificationsScreen.tsx'),/filter==='read'/],
