@@ -37,7 +37,7 @@ test('rota autenticada sem sessão redireciona para login',()=>{
 });
 
 test('rotas públicas permanecem acessíveis sem sessão',()=>{
-  for(const path of ['/','/register','/forgot-password','/reset-password','/invite/token-1','/p/public-token']){
+  for(const path of ['/','/register','/forgot-password','/reset-password','/first-access','/invite/token-1','/p/public-token']){
     assert.equal(isPublicAuthRoute(path),true,path);
     assert.equal(authGuardRedirect(false,path),undefined,path);
   }

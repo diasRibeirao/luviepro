@@ -3,7 +3,7 @@ export function postLoginRoute(session){
 }
 
 export function isPublicAuthRoute(path){
-  return path==='/'||path==='/register'||path==='/forgot-password'||path==='/reset-password'||path.startsWith('/invite/')||path.startsWith('/p/');
+  return path==='/'||path==='/register'||path==='/forgot-password'||path==='/reset-password'||path==='/first-access'||path.startsWith('/first-access?')||path.startsWith('/invite/')||path.startsWith('/p/');
 }
 
 export function authGuardRedirect(authenticated,path,platform=false){
