@@ -1,50 +1,132 @@
-export type PlanCode=string;
-export type BillingPeriod='monthly'|'quarterly'|'semiannual'|'annual';
-export type BillingAction='new_subscription'|'renewal'|'upgrade'|'downgrade';
-export type PaymentStatus='pending'|'approved'|'rejected'|'cancelled'|'refunded'|'charged_back'|'error';
+export type PlatformTab = 'overview' | 'companies' | 'users' | 'plans' | 'subs' | 'payments' | 'email' | 'maintenance' | 'health' | 'backup';
 
-export interface PlanLimit {
-  plan:PlanCode;
-  name:string;
-  description?:string|null;
-  active:boolean;
-  sortOrder:number;
-  maxClients:number;
-  maxQuotesPerMonth:number;
-  maxUsers:number;
-  customPdf:boolean;
-  logoPdf:boolean;
-  premiumTemplates:boolean;
-  projectManagement:string;
-  advancedReports:boolean;
-  exportData:boolean;
-  standardRoles:boolean;
-  customRoles:boolean;
-  granularPermissions:boolean;
-  auditAccess:boolean;
-  monthlyPriceCents:number;
-  quarterlyPriceCents:number;
-  semiannualPriceCents:number;
-  annualPriceCents:number;
+export type PlatformPage<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export type PlatformCompany = {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  planPeriod?: string;
+  status: string;
+  contactEmail?: string | null;
+  _count?: { users?: number; clients?: number; subscriptions?: number };
+  scheduledSubscription?: PlatformSubscription | null;
+};
+
+export type PlatformUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  lastLoginAt?: string | null;
+  tenant?: Pick<PlatformCompany, 'id' | 'name' | 'plan' | 'status'>;
+};
+
+export type PlatformMaster = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  current?: boolean;
+  lastLoginAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type PlatformPlan = {
+  plan: string;
+  name: string;
+  description?: string | null;
+  active: boolean;
+  sortOrder: number;
+  maxClients: number;
+  maxQuotesPerMonth: number;
+  maxUsers: number;
+  monthlyPriceCents: number;
+  quarterlyPriceCents: number;
+  semiannualPriceCents: number;
+  annualPriceCents: number;
+};
+
+export type PlatformSubscription = {
+  id: string;
+  plan: string;
+  period: string;
+  amountCents: number;
+  status: string;
+  startsAt: string;
+  expiresAt: string;
+  tenant?: Pick<PlatformCompany, 'id' | 'name' | 'slug'>;
+};
+
+export type PlatformPayment = {
+  id: string;
+  provider: string;
+  providerPaymentId?: string | null;
+  providerPreferenceId?: string | null;
+  externalReference?: string | null;
+  plan: string;
+  period: string;
+  amountCents: number;
+  status: string;
+  paymentMethod?: string | null;
+  providerStatus?: string | null;
+  providerStatusDetail?: string | null;
+  paidAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+  _count?: { webhookEvents?: number };
+  lastWebhook?: {
+    id: string;
+    status: string;
+    eventType?: string | null;
+    attempts: number;
+    lastError?: string | null;
+    processedAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  tenant?: Pick<PlatformCompany, 'id' | 'name' | 'slug'>;
+};
+
+export type PlatformOverview = {
+  tenants: number;
+  activeTenants: number;
+  users: number;
+  clients: number;
+  subscriptions: number;
+  monthlyRevenueCents: number;
+};
+
+export function isPlatformPage<T>(value: unknown): value is PlatformPage<T> {
+  return Boolean(value && typeof value === 'object' && Array.isArray((value as PlatformPage<T>).items));
 }
-export interface AccountUser {id:string;name:string;email:string;role:string;customProfileId?:string|null;customProfile?:{id:string;name:string}|null;active:boolean;lastLoginAt?:string|null;lockedUntil?:string|null;passwordChangedAt?:string|null;}
-export interface AccountResponse {
-  tenant:{id:string;name:string;plan:PlanCode;planPeriod:BillingPeriod;subscriptionExpiresAt?:string|null;status:string;responsibleName?:string|null;contactEmail?:string|null;phone?:string|null};
-  limit:PlanLimit|null;
-  currentUser:AccountUser|null;
-  usage:{clients:number;quotes:number;users:number;pendingInvitations:number;userSeatsUsed:number};
-  features:{customPdf:boolean;logoPdf:boolean;premiumTemplates:boolean;projectManagement:string;advancedReports:boolean;exportData:boolean;standardRoles:boolean;customRoles:boolean;granularPermissions:boolean;auditAccess:boolean};
-  entitlements?:{
-    limits:{clients:number|null;quotesPerMonth:number|null;users:number|null};
-    usage:{clients:number;quotes:number;users:number;pendingInvitations:number;userSeatsUsed:number};
-    features:AccountResponse['features'];
-    remaining:{clients:number|null;quotesPerMonth:number|null;users:number|null};
-  };
-}
-export interface BillingPayment {
-  id:string;provider:string;providerPaymentId?:string|null;providerPreferenceId?:string|null;plan:PlanCode;period:BillingPeriod;amountCents:number;status:PaymentStatus;billingAction:BillingAction;checkoutUrl?:string|null;paymentMethod?:string|null;providerStatus?:string|null;providerStatusDetail?:string|null;currency:string;payerEmail?:string|null;paidAt?:string|null;cancelledAt?:string|null;refundedAt?:string|null;chargebackAt?:string|null;createdAt:string;updatedAt:string;subscription?:{id:string;status:string;startsAt:string;expiresAt:string}|null;
-}
-export interface CheckoutResponse {paymentId:string;preferenceId?:string|null;checkoutUrl:string;webhookConfigured:boolean;sandbox:boolean;billingAction:BillingAction;effectiveAt?:string;reused?:boolean;}
-export interface ReconcileResponse {ok?:boolean;status:PaymentStatus;paymentId:string;ignored?:boolean;}
-export function isPlanCode(value:string):value is PlanCode{return /^[a-z][a-z0-9-]{1,30}$/.test(value);}
-export function planRank(value:string){return ({starter:1,pro:2,business:3} as Record<string,number>)[value]??0;}
+
+export type PlatformEditableItem =
+  | ({ kind: 'tenant' } & PlatformCompany)
+  | ({ kind: 'user' } & PlatformUser)
+  | ({ kind: 'plan' } & PlatformPlan);
+
+export type PlatformTenantCreateResult = {
+  invitation?: {
+    delivery?: { sent?: boolean };
+    inviteUrl?: string | null;
+  } | null;
+};
+
+export type PlatformFilterRecord = {
+  id?: string;
+  status?: string;
+  active?: boolean;
+  plan?: string;
+  tenant?: { id?: string; plan?: string };
+};

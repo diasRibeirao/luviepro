@@ -1,17 +1,26 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, Res, StreamableFile } from '@nestjs/common';
 import { Roles } from '../../roles.guard';
 import { PlatformRequest } from '../../request-user';
 import { PlatformAdminService } from './platform-admin.service';
 import { PlatformHealthService } from './platform-health.service';
+import { PlatformBackupService } from './platform-backup.service';
 import type { RequestWithId } from '../../http/request-context.middleware';
+import type { Response } from 'express';
+import { createReadStream } from 'node:fs';
+import { PlatformCreateBackupDto } from './dto/platform-backup.dto';
 import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformListQueryDto, PlatformMasterCreateDto, PlatformMasterUpdateDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
 
 @Roles('platform_admin')
 @Controller('platform')
 export class PlatformController {
-  constructor(private platform: PlatformAdminService, private health: PlatformHealthService) {}
+  constructor(private platform: PlatformAdminService, private health: PlatformHealthService, private backups: PlatformBackupService) {}
   @Get('overview') overview(){return this.platform.overview()}
   @Get('health') healthDiagnostic(@Req() request:RequestWithId){return this.health.diagnostic(request.requestId)}
+  @Get('backups') backupsList(){return this.backups.list()}
+  @Post('backups') createBackup(@Body() body:PlatformCreateBackupDto){return this.backups.create(body.description)}
+  @Get('backups/:id/download') async downloadBackup(@Param('id') id:string,@Res({ passthrough:true }) response:Response){const item=await this.backups.download(id);response.setHeader('Content-Type','application/octet-stream');response.setHeader('Content-Disposition',`attachment; filename="${item.fileName}"`);response.setHeader('Content-Length',String(item.bytes));return new StreamableFile(createReadStream(item.path))}
+  @Post('backups/:id/verify') verifyBackup(@Param('id') id:string){return this.backups.verify(id)}
+  @Post('backups/:id/simulate-restore') simulateBackupRestore(@Param('id') id:string){return this.backups.simulateRestore(id)}
   @Get('tenants') tenants(@Query() query:PlatformListQueryDto){return this.platform.tenants(query)}
   @Get('subscriptions') subscriptions(@Query() query:PlatformListQueryDto){return this.platform.subscriptions(query)}
   @Get('payments') payments(@Query() query:PlatformListQueryDto){return this.platform.payments(query)}

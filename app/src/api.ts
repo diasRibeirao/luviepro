@@ -104,3 +104,17 @@ export async function publicApi<T=unknown>(path:string,init:RequestInit={}):Prom
   if(!res.ok)throw await parseError(res);
   return res.status===204?undefined as T:res.json() as Promise<T>;
 }
+
+
+export async function apiDownload(path:string,fileName:string,retry=true):Promise<void>{
+  if(Platform.OS!=='web')throw new ApiError('O download do arquivo de backup está disponível na versão web.',400);
+  let res:Response;
+  try{res=await request(`${base}${path}`,{headers:{...(token?{Authorization:`Bearer ${token}`}:{})}});}catch(error){if(error instanceof ApiError)throw error;throw new ApiError('Não foi possível conectar ao servidor',0);}
+  if(res.status===401&&retry&&await renew())return apiDownload(path,fileName,false);
+  if(res.status===401)clearSession();
+  if(!res.ok)throw await parseError(res);
+  const blob=await res.blob();
+  const url=URL.createObjectURL(blob);
+  try{const anchor=document.createElement('a');anchor.href=url;anchor.download=fileName;document.body.appendChild(anchor);anchor.click();anchor.remove();}
+  finally{URL.revokeObjectURL(url);}
+}

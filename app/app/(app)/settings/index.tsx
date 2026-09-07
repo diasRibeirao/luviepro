@@ -1,1 +1,1 @@
-export {default} from '../../../src/modules/settings/screens/SettingsScreen';
+export {default} from '../../../../src/modules/settings/screens/ProductUnitsScreen';

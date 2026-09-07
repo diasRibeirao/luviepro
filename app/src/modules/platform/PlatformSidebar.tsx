@@ -16,6 +16,7 @@ export const PLATFORM_TABS=[
  {key:'payments',icon:'card-outline',label:'Pagamentos',subtitle:'Conciliação financeira do Mercado Pago'},
  {key:'email',icon:'mail-outline',label:'E-mail e SMTP',subtitle:'Infraestrutura global de envio de e-mails'},
  {key:'health',icon:'pulse-outline',label:'Saúde do aplicativo',subtitle:'Diagnóstico seguro de API, dependências e frontend'},
+ {key:'backup',icon:'cloud-upload-outline',label:'Backup e recuperação',subtitle:'Snapshots, integridade e simulação de restauração'},
 ] as const satisfies ReadonlyArray<{key:PlatformTab;icon:string;label:string;subtitle:string}>;
 
 const MOBILE_PRIMARY:PlatformTab[]=['overview','companies','users','maintenance'];

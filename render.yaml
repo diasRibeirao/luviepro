@@ -93,6 +93,12 @@ services:
         value: "false"
       - key: DEMO_SEED
         value: "0"
+      - key: BACKUP_STORAGE_DIR
+        value: "./var/backups"
+      - key: BACKUP_STORAGE_PERSISTENT
+        value: "false"
+      - key: BACKUP_RETENTION_COUNT
+        value: "20"
       - key: MAIL_PROVIDER
         value: "smtp"
       - key: SMTP_HOST
