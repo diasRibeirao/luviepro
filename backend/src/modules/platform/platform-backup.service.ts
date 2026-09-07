@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { createBackupManifest, type BackupManifest, verifyBackupPayload } from '../../operations/backup-manifest';
