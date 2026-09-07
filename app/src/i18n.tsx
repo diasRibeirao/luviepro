@@ -15,6 +15,11 @@ type NavKey=keyof typeof nav['pt-BR'];
 // Textos visíveis da aplicação. A chave é sempre o texto-base em pt-BR para permitir
 // migrar telas antigas sem manter strings duplicadas dentro dos componentes.
 const exact:Record<string,[string,string]>={
+ 'Avisos importantes do LuviePro em um único lugar':['Important LuviePro alerts in one place','Avisos importantes de LuviePro en un solo lugar'],
+ 'Ocultar preferências':['Hide preferences','Ocultar preferencias'],
+ 'Não lidas':['Unread','No leídas'],
+ 'Lidas':['Read','Leídas'],
+ 'Não há notificações neste filtro.':['There are no notifications in this filter.','No hay notificaciones en este filtro.'],
  'Primeiro acesso':['First access','Primer acceso'],
  'CÓDIGO DE PRIMEIRO ACESSO':['FIRST ACCESS CODE','CÓDIGO DE PRIMER ACCESO'],
  'Ative seu acesso':['Activate your access','Activa tu acceso'],
@@ -1455,10 +1460,11 @@ export function I18nProvider({children}:{children:ReactNode}){
   return <I18nContext.Provider value={value}><React.Fragment key={locale}>{children}</React.Fragment></I18nContext.Provider>;
 }
 export const useI18n=()=>useContext(I18nContext);
-export const localeOptions:[Locale,string][]=[['pt-BR','PT'],['en-US','EN'],['es-ES','ES']];
+export const localeOptions:[Locale,string][]=[['pt-BR','🇧🇷'],['en-US','🇺🇸'],['es-ES','🇪🇸']];
+const localeNames:Record<Locale,string>={'pt-BR':'Português','en-US':'English','es-ES':'Español'};
 
 export function LanguageSwitch({compact=false}:{compact?:boolean}){
   const{locale,setLocale,t}=useI18n();
-  return <View style={ls.wrap} accessibilityRole="radiogroup">{localeOptions.map(([value,label])=><Pressable key={value} accessibilityRole="radio" accessibilityLabel={`${t('language')} ${label}`} accessibilityState={{selected:locale===value}} onPress={()=>setLocale(value)} style={[ls.btn,compact&&ls.btnCompact,locale===value&&ls.active]}><RNText style={[ls.text,locale===value&&ls.textActive]}>{label}</RNText></Pressable>)}</View>;
+  return <View style={ls.wrap} accessibilityRole="radiogroup">{localeOptions.map(([value,label])=><Pressable key={value} accessibilityRole="radio" accessibilityLabel={`${t('language')} ${localeNames[value]}`} accessibilityState={{selected:locale===value}} onPress={()=>setLocale(value)} style={[ls.btn,compact&&ls.btnCompact,locale===value&&ls.active]}><RNText style={[ls.text,locale===value&&ls.textActive]}>{label}</RNText></Pressable>)}</View>;
 }
-const ls=StyleSheet.create({wrap:{flexDirection:'row',borderWidth:1,borderColor:theme.border,borderRadius:9,padding:2,backgroundColor:theme.white},btn:{minWidth:34,height:30,borderRadius:7,alignItems:'center',justifyContent:'center'},btnCompact:{minWidth:32,height:28},active:{backgroundColor:theme.green50},text:{fontSize:11,fontWeight:'800',color:theme.muted},textActive:{color:theme.green}});
+const ls=StyleSheet.create({wrap:{flexDirection:'row',borderWidth:1,borderColor:theme.border,borderRadius:9,padding:2,backgroundColor:theme.white},btn:{minWidth:34,height:30,borderRadius:7,alignItems:'center',justifyContent:'center'},btnCompact:{minWidth:32,height:28},active:{backgroundColor:theme.green50},text:{fontSize:18,lineHeight:22,fontWeight:'800',color:theme.muted},textActive:{color:theme.green}});
