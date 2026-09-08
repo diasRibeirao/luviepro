@@ -41,6 +41,7 @@ model Tenant {
   planPeriod              String?
   subscriptionExpiresAt   DateTime?
   status                  String                   @default("active")
+  onboardingCompletedAt   DateTime?
   createdAt               DateTime                 @default(now())
   users                   User[]
   clients                 Client[]

@@ -102,7 +102,7 @@ export default function Register(){
     try{
       setBusy(true);setError('');setEmailAlreadyRegistered(false);
       const result=await api<RegisterSession>('/auth/register',{method:'POST',body:JSON.stringify({company,name,phone,email,password,plan,period})});
-      establishSession(result);router.replace('/home');
+      establishSession(result);router.replace('/first-access?newAccount=1');
     }catch(e:unknown){
       const message=errorMessage(e);
       const duplicateEmail=/e-mail já está cadastrado|email já está cadastrado|already.*registered/i.test(message);

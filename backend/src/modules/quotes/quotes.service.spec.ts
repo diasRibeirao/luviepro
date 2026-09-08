@@ -138,6 +138,20 @@ describe('QuotesService',()=>{
     expect(items[0].configurationJson).toEqual(expect.objectContaining({daysSource:'stages'}));
   });
 
+  it('uses the R$ 300 base daily for a legacy zero-rate service when the quote item omits the daily rate',async()=>{
+    db.service.findFirst.mockResolvedValue({id:'s1',name:'Planejamento',defaultDays:1,people:1,dailyRateCents:0,variableCostCents:0,fixedCostCents:0,safetyMarginBps:0,variableCostMode:'per_day',stages:[]});
+    const items=await (service as any).buildQuoteItems('t1',[{serviceId:'s1'}]);
+    expect(items[0]).toEqual(expect.objectContaining({laborCents:30000,totalCents:30000}));
+    expect(items[0].configurationJson).toEqual(expect.objectContaining({dailyRateCents:30000}));
+  });
+
+  it('preserves an explicit zero daily rate as a manual quote override',async()=>{
+    db.service.findFirst.mockResolvedValue({id:'s1',name:'Cortesia',defaultDays:1,people:1,dailyRateCents:0,variableCostCents:0,fixedCostCents:0,safetyMarginBps:0,variableCostMode:'per_day',stages:[]});
+    const items=await (service as any).buildQuoteItems('t1',[{serviceId:'s1',dailyRateCents:0}]);
+    expect(items[0]).toEqual(expect.objectContaining({laborCents:0,totalCents:0}));
+    expect(items[0].configurationJson).toEqual(expect.objectContaining({dailyRateCents:0}));
+  });
+
   it('keeps an explicit manual day override even when stages have another duration',async()=>{
     db.service.findFirst.mockResolvedValue({id:'s1',name:'Organização',defaultDays:5,people:1,dailyRateCents:10000,variableCostCents:0,fixedCostCents:0,safetyMarginBps:0,variableCostMode:'per_day',stages:[{sequence:1,description:'Execução',duration:'3 dias'}]});
     const items=await (service as any).buildQuoteItems('t1',[{serviceId:'s1',days:2}]);
@@ -173,6 +187,22 @@ describe('QuotesService',()=>{
     expect(tx.stockReservation.findMany).toHaveBeenCalledWith({where:{tenantId:'t1',quoteId:'q1',status:'active'}});
     expect(tx.product.update).toHaveBeenCalledWith({where:{id:'p1'},data:{reservedQuantity:{decrement:2}}});
     expect(tx.stockReservation.update).toHaveBeenCalledWith({where:{id:'r1'},data:expect.objectContaining({status:'released'})});
+  });
+
+
+  it('uses active service team daily total before the legacy R$ 300 fallback', async()=>{
+    db.service.findFirst.mockResolvedValue({
+      id:'s1',name:'Consultoria',defaultDays:1,people:1,dailyRateCents:0,
+      variableCostCents:0,fixedCostCents:0,safetyMarginBps:0,variableCostMode:'per_day',stages:[],
+      team:[
+        {role:'P.O.',dailyRateCents:30000,included:true},
+        {role:'Assistente',dailyRateCents:18000,included:true},
+        {role:'Inativo',dailyRateCents:99999,included:false},
+      ],
+    });
+    const items=await (service as any).buildQuoteItems('t1',[{serviceId:'s1'}]);
+    expect(items[0]).toEqual(expect.objectContaining({laborCents:48000,totalCents:48000}));
+    expect(items[0].configurationJson).toEqual(expect.objectContaining({dailyRateCents:48000}));
   });
 
 });

@@ -9,6 +9,8 @@ services:
         source: /*
         destination: /index.html
     envVars:
+      - key: NODE_VERSION
+        value: 22.20.0
       - key: EXPO_PUBLIC_API_URL
         value: https://luviepro-api-hml.onrender.com/api
       - key: EXPO_PUBLIC_API_TIMEOUT_MS
@@ -28,7 +30,7 @@ services:
     region: virginia
     buildCommand: cd backend && npm ci --include=dev && npm run build
     startCommand: cd backend && npm run render:start
-    healthCheckPath: /api/health
+    healthCheckPath: /api/health/live
     envVars:
       - key: NODE_VERSION
         value: 22.20.0

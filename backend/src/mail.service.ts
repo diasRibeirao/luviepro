@@ -66,7 +66,8 @@ export class MailService {
     if(provider==='resend'){
       return {provider,configured:!!(resend.apiKey&&resend.from),from:resend.from||null,host:null,port:null,secure:null,userConfigured:false,passwordConfigured:false,resendApiKeyConfigured:!!resend.apiKey,lastTestOk:this.lastTestOk,lastTestAt:this.lastTestAt??null};
     }
-    return {provider,configured:!!(smtp.host&&smtp.from),from:smtp.from||null,host:smtp.host||null,port:smtp.port,secure:smtp.secure,userConfigured:!!smtp.user,passwordConfigured:!!smtp.pass,resendApiKeyConfigured:!!resend.apiKey,lastTestOk:this.lastTestOk,lastTestAt:this.lastTestAt??null};
+    const authenticated=!smtp.user||!!smtp.pass;
+    return {provider,configured:!!(smtp.host&&smtp.from&&authenticated),from:smtp.from||null,host:smtp.host||null,port:smtp.port,secure:smtp.secure,userConfigured:!!smtp.user,passwordConfigured:!!smtp.pass,resendApiKeyConfigured:!!resend.apiKey,lastTestOk:this.lastTestOk,lastTestAt:this.lastTestAt??null};
   }
 
   private getTransporter():MailTransport|undefined{
@@ -90,7 +91,7 @@ export class MailService {
   private async sendWithSmtp(to:string,subject:string,text:string,html:string):Promise<MailDelivery>{
     const transporter=this.getTransporter();
     const c=this.smtpConfig();
-    if(!transporter||!c.from)return {sent:false,reason:'not_configured'};
+    if(!transporter||!c.from||(c.user&&!c.pass))return {sent:false,reason:'not_configured'};
     try{
       await transporter.sendMail({from:c.from,to,subject,text,html});
       return {sent:true};

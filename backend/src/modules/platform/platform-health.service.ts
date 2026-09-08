@@ -82,6 +82,7 @@ export class PlatformHealthService {
       ? this.configured(process.env.RESEND_API_KEY, process.env.RESEND_FROM)
       : mailProvider === 'smtp'
         ? this.configured(process.env.SMTP_HOST, process.env.SMTP_FROM)
+          && (!process.env.SMTP_USER?.trim() || Boolean(process.env.SMTP_PASS?.trim()))
         : false;
 
     const metrics = this.metrics.snapshot();

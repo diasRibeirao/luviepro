@@ -55,7 +55,7 @@ export class ServicesService {
       description:String(val('description','')??'').trim()||null,
       category:String(val('category','')??'').trim()||null,
       billingUnit:String(val('billingUnit','daily')),
-      dailyRateCents:team.length?teamDaily:Number(val('dailyRateCents',0)),
+      dailyRateCents:teamDaily>0?teamDaily:Number(val('dailyRateCents',0)),
       defaultDays:Number(val('defaultDays',1)),
       people:Number(val('people',1)),
       variableCostCents:costs.length?variable:Number(val('variableCostCents',0)),
@@ -135,13 +135,22 @@ export class ServicesService {
         changed=await this.db.$transaction(async tx=>{
           const current=await tx.service.findFirst({where:{id,tenantId}});
           if(!current)throw new NotFoundException('Serviço não encontrado');
-          const neighbor=await tx.service.findFirst({
-            where:{tenantId,id:{not:id},active:current.active,sortOrder:direction==='up'?{lt:current.sortOrder}:{gt:current.sortOrder}},
-            orderBy:{sortOrder:direction==='up'?'desc':'asc'},
+          // Reconstroi a ordem inteira do mesmo grupo de status antes de mover.
+          // Isso elimina sortOrder duplicado/antigo e evita que, depois de atualizar a tela,
+          // o desempate alfabetico altere novamente a ordem escolhida pelo usuario.
+          const ordered=await tx.service.findMany({
+            where:{tenantId,active:current.active},
+            orderBy:[{sortOrder:'asc'},{name:'asc'},{id:'asc'}],
+            select:{id:true},
           });
-          if(!neighbor)return false;
-          await tx.service.update({where:{id:current.id},data:{sortOrder:neighbor.sortOrder}});
-          await tx.service.update({where:{id:neighbor.id},data:{sortOrder:current.sortOrder}});
+          const index=ordered.findIndex(item=>item.id===id);
+          if(index<0)throw new NotFoundException('Serviço não encontrado');
+          const target=direction==='up'?index-1:index+1;
+          if(target<0||target>=ordered.length)return false;
+          [ordered[index],ordered[target]]=[ordered[target],ordered[index]];
+          for(let position=0;position<ordered.length;position++){
+            await tx.service.update({where:{id:ordered[position].id},data:{sortOrder:(position+1)*10}});
+          }
           return true;
         },{isolationLevel:'Serializable'});
         break;

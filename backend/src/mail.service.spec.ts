@@ -11,6 +11,15 @@ describe('MailService',()=>{
     await expect(new MailService().sendPasswordReset({to:'a@b.com',name:'A',resetUrl:'https://example.test',expiresAt:new Date()})).resolves.toEqual({sent:false,reason:'not_configured'});
   });
 
+  it('does not report authenticated SMTP as configured without a password',()=>{
+    process.env.MAIL_PROVIDER='smtp';
+    process.env.SMTP_HOST='smtp.example.com';
+    process.env.SMTP_FROM='no-reply@example.com';
+    process.env.SMTP_USER='apikey';
+    delete process.env.SMTP_PASS;
+    expect(new MailService().status().configured).toBe(false);
+  });
+
   it('uses Resend HTTPS when configured',async()=>{
     process.env.MAIL_PROVIDER='resend';
     process.env.RESEND_API_KEY='re_test';

@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+const src=fs.readFileSync(new URL('../src/modules/services/screens/ServicesScreen.tsx', import.meta.url),'utf8');
+let ok=0,total=5;
+const check=(name,cond)=>{if(!cond){console.error('FAIL',name);process.exitCode=1}else{console.log('OK',name);ok++}};
+check('usa projectDaysFromStages na composição',src.includes('const compositionDays=Math.max(1,selected.reduce((sum,service)=>sum+projectDaysFromStages(service.stages,service.defaultDays??1),0))'));
+check('defaultDays recebe compositionDays',src.includes("defaultDays:String(compositionDays)"));
+check('fallback permanece no helper',src.includes('projectDaysFromStages(service.stages,service.defaultDays??1)'));
+check('não usa soma bruta de defaultDays na composição',!src.includes("defaultDays:String(Math.max(1,selected.reduce((sum,service)=>sum+Math.max(1,service.defaultDays??1),0)))"));
+check('mantém mínimo de um dia',src.includes('const compositionDays=Math.max(1,'));
+console.log(`${ok}/${total} checks OK`);
+if(ok!==total)process.exit(1);

@@ -8,6 +8,8 @@ import { AppShell } from '../../../components/AppShell';
 import { theme } from '../../../theme';
 import { decimalInput,integerInput } from '../../../inputFormatters';
 import { projectDaysFromStages } from '../../../servicePlanning';
+import { activeServiceTeam,serviceReferenceDailyCents,serviceTeamDailyCents } from '../../services/serviceDaily';
+import { setCalculatorQuoteDraft } from '../../quotes/calculatorQuoteDraft';
 
 type Row={label:string;value:string};
 type ServiceTeamMember={role:string;dailyRateCents:number;included?:boolean};
@@ -31,12 +33,17 @@ export default function CalculatorScreen(){
     const projectDays=selectedServices.reduce((sum,s)=>sum+projectDaysFromStages(s.stages,s.defaultDays),0);
     setDays(String(Math.max(1,projectDays)));
     setMargin(String(Math.max(...selectedServices.map(s=>s.safetyMarginBps??0))/100));
-    setMinimumDaily(Math.max(...selectedServices.map(s=>s.dailyRateCents||0)));
+    // O piso da diária precisa representar todos os serviços selecionados.
+    // Usar apenas o maior valor fazia composições sem equipe perderem as demais P.O./diárias.
+    setMinimumDaily(selectedServices.reduce((sum,s)=>sum+serviceReferenceDailyCents(s),0));
     const nextTeam:Row[]=[];const nextVariable:Row[]=[];const nextFixed:Row[]=[];
     selectedServices.forEach(service=>{
       const prefix=selectedServices.length>1?`${service.code||service.name} · `:'';
-      const members=service.team?.filter(x=>x.included!==false)??[];
-      members.forEach(x=>nextTeam.push({label:`${prefix}${x.role}`,value:reais(x.dailyRateCents)}));
+      const members=activeServiceTeam(service);
+      members.forEach(x=>nextTeam.push({label:`${prefix}${x.role}`,value:reais(Number(x.dailyRateCents)||0)}));
+      if(serviceTeamDailyCents(service)<=0){
+        nextTeam.push({label:`${prefix}P.O. responsável`,value:reais(serviceReferenceDailyCents(service))});
+      }
       const variableCosts=service.costs?.filter(x=>x.type==='variable')??[];
       const fixedCosts=service.costs?.filter(x=>x.type==='fixed')??[];
       if(variableCosts.length)variableCosts.forEach(x=>nextVariable.push({label:`${prefix}${x.description}`,value:reais(x.amountCents)}));
@@ -49,7 +56,10 @@ export default function CalculatorScreen(){
     setTeam(nextTeam);setVariable(nextVariable);setFixed(nextFixed);
   },[selectedServices]);
   const teamDaily=team.reduce((n,x)=>n+cents(x.value),0);
-  const effectiveDaily=Math.max(teamDaily,minimumDaily);
+  // Se existem linhas de equipe/P.O. na calculadora, o valor informado pelo usuário
+  // deve ser a fonte do cálculo. A diária cadastrada funciona apenas como fallback
+  // quando não há composição editável, evitando impedir a redução da P.O. no orçamento.
+  const effectiveDaily=team.length?teamDaily:minimumDaily;
   const payload=useMemo<PricingPayload>(()=>({dailyRateCents:effectiveDaily,days:Math.max(1,Number(days)||1),people:1,variableCostCents:variable.reduce((n,x)=>n+cents(x.value),0),fixedCostCents:fixed.reduce((n,x)=>n+cents(x.value),0),safetyMarginBps:Math.max(0,Math.round((Number(margin.replace(',','.'))||0)*100))}),[effectiveDaily,days,variable,fixed,margin]);
   useEffect(()=>{if(!payload.dailyRateCents){setResult(undefined);return} const timer=setTimeout(()=>api<PricingResult>('/pricing/calculate',{method:'POST',body:JSON.stringify(payload)}).then(setResult),220);return()=>clearTimeout(timer)},[payload]);
   const toggle=(id:string)=>setSelectedIds(ids=>ids.includes(id)?ids.filter(x=>x!==id):[...ids,id]);
@@ -57,13 +67,13 @@ export default function CalculatorScreen(){
   return <AppShell title="Calculadora Rápida" subtitle="Monte o projeto com um ou mais serviços e simule o preço em tempo real.">
     <View style={[s.layout,wide&&s.layoutWide,compact&&s.layoutCompact]}><View style={s.formColumn}>
       <Card title="Serviços do projeto" hint="selecione um ou mais"><View style={s.services}>{services.map(x=>{const on=selectedIds.includes(x.id);return <Pressable key={x.id} onPress={()=>toggle(x.id)} style={[s.service,on&&s.serviceOn]}><Ionicons name={on?'checkmark-circle':'add-circle-outline'} size={18} color={on?theme.green2:theme.muted}/><Text style={[s.serviceText,on&&s.serviceTextOn]}>{x.code?`${x.code} — `:''}{x.name}</Text><Text style={s.serviceDays}>{projectDaysFromStages(x.stages,x.defaultDays)}d</Text></Pressable>})}</View>{selectedServices.length>1&&<View style={s.selectedList}><Text style={s.fieldLabel}>Ordem dos serviços — arraste pelo ícone</Text>{selectedServices.map((service,index)=><DraggableService key={service.id} name={`${service.code?service.code+' — ':''}${service.name}`} index={index} total={selectedServices.length} move={move}/>)}</View>}</Card>
-      <Card title="Parâmetros"><View style={s.twoFields}><Field label="Quantidade de dias (pelas etapas)" value={days} onChange={(v:string)=>setDays(integerInput(v,3))}/><Field label="Margem de segurança (%)" value={margin} onChange={(v:string)=>setMargin(decimalInput(v,2,999.99))}/></View>{minimumDaily>0&&<Text style={s.minimum}>Diária mínima cadastrada: {money(minimumDaily)}. Se a equipe ficar abaixo desse valor, o mínimo é aplicado automaticamente.</Text>}</Card>
+      <Card title="Parâmetros"><View style={s.twoFields}><Field label="Quantidade de dias (pelas etapas)" value={days} onChange={(v:string)=>setDays(integerInput(v,3))}/><Field label="Margem de segurança (%)" value={margin} onChange={(v:string)=>setMargin(decimalInput(v,2,999.99))}/></View>{minimumDaily>0&&<Text style={s.minimum}>Diária cadastrada de referência: {money(minimumDaily)}. Ajustes feitos nas linhas de equipe/P.O. abaixo passam a valer imediatamente no cálculo.</Text>}</Card>
       <EditableCard title="Equipe" hint="diária por profissional" rows={team} setRows={setTeam} addLabel="Assistente"/>
       <EditableCard title="Custos Variáveis" hint="por dia" rows={variable} setRows={setVariable} addLabel="Novo custo"/>
       <EditableCard title="Custos Fixos" hint="por projeto" rows={fixed} setRows={setFixed} addLabel="Novo custo"/>
     </View>
-    <View style={[s.resultColumn,compact&&s.resultColumnCompact]}><View style={s.resultCard}><View style={s.resultHead}><Text style={s.resultTitle}>Resultado</Text><Ionicons name="sparkles-outline" size={18} color={theme.gold}/></View>{result?<View><ResultLine label="Diária aplicada" value={payload.dailyRateCents}/>{minimumDaily>teamDaily&&<ResultLine label="Equipe informada" value={teamDaily}/>}<ResultLine label={`Total equipe × ${payload.days}d`} value={result.laborCents}/><ResultLine label={`Custo variável × ${payload.days}d`} value={result.variableCents}/><ResultLine label="Custo fixo" value={result.fixedCents}/><ResultLine label={`Margem (${margin||0}%) sobre diária da equipe + variáveis`} value={result.marginCents}/><View style={s.total}><Text style={s.totalLabel}>Total</Text><Text style={s.totalValue}>{money(result.totalCents)}</Text></View></View>:<View style={s.placeholder}><Ionicons name="calculator-outline" size={30} color="rgba(255,255,255,.25)"/><Text style={s.placeholderText}>Selecione um serviço ou adicione a equipe para ver o cálculo</Text></View>}</View>
-      {result&&<Pressable style={s.save} onPress={()=>router.push('/quotes?new=1')}><Ionicons name="document-text-outline" size={17} color={theme.g900}/><Text style={s.saveText}>Salvar como Orçamento</Text></Pressable>}
+    <View style={[s.resultColumn,compact&&s.resultColumnCompact]}><View style={s.resultCard}><View style={s.resultHead}><Text style={s.resultTitle}>Resultado</Text><Ionicons name="sparkles-outline" size={18} color={theme.gold}/></View>{result?<View><ResultLine label="Diária aplicada" value={payload.dailyRateCents}/><ResultLine label={`Total equipe × ${payload.days}d`} value={result.laborCents}/><ResultLine label={`Custo variável × ${payload.days}d`} value={result.variableCents}/><ResultLine label="Custo fixo" value={result.fixedCents}/><ResultLine label={`Margem (${margin||0}%) sobre diária da equipe + variáveis`} value={result.marginCents}/><View style={s.total}><Text style={s.totalLabel}>Total</Text><Text style={s.totalValue}>{money(result.totalCents)}</Text></View></View>:<View style={s.placeholder}><Ionicons name="calculator-outline" size={30} color="rgba(255,255,255,.25)"/><Text style={s.placeholderText}>Selecione um serviço ou adicione a equipe para ver o cálculo</Text></View>}</View>
+      {result&&<Pressable style={s.save} onPress={()=>{setCalculatorQuoteDraft({serviceIds:selectedIds,days,margin,minimumDailyCents:effectiveDaily,team,variable,fixed});router.push('/quotes?new=1&fromCalculator=1')}}><Ionicons name="document-text-outline" size={17} color={theme.g900}/><Text style={s.saveText}>Salvar como Orçamento</Text></Pressable>}
       <View style={s.tip}><Ionicons name="information-circle-outline" size={18} color={theme.green2}/><Text style={s.tipText}>Custos variáveis são multiplicados pelos dias. Custos fixos entram uma única vez. A margem de segurança considera a diária da equipe + o total dos custos variáveis.</Text></View>
     </View></View>
   </AppShell>;

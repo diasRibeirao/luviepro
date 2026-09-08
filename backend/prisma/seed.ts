@@ -14,7 +14,7 @@ async function main() {
   if(!platformPassword)throw new Error('PLATFORM_ADMIN_PASSWORD não configurada');
   await (db as any).platformAdmin.upsert({where:{email:platformEmail},update:{name:'LuviePro Master',active:true},create:{name:'LuviePro Master',email:platformEmail,passwordHash:await hash(platformPassword,12),role:'platform_admin'}});
   const brand={name:'Luvie Organiza',responsibleName:'Luana Oliveira',phone:'(18) 99163-1532',contactEmail:'luvieorganiza@gmail.com',siteUrl:'www.luvieorganiza.com.br',instagram:'@luvieorganiza',primaryColor:'#2F4538',secondaryColor:'#C9A84C',proposalText:'Organização que transforma. Gestão que cresce.',plan:'pro',planPeriod:'annual'};
-  const tenant = await db.tenant.upsert({ where:{slug:'luvie-organiza'}, update:brand, create:{...brand,slug:'luvie-organiza'} });
+  const tenant = await db.tenant.upsert({ where:{slug:'luvie-organiza'}, update:{}, create:{...brand,slug:'luvie-organiza'} });
   await db.user.upsert({ where:{email:'luana@luviepro.local'}, update:{}, create:{tenantId:tenant.id,name:'Luana Oliveira',email:'luana@luviepro.local',passwordHash:await hash('LuviePro123!',12)} });
   const client = await db.client.findFirst({where:{tenantId:tenant.id,name:'Silzia Luz'}}) ?? await db.client.create({data:{tenantId:tenant.id,name:'Silzia Luz',phone:'(18) 99999-0000',city:'Presidente Prudente'}});
   if (!await db.service.count({where:{tenantId:tenant.id}})) await db.service.createMany({data:[

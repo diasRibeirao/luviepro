@@ -50,6 +50,19 @@ export function validateRuntimeConfig(env:NodeJS.ProcessEnv=process.env){
   const mailProvider=envString(env,'MAIL_PROVIDER').toLowerCase();
   if(mailProvider&&mailProvider!=='smtp'&&mailProvider!=='resend')errors.push('MAIL_PROVIDER deve ser smtp ou resend');
 
+  const emailWorkerEnabled=envString(env,'NOTIFICATION_EMAIL_WORKER_ENABLED').toLowerCase()==='true';
+  if(emailWorkerEnabled){
+    const effectiveMailProvider=mailProvider||(envString(env,'RESEND_API_KEY')?'resend':'smtp');
+    if(effectiveMailProvider==='resend'){
+      if(!envString(env,'RESEND_API_KEY'))errors.push('RESEND_API_KEY não configurado com worker de e-mail habilitado');
+      if(!envString(env,'RESEND_FROM'))errors.push('RESEND_FROM não configurado com worker de e-mail habilitado');
+    }else{
+      if(!envString(env,'SMTP_HOST'))errors.push('SMTP_HOST não configurado com worker de e-mail habilitado');
+      if(!envString(env,'SMTP_FROM'))errors.push('SMTP_FROM não configurado com worker de e-mail habilitado');
+      if(envString(env,'SMTP_USER')&&!envString(env,'SMTP_PASS'))errors.push('SMTP_PASS não configurado para SMTP autenticado com worker de e-mail habilitado');
+    }
+  }
+
   for(const [k,d,min,max] of [
     ['SMTP_PORT',587,1,65535],
     ['TRUST_PROXY_HOPS',0,0,100],

@@ -6,7 +6,7 @@ describe('ServicesService',()=>{
     serviceTeamMember:{deleteMany:jest.fn()},
     serviceCost:{deleteMany:jest.fn()},
     serviceStage:{deleteMany:jest.fn()},
-    service:{findFirst:jest.fn(),update:jest.fn(),aggregate:jest.fn(),create:jest.fn()},
+    service:{findFirst:jest.fn(),findMany:jest.fn(),update:jest.fn(),aggregate:jest.fn(),create:jest.fn()},
   };
   const db:any={
     service:{findMany:jest.fn(),findFirst:jest.fn(),create:jest.fn(),aggregate:jest.fn()},
@@ -24,6 +24,7 @@ describe('ServicesService',()=>{
     tx.serviceStage.deleteMany.mockResolvedValue({});
     db.$transaction.mockImplementation((fn:any)=>fn(tx));
     tx.service.findFirst.mockReset();
+    tx.service.findMany.mockReset();
     tx.service.update.mockReset();
     tx.service.aggregate.mockReset();
     tx.service.create.mockReset();
@@ -59,6 +60,18 @@ describe('ServicesService',()=>{
     expect(result.variableCostCents).toBe(100);
     expect(result.fixedCostCents).toBe(200);
     expect(result.stages.map((x:any)=>x.sequence)).toEqual([1,2]);
+  });
+
+  it('preserves the configured base daily when the team exists but all included rates are zero',async()=>{
+    tx.service.create.mockImplementation(({data}:any)=>Promise.resolve({
+      id:'s-base',...data,team:data.team.create,costs:data.costs.create,stages:data.stages.create,
+    }));
+    const result:any=await service.create('t1',{
+      name:'Planejamento',billingUnit:'daily',dailyRateCents:30000,defaultDays:1,people:1,
+      variableCostCents:0,fixedCostCents:0,safetyMarginBps:2000,
+      team:[{role:'P.O.',dailyRateCents:0,included:true}],
+    },'u1');
+    expect(result.dailyRateCents).toBe(30000);
   });
 
   it('rejects an update outside the tenant',async()=>{
@@ -97,23 +110,38 @@ describe('ServicesService',()=>{
     expect(result.variableCostMode).toBe('per_person_day');
     expect(result.marginBase).toBe('subtotal');
   });
-  it('reorders inside a serializable transaction and swaps the neighbor atomically',async()=>{
-    tx.service.findFirst
-      .mockResolvedValueOnce({id:'s2',tenantId:'t1',active:true,sortOrder:20})
-      .mockResolvedValueOnce({id:'s1',tenantId:'t1',active:true,sortOrder:10});
+  it('reorders inside a serializable transaction and normalizes the persisted order',async()=>{
+    tx.service.findFirst.mockResolvedValue({id:'s2',tenantId:'t1',active:true,sortOrder:20});
+    tx.service.findMany.mockResolvedValue([{id:'s1'},{id:'s2'},{id:'s3'}]);
     tx.service.update.mockResolvedValue({});
     db.service.findMany.mockResolvedValue([]);
 
     await service.reorder('t1','s2','up','u1');
 
     expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function),{isolationLevel:'Serializable'});
-    expect(tx.service.findFirst).toHaveBeenNthCalledWith(1,{where:{id:'s2',tenantId:'t1'}});
-    expect(tx.service.findFirst).toHaveBeenNthCalledWith(2,{
-      where:{tenantId:'t1',id:{not:'s2'},active:true,sortOrder:{lt:20}},
-      orderBy:{sortOrder:'desc'},
+    expect(tx.service.findMany).toHaveBeenCalledWith({
+      where:{tenantId:'t1',active:true},
+      orderBy:[{sortOrder:'asc'},{name:'asc'},{id:'asc'}],
+      select:{id:true},
     });
     expect(tx.service.update).toHaveBeenNthCalledWith(1,{where:{id:'s2'},data:{sortOrder:10}});
     expect(tx.service.update).toHaveBeenNthCalledWith(2,{where:{id:'s1'},data:{sortOrder:20}});
+    expect(tx.service.update).toHaveBeenNthCalledWith(3,{where:{id:'s3'},data:{sortOrder:30}});
+  });
+
+  it('normalizes duplicate sortOrder values so refresh keeps the chosen order',async()=>{
+    tx.service.findFirst.mockResolvedValue({id:'s3',tenantId:'t1',active:true,sortOrder:10});
+    tx.service.findMany.mockResolvedValue([{id:'s1'},{id:'s2'},{id:'s3'}]);
+    tx.service.update.mockResolvedValue({});
+    db.service.findMany.mockResolvedValue([]);
+
+    await service.reorder('t1','s3','up','u1');
+
+    expect(tx.service.update.mock.calls.map((call:any[])=>call[0])).toEqual([
+      {where:{id:'s1'},data:{sortOrder:10}},
+      {where:{id:'s3'},data:{sortOrder:20}},
+      {where:{id:'s2'},data:{sortOrder:30}},
+    ]);
   });
 
   it('retries a serialization conflict before reordering',async()=>{
@@ -124,9 +152,8 @@ describe('ServicesService',()=>{
       if(attempts===1)throw {code:'P2034'};
       return fn(tx);
     });
-    tx.service.findFirst
-      .mockResolvedValueOnce({id:'s2',tenantId:'t1',active:true,sortOrder:20})
-      .mockResolvedValueOnce({id:'s1',tenantId:'t1',active:true,sortOrder:10});
+    tx.service.findFirst.mockResolvedValue({id:'s2',tenantId:'t1',active:true,sortOrder:20});
+    tx.service.findMany.mockResolvedValue([{id:'s1'},{id:'s2'}]);
     tx.service.update.mockResolvedValue({});
     db.service.findMany.mockResolvedValue([]);
 
@@ -136,10 +163,9 @@ describe('ServicesService',()=>{
     expect(tx.service.update).toHaveBeenCalledTimes(2);
   });
 
-  it('does not audit when there is no neighbor to reorder',async()=>{
-    tx.service.findFirst
-      .mockResolvedValueOnce({id:'s1',tenantId:'t1',active:true,sortOrder:10})
-      .mockResolvedValueOnce(null);
+  it('does not audit when the service is already at the requested edge',async()=>{
+    tx.service.findFirst.mockResolvedValue({id:'s1',tenantId:'t1',active:true,sortOrder:10});
+    tx.service.findMany.mockResolvedValue([{id:'s1'},{id:'s2'}]);
     db.service.findMany.mockResolvedValue([]);
 
     await service.reorder('t1','s1','up','u1');

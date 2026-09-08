@@ -10,8 +10,10 @@ import {useFeedback} from '@/components/Feedback';
 import {theme} from '@/theme';
 import {decimalInput,integerInput} from '@/inputFormatters';
 import {projectDaysFromStages} from '@/servicePlanning';
+import {activeServiceTeam,serviceReferenceDailyCents,serviceTeamDailyCents} from '../../services/serviceDaily';
 import {quotesApi} from '../api/quotes.api';
 import type {PricingResult,QuoteClientOption,QuoteProductOption,QuoteServiceOption} from '../types/quote.types';
+import type {CalculatorQuoteDraft} from '../calculatorQuoteDraft';
 
 const steps=['Cliente','Itens','Calcular','Revisão'];
 type CostLine={label:string;value:string};
@@ -20,8 +22,9 @@ type ServiceItem={serviceId:string;name:string;code?:string;days:string;people:s
 type ProductItem={productId:string;name:string;sku:string;unit:string;quantity:string;unitPrice:string;discount:string;available:number};
 const toReais=(cents:number)=>String((cents??0)/100);
 const toCents=(value:string)=>Math.max(0,Math.round((Number(value.replace(',','.'))||0)*100));
+const effectiveDailyCents=(item:ServiceItem)=>item.team.length?item.team.reduce((sum,line)=>sum+toCents(line.value),0):item.minimumDailyCents;
 
-export default function QuoteWizard({embedded=false,onClose,onSaved}:{embedded?:boolean;onClose?:()=>void;onSaved?:()=>void}={}){
+export default function QuoteWizard({embedded=false,onClose,onSaved,calculatorDraft}:{embedded?:boolean;onClose?:()=>void;onSaved?:()=>void;calculatorDraft?:CalculatorQuoteDraft}={}){
   const {notify}=useFeedback();
   const {width}=useWindowDimensions();
   const small=width<620;
@@ -42,6 +45,7 @@ export default function QuoteWizard({embedded=false,onClose,onSaved}:{embedded?:
   const [notes,setNotes]=useState('');
   const [busy,setBusy]=useState(false);
   const [errors,setErrors]=useState<Record<string,string>>({});
+  const [calculatorDraftApplied,setCalculatorDraftApplied]=useState(false);
 
   useEffect(()=>{
     Promise.all([quotesApi.clients(),quotesApi.services(),quotesApi.products(),quotesApi.wizardAccount()])
@@ -56,20 +60,36 @@ export default function QuoteWizard({embedded=false,onClose,onSaved}:{embedded?:
   },[notify]);
 
   useEffect(()=>{
+    if(!calculatorDraft||calculatorDraftApplied||!services.length)return;
+    const validIds=calculatorDraft.serviceIds.filter(id=>services.some(service=>service.id===id));
+    if(!validIds.length){setCalculatorDraftApplied(true);return;}
+    setSelectedServices(validIds);
+    setStep(1);
+  },[calculatorDraft,calculatorDraftApplied,services]);
+
+  useEffect(()=>{
     setServiceItems(previous=>selectedServices.map(id=>{
       const old=previous.find(x=>x.serviceId===id);
       if(old)return old;
       const service=services.find(x=>x.id===id);
       if(!service)return null;
-      const members=service.team?.filter(x=>x.included!==false)??[];
+      const members=activeServiceTeam(service);
       const variableCosts=service.costs?.filter(x=>x.type==='variable')??[];
       const fixedCosts=service.costs?.filter(x=>x.type==='fixed')??[];
-      const mapped=members.map(x=>({label:x.role,value:toReais(x.dailyRateCents)}));
-      const hasResponsible=mapped.some(x=>/p\.?o\.?|respons[aá]vel|minha di[aá]ria/i.test(x.label));
+      const mapped=members.map(x=>({label:x.role,value:toReais(Number(x.dailyRateCents)||0)}));
+      const teamDailyCents=serviceTeamDailyCents(service);
+      // service.dailyRateCents já representa a soma da equipe quando o serviço possui
+      // profissionais cadastrados. Reintroduzi-lo como "P.O. responsável" duplicava
+      // a diária no orçamento (ex.: equipe R$ 300 + base R$ 300 => R$ 600).
+      // Só usamos a base como P.O. quando não existe diária positiva na equipe.
+      // Isso também cobre serviços antigos que possuem funções cadastradas com diária
+      // zerada: as funções são preservadas e a P.O. recebe a base/padrão de R$ 300,00.
+      const fallbackDailyCents=serviceReferenceDailyCents(service);
+      const budgetTeam=teamDailyCents>0?mapped:[...mapped,{label:'P.O. responsável',value:toReais(fallbackDailyCents)}];
       return {
         serviceId:id,name:service.name,code:service.code??undefined,
-        days:String(projectDaysFromStages(service.stages,service.defaultDays??1)),people:String(service.people??1),margin:String((service.safetyMarginBps??0)/100),minimumDailyCents:service.dailyRateCents||0,
-        team:hasResponsible?mapped:[{label:'P.O. responsável',value:toReais(service.dailyRateCents||0)},...mapped],
+        days:String(projectDaysFromStages(service.stages,service.defaultDays??1)),people:String(service.people??1),margin:String((service.safetyMarginBps??0)/100),minimumDailyCents:teamDailyCents>0?teamDailyCents:fallbackDailyCents,
+        team:budgetTeam,
         variable:variableCosts.length?variableCosts.map(x=>({label:x.description,value:toReais(x.amountCents)})):(service.variableCostCents?[{label:'Despesas por dia',value:toReais(service.variableCostCents)}]:[]),
         fixed:fixedCosts.length?fixedCosts.map(x=>({label:x.description,value:toReais(x.amountCents)})):(service.fixedCostCents?[{label:'Custo do projeto',value:toReais(service.fixedCostCents)}]:[]),
         stages:(service.stages??[]).filter(x=>x.description?.trim()).map(x=>({description:x.description!.trim(),duration:x.duration}))
@@ -78,9 +98,24 @@ export default function QuoteWizard({embedded=false,onClose,onSaved}:{embedded?:
   },[selectedServices,services]);
 
   useEffect(()=>{
+    if(!calculatorDraft||calculatorDraftApplied||calculatorDraft.serviceIds.length!==1||serviceItems.length!==1)return;
+    if(serviceItems[0].serviceId!==calculatorDraft.serviceIds[0])return;
+    setServiceItems(items=>items.map((item,index)=>index===0?{...item,days:calculatorDraft.days,margin:calculatorDraft.margin,minimumDailyCents:calculatorDraft.minimumDailyCents,team:calculatorDraft.team.map(line=>({...line})),variable:calculatorDraft.variable.map(line=>({...line})),fixed:calculatorDraft.fixed.map(line=>({...line}))}:item));
+    setCalculatorDraftApplied(true);
+    setStep(2);
+  },[calculatorDraft,calculatorDraftApplied,serviceItems]);
+
+  useEffect(()=>{
+    if(calculatorDraft&&calculatorDraft.serviceIds.length>1&&selectedServices.length===calculatorDraft.serviceIds.length&&!calculatorDraftApplied){
+      setCalculatorDraftApplied(true);
+      setStep(1);
+    }
+  },[calculatorDraft,calculatorDraftApplied,selectedServices]);
+
+  useEffect(()=>{
     if(!serviceItems.length){setResults([]);return;}
     const timer=setTimeout(()=>Promise.all(serviceItems.map(item=>quotesApi.calculate({
-      dailyRateCents:item.team.length?item.team.reduce((sum,line)=>sum+toCents(line.value),0):item.minimumDailyCents,
+      dailyRateCents:effectiveDailyCents(item),
       days:Number(item.days)||1,people:Number(item.people)||1,
       variableCostCents:item.variable.reduce((sum,line)=>sum+toCents(line.value),0),
       fixedCostCents:item.fixed.reduce((sum,line)=>sum+toCents(line.value),0),
@@ -141,7 +176,7 @@ export default function QuoteWizard({embedded=false,onClose,onSaved}:{embedded?:
       setBusy(true);
       await quotesApi.create({
         clientId,discountBps,validityDays,notes,paymentLinkUrl:paymentLinkUrl.trim()||undefined,
-        items:serviceItems.map(item=>({serviceId:item.serviceId,days:Number(item.days)||1,people:Number(item.people)||1,dailyRateCents:item.team.length?item.team.reduce((sum,line)=>sum+toCents(line.value),0):item.minimumDailyCents,variableCostCents:item.variable.reduce((sum,line)=>sum+toCents(line.value),0),fixedCostCents:item.fixed.reduce((sum,line)=>sum+toCents(line.value),0),safetyMarginBps:Math.round((Number(item.margin)||0)*100),stages:item.stages.map(stage=>({description:stage.description.trim(),duration:stage.duration?.trim()||undefined}))})),
+        items:serviceItems.map(item=>({serviceId:item.serviceId,days:Number(item.days)||1,people:Number(item.people)||1,dailyRateCents:effectiveDailyCents(item),variableCostCents:item.variable.reduce((sum,line)=>sum+toCents(line.value),0),fixedCostCents:item.fixed.reduce((sum,line)=>sum+toCents(line.value),0),safetyMarginBps:Math.round((Number(item.margin)||0)*100),stages:item.stages.map(stage=>({description:stage.description.trim(),duration:stage.duration?.trim()||undefined}))})),
         productItems:productItems.map(item=>({productId:item.productId,quantity:Number(item.quantity)||1,unitPriceCents:toCents(item.unitPrice),discountBps:Math.round((Number(item.discount)||0)*100)}))
       });
       notify({tone:'success',title:'Orçamento criado',message:'Serviços e produtos foram salvos na proposta.'});
@@ -155,12 +190,12 @@ export default function QuoteWizard({embedded=false,onClose,onSaved}:{embedded?:
     {step===0&&<View style={s.card}><Text style={s.cardTitle}>Selecionar cliente</Text><Text style={s.cardSub}>Escolha para quem este orçamento será preparado.</Text><TextInput value={clientSearch} onChangeText={setClientSearch} placeholder="Buscar por nome, cidade, telefone ou e-mail..." style={s.input}/><View style={s.list}>{clients.filter(c=>`${c.name} ${c.city??''} ${c.phone??''} ${c.email??''}`.toLowerCase().includes(clientSearch.toLowerCase().trim())).slice(0,8).map(client=><Pressable key={client.id} onPress={()=>{setClientId(client.id);clearError('client')}} style={[s.choice,clientId===client.id&&s.choiceOn]}><View style={s.avatar}><Text style={s.avatarText}>{client.name.slice(0,2).toUpperCase()}</Text></View><View style={s.choiceInfo}><Text style={s.choiceTitle}>{client.name}</Text><Text style={s.choiceMeta}>{[client.city,client.phone].filter(Boolean).join(' · ')||'Sem contato informado'}</Text></View>{clientId===client.id&&<Ionicons name="checkmark-circle" size={22} color={theme.green2}/>}</Pressable>)}</View>{errors.client&&<Text style={s.errorText}>{errors.client}</Text>}</View>}
 
     {step===1&&<View style={s.configure}>
-      <View style={s.card}><View style={s.cardHead}><View><Text style={s.cardTitle}>Serviços</Text><Text style={s.cardSub}>Opcional. Selecione um ou mais serviços.</Text></View><View style={s.counter}><Text style={s.counterText}>{selectedServices.length}</Text></View></View><View style={s.list}>{services.map(service=>{const on=selectedServices.includes(service.id);return <Pressable key={service.id} onPress={()=>toggleService(service.id)} style={[s.choice,on&&s.choiceOn]}><View style={[s.serviceIcon,on&&s.serviceIconOn]}><Ionicons name={on?'checkmark':'add'} size={17} color={on?theme.white:theme.green2}/></View><View style={s.choiceInfo}><Text style={s.code}>{service.code??'SERVIÇO'}</Text><Text style={s.choiceTitle}>{service.name}</Text><Text style={s.choiceMeta}>{projectDaysFromStages(service.stages,service.defaultDays??1)} dia(s) · {service.stages?.length??0} etapa(s)</Text></View><Text style={s.baseValue}>{money(service.dailyRateCents)}</Text></Pressable>})}</View></View>
+      <View style={s.card}><View style={s.cardHead}><View><Text style={s.cardTitle}>Serviços</Text><Text style={s.cardSub}>Opcional. Selecione um ou mais serviços.</Text></View><View style={s.counter}><Text style={s.counterText}>{selectedServices.length}</Text></View></View><View style={s.list}>{services.map(service=>{const on=selectedServices.includes(service.id);return <Pressable key={service.id} onPress={()=>toggleService(service.id)} style={[s.choice,on&&s.choiceOn]}><View style={[s.serviceIcon,on&&s.serviceIconOn]}><Ionicons name={on?'checkmark':'add'} size={17} color={on?theme.white:theme.green2}/></View><View style={s.choiceInfo}><Text style={s.code}>{service.code??'SERVIÇO'}</Text><Text style={s.choiceTitle}>{service.name}</Text><Text style={s.choiceMeta}>{projectDaysFromStages(service.stages,service.defaultDays??1)} dia(s) · {service.stages?.length??0} etapa(s)</Text></View><Text style={s.baseValue}>{money(serviceReferenceDailyCents(service))}</Text></Pressable>})}</View></View>
       <View style={s.card}><View style={s.cardHead}><View><Text style={s.cardTitle}>Produtos</Text><Text style={s.cardSub}>Opcional. Pode criar orçamento somente de produtos ou complementar os serviços.</Text></View><View style={s.counter}><Text style={s.counterText}>{productItems.length}</Text></View></View><TextInput value={productSearch} onChangeText={setProductSearch} placeholder="Buscar produto por nome ou SKU..." style={s.input}/><View style={[s.list,{marginTop:12}]}>{visibleProducts.map(product=>{const added=productItems.some(x=>x.productId===product.id);const available=product.stockQuantity-product.reservedQuantity;return <Pressable key={product.id} disabled={added||available<=0} onPress={()=>addProduct(product)} style={[s.choice,added&&s.choiceOn,(available<=0)&&s.disabled]}><View style={s.productIcon}><Ionicons name="cube-outline" size={17} color={theme.green2}/></View><View style={s.choiceInfo}><Text style={s.code}>{product.sku}</Text><Text style={s.choiceTitle}>{product.name}</Text><Text style={s.choiceMeta}>Disponível: {available} {product.unit} · reservado: {product.reservedQuantity}</Text></View><Text style={s.baseValue}>{money(product.salePriceCents)}</Text><Ionicons name={added?'checkmark-circle':'add-circle-outline'} size={21} color={theme.green2}/></Pressable>})}</View>{!products.length&&<Text style={s.noLines}>Nenhum produto ativo cadastrado.</Text>}</View>
       {errors.items&&<Text style={s.errorText}>{errors.items}</Text>}
     </View>}
 
-    {step===2&&<View style={s.configure}><View><Text style={s.cardTitle}>Calcular orçamento</Text><Text style={s.cardSub}>Ajuste serviços e produtos. O total é atualizado automaticamente.</Text></View>{serviceItems.map((item,index)=>{const result=results[index];const daily=item.team.reduce((sum,line)=>sum+toCents(line.value),0);return <View key={item.serviceId} style={s.calcItem}><View style={s.itemHead}><View style={s.itemNumber}><Text style={s.itemNumberText}>{index+1}</Text></View><View style={s.choiceInfo}><Text style={s.code}>{item.code??'SERVIÇO'}</Text><Text style={s.itemTitle}>{item.name}</Text></View><Pressable onPress={()=>removeService(item.serviceId)} style={s.remove}><Ionicons name="trash-outline" size={17} color={theme.danger}/></Pressable></View><View style={[s.calcColumns,small&&s.calcColumnsSmall]}><View style={s.calcForm}><Text style={s.calcSection}>Equipe e dias</Text><View style={s.twoFields}><Field label="QTDE DE PESSOAS" value={item.people} error={errors[`service-${index}-people`]} change={v=>updateService(index,'people',integerInput(v,3))}/><Field label={item.stages.length?'DIAS DE PROJETO · PELAS ETAPAS':'DIAS DE PROJETO'} value={item.days} error={errors[`service-${index}-days`]} editable={item.stages.length===0} change={v=>updateService(index,'days',integerInput(v,3))}/></View>{item.stages.length?<Text style={s.daysHelper}>Calculado automaticamente pela soma das durações das etapas cadastradas no serviço.</Text>:null}<LineGroup title="Diárias da equipe" group="team" lines={item.team} itemIndex={index} update={updateLine} add={addLine} remove={removeLine} errors={errors}/><LineGroup title="Custos variáveis" hint="por dia" group="variable" lines={item.variable} itemIndex={index} update={updateLine} add={addLine} remove={removeLine} errors={errors}/><StageEditor stages={item.stages} itemIndex={index} errors={errors} update={updateStage} add={addStage} remove={removeStage}/></View><View style={s.calcSide}><View style={s.fixedCard}><LineGroup title="Custos fixos" hint="por projeto" group="fixed" lines={item.fixed} itemIndex={index} update={updateLine} add={addLine} remove={removeLine} errors={errors}/></View><View style={s.liveCard}><Text style={s.calcSection}>Cálculo ao vivo</Text><CalcLine label="Diária base da equipe" value={daily}/><CalcLine label={`Equipe × ${item.days||1} dias`} value={Number(result?.laborCents??0)}/><CalcLine label={`Custos variáveis × ${item.days||1} dias`} value={Number(result?.variableCents??0)}/><CalcLine label="Custos fixos" value={Number(result?.fixedCents??0)}/><CalcLine label={`Margem (${item.margin||0}%)`} value={Number(result?.marginCents??0)} gold/><View style={s.liveTotal}><Text style={s.liveTotalLabel}>Total do serviço</Text><Text style={s.liveTotalValue}>{money(Number(result?.totalCents??0))}</Text></View><View style={s.marginField}><Field label="MARGEM (%)" value={item.margin} error={errors[`service-${index}-margin`]} change={v=>updateService(index,'margin',decimalInput(v,2,999.99))}/></View></View></View></View></View>})}
+    {step===2&&<View style={s.configure}><View><Text style={s.cardTitle}>Calcular orçamento</Text><Text style={s.cardSub}>Ajuste serviços e produtos. O total é atualizado automaticamente.</Text></View>{serviceItems.map((item,index)=>{const result=results[index];const daily=effectiveDailyCents(item);return <View key={item.serviceId} style={s.calcItem}><View style={s.itemHead}><View style={s.itemNumber}><Text style={s.itemNumberText}>{index+1}</Text></View><View style={s.choiceInfo}><Text style={s.code}>{item.code??'SERVIÇO'}</Text><Text style={s.itemTitle}>{item.name}</Text></View><Pressable onPress={()=>removeService(item.serviceId)} style={s.remove}><Ionicons name="trash-outline" size={17} color={theme.danger}/></Pressable></View><View style={[s.calcColumns,small&&s.calcColumnsSmall]}><View style={s.calcForm}><Text style={s.calcSection}>Equipe e dias</Text><View style={s.twoFields}><Field label="QTDE DE PESSOAS" value={item.people} error={errors[`service-${index}-people`]} change={v=>updateService(index,'people',integerInput(v,3))}/><Field label={item.stages.length?'DIAS DE PROJETO · PELAS ETAPAS':'DIAS DE PROJETO'} value={item.days} error={errors[`service-${index}-days`]} editable={item.stages.length===0} change={v=>updateService(index,'days',integerInput(v,3))}/></View>{item.stages.length?<Text style={s.daysHelper}>Calculado automaticamente pela soma das durações das etapas cadastradas no serviço.</Text>:null}<LineGroup title="Diárias da equipe" group="team" lines={item.team} itemIndex={index} update={updateLine} add={addLine} remove={removeLine} errors={errors}/><LineGroup title="Custos variáveis" hint="por dia" group="variable" lines={item.variable} itemIndex={index} update={updateLine} add={addLine} remove={removeLine} errors={errors}/><StageEditor stages={item.stages} itemIndex={index} errors={errors} update={updateStage} add={addStage} remove={removeStage}/></View><View style={s.calcSide}><View style={s.fixedCard}><LineGroup title="Custos fixos" hint="por projeto" group="fixed" lines={item.fixed} itemIndex={index} update={updateLine} add={addLine} remove={removeLine} errors={errors}/></View><View style={s.liveCard}><Text style={s.calcSection}>Cálculo ao vivo</Text><CalcLine label="Diária equipe / P.O. responsável" value={daily}/><CalcLine label={`Equipe × ${item.days||1} dias`} value={Number(result?.laborCents??0)}/><CalcLine label={`Custos variáveis × ${item.days||1} dias`} value={Number(result?.variableCents??0)}/><CalcLine label="Custos fixos" value={Number(result?.fixedCents??0)}/><CalcLine label={`Margem (${item.margin||0}%)`} value={Number(result?.marginCents??0)} gold/><View style={s.liveTotal}><Text style={s.liveTotalLabel}>Total do serviço</Text><Text style={s.liveTotalValue}>{money(Number(result?.totalCents??0))}</Text></View><View style={s.marginField}><Field label="MARGEM (%)" value={item.margin} error={errors[`service-${index}-margin`]} change={v=>updateService(index,'margin',decimalInput(v,2,999.99))}/></View></View></View></View></View>})}
       {!!productItems.length&&<View style={s.card}><Text style={s.cardTitle}>Produtos</Text><Text style={s.cardSub}>O estoque disponível é validado agora e será reservado quando a proposta for aprovada.</Text>{productItems.map(item=>{const qty=Number(item.quantity)||0;const price=toCents(item.unitPrice);const bps=Math.round((Number(item.discount)||0)*100);const total=Math.round(Math.max(0,qty)*price*(10000-Math.min(10000,Math.max(0,bps)))/10000);const invalid=qty<1||qty>item.available;return <View key={item.productId} style={[s.productLine,invalid&&s.productLineInvalid]}><View style={s.productLineHead}><View style={s.choiceInfo}><Text style={s.code}>{item.sku}</Text><Text style={s.itemTitle}>{item.name}</Text><Text style={[s.choiceMeta,invalid&&{color:theme.danger}]}>Disponível: {item.available} {item.unit}</Text></View><Pressable onPress={()=>removeProduct(item.productId)} style={s.remove}><Ionicons name="trash-outline" size={17} color={theme.danger}/></Pressable></View><View style={[s.productFields,small&&s.calcColumnsSmall]}><Field label="QUANTIDADE" value={item.quantity} error={errors[`product-${item.productId}-quantity`]} change={v=>updateProduct(item.productId,'quantity',integerInput(v,5))}/><MoneyField label="PREÇO UNITÁRIO" value={item.unitPrice} error={errors[`product-${item.productId}-unitPrice`]} change={v=>updateProduct(item.productId,'unitPrice',decimalInput(v,2,999999.99))}/><Field label="DESCONTO (%)" value={item.discount} change={v=>updateProduct(item.productId,'discount',decimalInput(v,2,100))}/><View style={s.productTotal}><Text style={s.fieldLabel}>TOTAL</Text><Text style={s.productTotalValue}>{money(total)}</Text></View></View></View>})}</View>}
       <View style={[s.grandWrap,small&&s.grandWrapSmall]}><View style={s.discountControl}><Text style={s.fieldLabel}>DESCONTO GLOBAL (%)</Text><TextInput value={discount} onChangeText={v=>setDiscount(decimalInput(v,2,100))} keyboardType="decimal-pad" style={s.input}/></View><View style={s.grandTotal}><View><Text style={s.summaryMini}>Serviços {money(serviceSubtotal)} · Produtos {money(productSubtotal)}</Text><Text style={s.grandLabel}>Total do orçamento</Text></View><Text style={s.grandValue}>{money(finalTotal)}</Text></View></View>
     </View>}

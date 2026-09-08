@@ -163,12 +163,24 @@ export class QuotesService {
   private async buildQuoteItems(tenantId:string,inputs:QuoteItemDto[]){
     const items:BuiltQuoteItem[]=[];
     for(const input of inputs){
-      const service=await this.db.service.findFirst({where:{id:input.serviceId,tenantId,active:true},include:{stages:{where:{tenantId},orderBy:{sequence:'asc'}}}});
+      const service=await this.db.service.findFirst({where:{id:input.serviceId,tenantId,active:true},include:{team:{where:{tenantId}},stages:{where:{tenantId},orderBy:{sequence:'asc'}}}});
       if(!service)throw new NotFoundException('Serviço não encontrado ou inativo');
       const selectedStages=input.stages===undefined?service.stages:input.stages.map((st,index)=>({sequence:index+1,description:st.description.trim(),duration:st.duration?.trim()||null})).filter(st=>st.description);
       const days=input.days??this.daysFromStages(selectedStages,service.defaultDays),people=input.people??service.people;
-      const calc=this.calculate({dailyRateCents:input.dailyRateCents??service.dailyRateCents,days,people,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps,variableCostMode:service.variableCostMode});
-      items.push({tenantId,serviceName:service.name,days,people,...calc,configurationJson:{serviceId:service.id,dailyRateCents:input.dailyRateCents??service.dailyRateCents,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps,variableCostMode:service.variableCostMode,daysSource:input.days===undefined?'stages':'manual'},stages:{create:selectedStages.map(st=>({tenantId,sequence:st.sequence,description:st.description,duration:st.duration}))}});
+      // Regra da validação da Calculadora P.O.: quando o consumidor da API não
+      // informar uma diária e o serviço legado estiver zerado, usar a diária base
+      // padrão de R$ 300,00. Um valor explicitamente informado (inclusive zero)
+      // continua sendo respeitado como ajuste manual do orçamento.
+      const activeTeamDailyCents=(service.team??[])
+        .filter(member=>member.included!==false)
+        .reduce((sum,member)=>sum+Math.max(0,Number(member.dailyRateCents)||0),0);
+      const dailyRateCents=input.dailyRateCents!==undefined
+        ? input.dailyRateCents
+        : activeTeamDailyCents>0
+          ? activeTeamDailyCents
+          : (Number(service.dailyRateCents)>0?Number(service.dailyRateCents):30000);
+      const calc=this.calculate({dailyRateCents,days,people,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps,variableCostMode:service.variableCostMode});
+      items.push({tenantId,serviceName:service.name,days,people,...calc,configurationJson:{serviceId:service.id,dailyRateCents,variableCostCents:input.variableCostCents??service.variableCostCents,fixedCostCents:input.fixedCostCents??service.fixedCostCents,safetyMarginBps:input.safetyMarginBps??service.safetyMarginBps,variableCostMode:service.variableCostMode,daysSource:input.days===undefined?'stages':'manual'},stages:{create:selectedStages.map(st=>({tenantId,sequence:st.sequence,description:st.description,duration:st.duration}))}});
     }
     return items;
   }

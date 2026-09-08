@@ -212,4 +212,51 @@ describe('AccountService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(db.$transaction).not.toHaveBeenCalled();
   });
+
+  it('does not complete onboarding when basic company data is missing', async () => {
+    const db: any = {
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 't1', plan: 'pro', name: '', responsibleName: null, contactEmail: null,
+        }),
+        update: jest.fn(),
+      },
+      planLimit: { findUnique: jest.fn().mockResolvedValue({ plan: 'pro', customPdf: true }) },
+    };
+
+    await expect(
+      new AccountService(db, {} as any).update('t1', { onboardingCompleted: true }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(db.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('completes onboarding after validating the merged company data', async () => {
+    const updated = {
+      id: 't1', plan: 'pro', name: 'Luvie', responsibleName: 'Luana', contactEmail: 'contato@luvie.com.br',
+      onboardingCompletedAt: new Date('2026-09-08T18:00:00Z'),
+    };
+    const db: any = {
+      tenant: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 't1', plan: 'pro', name: 'Luvie', responsibleName: null, contactEmail: null,
+        }),
+        update: jest.fn().mockResolvedValue(updated),
+      },
+      planLimit: { findUnique: jest.fn().mockResolvedValue({ plan: 'pro', customPdf: true }) },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
+    };
+
+    await expect(
+      new AccountService(db, {} as any).update('t1', {
+        responsibleName: 'Luana', contactEmail: 'contato@luvie.com.br', onboardingCompleted: true,
+      }, 'u1'),
+    ).resolves.toBe(updated);
+    expect(db.tenant.update).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: expect.objectContaining({
+        responsibleName: 'Luana', contactEmail: 'contato@luvie.com.br', onboardingCompletedAt: expect.any(Date),
+      }),
+    });
+  });
+
 });
