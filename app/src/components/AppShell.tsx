@@ -32,6 +32,8 @@ const items=[
 const groupLabels={principal:'Principal',comercial:'Comercial',operacao:'Operação',administracao:'Administração'} as const;
 const itemPermissions:Record<string,string|undefined>={dashboard:'dashboard.read',calendar:'calendar.read',notifications:undefined,clients:'clients.read',services:'services.read',products:undefined,quotes:'quotes.read',orders:'orders.read',purchases:'purchases.read',finance:'finance.read',projects:'projects.read',calculator:'quotes.write',casaNova:undefined,company:'settings.manage',settings:'settings.manage',projectStatuses:'settings.manage'};
 type AccountSummary={tenant?:{plan?:string;name?:string;logoUrl?:string|null;primaryColor?:string|null;secondaryColor?:string|null;onboardingCompletedAt?:string|null};usage?:{clients?:number};limit?:{maxClients?:number}};
+type AccountCacheEntry={key:string;value:AccountSummary};
+let accountCache:AccountCacheEntry|undefined;
 type UnreadCount={count?:number};
 type IoniconName=ComponentProps<typeof Ionicons>['name'];
 
@@ -61,7 +63,9 @@ export function AppShell({title,subtitle,action,children,backHref}:{title:string
   const narrow=width<760;
   const medium=width>=760&&width<1180;
   const compactHeader=width<1180;
-  const[account,setAccount]=useState<AccountSummary>();
+  const currentSession=getSession();
+  const accountCacheKey=currentSession?.id??currentSession?.email??'anonymous';
+  const[account,setAccount]=useState<AccountSummary|undefined>(()=>accountCache?.key===accountCacheKey?accountCache.value:undefined);
   const[unread,setUnread]=useState(0);
   const[collapsed,setCollapsed]=useState(false);
   const[mobileMenuOpen,setMobileMenuOpen]=useState(false);
@@ -69,10 +73,10 @@ export function AppShell({title,subtitle,action,children,backHref}:{title:string
   useEffect(()=>{if(Platform.OS==='web'&&typeof localStorage!=='undefined')setCollapsed(localStorage.getItem('luviepro.sidebar.collapsed')==='1')},[]);
   useEffect(()=>{if(collapsed)setAccountMenuOpen(false)},[collapsed]);
   const toggleSidebar=()=>setCollapsed(v=>{const next=!v;if(Platform.OS==='web'&&typeof localStorage!=='undefined')localStorage.setItem('luviepro.sidebar.collapsed',next?'1':'0');return next});
-  useEffect(()=>{const refresh=()=>api<AccountSummary>('/account').then(setAccount).catch(()=>undefined);refresh();return subscribeTenantBrand(refresh)},[path]);
+  useEffect(()=>{let mounted=true;const refresh=()=>api<AccountSummary>('/account').then(value=>{if(!mounted)return;accountCache={key:accountCacheKey,value};setAccount(value)}).catch(()=>undefined);refresh();const unsubscribe=subscribeTenantBrand(refresh);return()=>{mounted=false;unsubscribe()}},[accountCacheKey,path]);
   useEffect(()=>{if(account?.tenant&&account.tenant.onboardingCompletedAt==null&&path!=='/company')router.replace('/company?onboarding=1')},[account?.tenant?.onboardingCompletedAt,path]);
   useEffect(()=>{let mounted=true;const refresh=()=>api<UnreadCount>('/notifications/unread-count').then(v=>{if(mounted)setUnread(v.count||0)}).catch(()=>undefined);refresh();const timer=setInterval(refresh,60000);return()=>{mounted=false;clearInterval(timer)}},[path]);
-  const session=getSession()??{name:'Luana Ribeiro',email:'luana@luviepro.com.br',plan:'Pro'};
+  const session=currentSession??{name:'Luana Ribeiro',email:'luana@luviepro.com.br',plan:'Pro'};
   const plan=account?.tenant?.plan??session.plan;
   const tenantName=account?.tenant?.name?.trim()||'LuviePro';
   const tenantLogo=account?.tenant?.logoUrl||undefined;
