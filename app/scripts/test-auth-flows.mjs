@@ -60,6 +60,62 @@ test('sessão de tenant não acessa o painel da plataforma',()=>{
   assert.equal(authGuardRedirect(true,'/platform',false),'/home');
 });
 
+test('assinatura ativa com vencimento passado fica restrita',async()=>{
+  const {isBillingRestrictedSession}=await import('../src/modules/auth/authFlow.mjs');
+  assert.equal(
+    isBillingRestrictedSession({
+      tenantStatus:'active',
+      subscriptionExpiresAt:'2020-01-01T00:00:00.000Z'
+    }),
+    true
+  );
+});
+
+test('assinatura ativa com vencimento futuro permanece liberada',async()=>{
+  const {isBillingRestrictedSession}=await import('../src/modules/auth/authFlow.mjs');
+  assert.equal(
+    isBillingRestrictedSession({
+      tenantStatus:'active',
+      subscriptionExpiresAt:'2099-12-31T23:59:59.000Z'
+    }),
+    false
+  );
+});
+
+test('login com assinatura vencida pela data direciona para planos',async()=>{
+  const {postLoginRoute}=await import('../src/modules/auth/authFlow.mjs');
+  assert.equal(
+    postLoginRoute({
+      platform:false,
+      user:{role:'owner'},
+      tenant:{
+        plan:'pro',
+        status:'active',
+        subscriptionExpiresAt:'2020-01-01T00:00:00.000Z'
+      }
+    }),
+    '/plans'
+  );
+});
+
+test('sessao billing restrita nao acessa rotas normais do tenant',async()=>{
+  const {authGuardRedirect}=await import('../src/modules/auth/authFlow.mjs');
+
+  assert.equal(
+    authGuardRedirect(true,'/home',false,true),
+    '/plans'
+  );
+
+  assert.equal(
+    authGuardRedirect(true,'/projects',false,true),
+    '/plans'
+  );
+
+  assert.equal(
+    authGuardRedirect(true,'/plans',false,true),
+    undefined
+  );
+});
 test('logout confirmado encerra sessão antes de voltar ao login',async()=>{
   const calls=[];
   const result=await runLogout(async()=>{calls.push('confirm');return true},async()=>{calls.push('logout')},route=>calls.push(`replace:${route}`));
