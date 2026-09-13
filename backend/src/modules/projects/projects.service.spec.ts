@@ -9,6 +9,8 @@ describe('ProjectsService', () => {
     quoteItem: { findMany: jest.fn() },
     calendarEvent: { updateMany: jest.fn() },
     projectNote: { create: jest.fn() },
+    projectOrganizerUsage: { findFirst: jest.fn(), upsert: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    product: { findFirst: jest.fn() },
     user: { findFirst: jest.fn() },
     auditLog: { create: jest.fn() },
     $transaction: jest.fn(),
@@ -62,5 +64,13 @@ describe('ProjectsService', () => {
     expect(db.projectTask.updateMany).toHaveBeenNthCalledWith(1,expect.objectContaining({data:{dueDate:new Date('2026-09-07T00:00:00')}}));
     expect(db.projectTask.updateMany).toHaveBeenNthCalledWith(2,expect.objectContaining({data:{dueDate:new Date('2026-09-08T00:00:00')}}));
     expect(db.calendarEvent.updateMany).toHaveBeenCalledWith(expect.objectContaining({where:{tenantId:'t1',projectId:'p1',status:'active'}}));
+  });
+
+  it('registers an organizer with separate charge and cost values', async () => {
+    db.project.findFirst.mockResolvedValue({id:'p1'});
+    db.product.findFirst.mockResolvedValue({id:'prod1',name:'Caixa organizadora'});
+    db.projectOrganizerUsage.upsert.mockResolvedValue({id:'usage1',projectId:'p1',productId:'prod1',quantity:3,chargeUnitCents:2500,costUnitCents:1200,charged:false,paid:false,product:{id:'prod1',name:'Caixa organizadora',sku:'CX-1',unit:'un'}});
+    await service.upsertOrganizer('t1','p1',{productId:'prod1',quantity:3,chargeUnitCents:2500,costUnitCents:1200},'u1');
+    expect(db.projectOrganizerUsage.upsert).toHaveBeenCalledWith(expect.objectContaining({where:{projectId_productId:{projectId:'p1',productId:'prod1'}},create:expect.objectContaining({tenantId:'t1',quantity:3,chargeUnitCents:2500,costUnitCents:1200})}));
   });
 });

@@ -18,12 +18,14 @@ async function main() {
   await db.user.upsert({ where:{email:'luana@luviepro.local'}, update:{}, create:{tenantId:tenant.id,name:'Luana Oliveira',email:'luana@luviepro.local',passwordHash:await hash('LuviePro123!',12)} });
   const client = await db.client.findFirst({where:{tenantId:tenant.id,name:'Silzia Luz'}}) ?? await db.client.create({data:{tenantId:tenant.id,name:'Silzia Luz',phone:'(18) 99999-0000',city:'Presidente Prudente'}});
   if (!await db.service.count({where:{tenantId:tenant.id}})) await db.service.createMany({data:[
-    {tenantId:tenant.id,code:'SVC-01',name:'Mudança residencial',description:'Planejamento, embalagem técnica, implantação e treinamento.',dailyRateCents:148000,defaultDays:5,people:5,variableCostCents:27500,fixedCostCents:114500,safetyMarginBps:5000},
-    {tenantId:tenant.id,code:'SVC-06',name:'Organização de ambientes',description:'Organização completa por cômodos e treinamento.',dailyRateCents:105000,defaultDays:1,people:2,variableCostCents:15000,fixedCostCents:49000,safetyMarginBps:5000},
+    {tenantId:tenant.id,code:'SVC-01',name:'Mudança residencial',description:'Planejamento, embalagem técnica, implantação e treinamento.',dailyRateCents:455250,defaultDays:5,people:5,variableCostCents:27500,fixedCostCents:114500,safetyMarginBps:5000},
+    {tenantId:tenant.id,code:'SVC-06',name:'Organização de ambientes',description:'Organização completa por cômodos e treinamento.',dailyRateCents:359250,defaultDays:1,people:2,variableCostCents:15000,fixedCostCents:49000,safetyMarginBps:5000},
     {tenantId:tenant.id,code:'SVC-10',name:'Consultoria online',description:'Consultoria remota guiada com tarefas práticas.',dailyRateCents:5000,defaultDays:10,people:1,variableCostCents:0,fixedCostCents:0,safetyMarginBps:5000}
   ]});
   const moving=await db.service.findFirstOrThrow({where:{tenantId:tenant.id,name:'Mudança residencial'}});
-  await db.service.update({where:{id:moving.id},data:{code:'SVC-01',description:'Planejamento, embalagem técnica, implantação e treinamento.',safetyMarginBps:5000}});
+  await db.service.update({where:{id:moving.id},data:{code:'SVC-01',description:'Planejamento, embalagem técnica, implantação e treinamento.',dailyRateCents:455250,safetyMarginBps:5000}});
+  const organizing=await db.service.findFirst({where:{tenantId:tenant.id,name:'Organização de ambientes'}});
+  if(organizing)await db.service.update({where:{id:organizing.id},data:{dailyRateCents:359250}});
   if(!await db.serviceStage.count({where:{serviceId:moving.id}})) await db.serviceStage.createMany({data:[
     {tenantId:tenant.id,serviceId:moving.id,sequence:1,description:'Planejamento e embalagem técnica',duration:'2 dias'},
     {tenantId:tenant.id,serviceId:moving.id,sequence:2,description:'Implantação pós-mudança',duration:'1 dia'},

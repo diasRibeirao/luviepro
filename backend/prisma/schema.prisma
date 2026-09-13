@@ -419,6 +419,7 @@ model Product {
   movements        StockMovement[]
   reservations     StockReservation[]
   quoteItems       QuoteProductItem[]
+  projectUsages    ProjectOrganizerUsage[]
   orderItems       OrderItem[]
   purchaseItems    PurchaseOrderItem[]
   createdAt        DateTime            @default(now())
@@ -846,9 +847,30 @@ model Project {
   tasks            ProjectTask[]
   activityNotes    ProjectNote[]
   monthlyFollowUps MonthlyFollowUp[]
+  organizerUsages  ProjectOrganizerUsage[]
 
   @@index([tenantId, status])
   @@index([tenantId, assigneeUserId, status])
+}
+
+model ProjectOrganizerUsage {
+  id              String   @id @default(cuid())
+  tenantId        String
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity        Int      @default(1)
+  chargeUnitCents Int      @default(0)
+  costUnitCents   Int      @default(0)
+  charged         Boolean  @default(false)
+  paid            Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, productId])
+  @@index([tenantId, projectId])
+  @@index([tenantId, charged, paid])
 }
 
 model ProjectStatus {

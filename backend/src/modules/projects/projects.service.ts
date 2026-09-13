@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma.service';
 import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
 import { clampInteger, nullableTrimmed } from '../../validation/patch';
 import { parseDateOrThrow } from '../../validation/dates';
-import { CreateProjectStatusDto, CreateProjectTaskDto, UpdateProjectDto, UpdateProjectStatusDto, UpdateProjectTaskDto } from './dto/projects.dto';
+import { CreateProjectStatusDto, CreateProjectTaskDto, UpdateProjectDto, UpdateProjectOrganizerDto, UpdateProjectStatusDto, UpdateProjectTaskDto, UpsertProjectOrganizerDto } from './dto/projects.dto';
 
 @Injectable()
 export class ProjectsService {
@@ -165,6 +165,7 @@ export class ProjectsService {
         assignee: { select: { id: true, name: true, email: true } },
         tasks: { where: { tenantId }, include: { assignee: { select: { id: true, name: true, email: true } } }, orderBy: [{ status: 'asc' }, { priority: 'desc' }, { dueDate: 'asc' }, { createdAt: 'asc' }] },
         activityNotes: { where: { tenantId }, orderBy: { createdAt: 'desc' }, take: 30 },
+        organizerUsages: { where: { tenantId }, include: { product: { select: { id: true, name: true, sku: true, unit: true } } }, orderBy: { createdAt: 'asc' } },
       },
     });
     if (!project) throw new NotFoundException('Projeto não encontrado');
@@ -312,5 +313,34 @@ export class ProjectsService {
     if (!updated) throw new ConflictException('O projeto foi alterado por outra operação. Atualize e tente novamente.');
     await this.audit(tenantId, actorUserId, 'update', 'project_task', taskId, { projectId, status: finalStatus });
     return updated;
+  }
+
+  async upsertOrganizer(tenantId:string,projectId:string,data:UpsertProjectOrganizerDto,actorUserId?:string){
+    const [project,product]=await Promise.all([
+      this.db.project.findFirst({where:{id:projectId,tenantId},select:{id:true}}),
+      this.db.product.findFirst({where:{id:data.productId,tenantId,active:true},select:{id:true,name:true}}),
+    ]);
+    if(!project)throw new NotFoundException('Projeto não encontrado');
+    if(!product)throw new BadRequestException('Organizador inválido ou inativo');
+    const values={tenantId,projectId,productId:data.productId,quantity:data.quantity,chargeUnitCents:data.chargeUnitCents,costUnitCents:data.costUnitCents,charged:data.charged??false,paid:data.paid??false};
+    const usage=await this.db.projectOrganizerUsage.upsert({where:{projectId_productId:{projectId,productId:data.productId}},create:values,update:{quantity:data.quantity,chargeUnitCents:data.chargeUnitCents,costUnitCents:data.costUnitCents,charged:data.charged,paid:data.paid},include:{product:{select:{id:true,name:true,sku:true,unit:true}}}});
+    await this.audit(tenantId,actorUserId,'upsert','project_organizer_usage',usage.id,{projectId,productId:data.productId,quantity:data.quantity});
+    return usage;
+  }
+
+  async updateOrganizer(tenantId:string,projectId:string,id:string,data:UpdateProjectOrganizerDto,actorUserId?:string){
+    const existing=await this.db.projectOrganizerUsage.findFirst({where:{id,projectId,tenantId}});
+    if(!existing)throw new NotFoundException('Organizador do projeto não encontrado');
+    const usage=await this.db.projectOrganizerUsage.update({where:{id},data,include:{product:{select:{id:true,name:true,sku:true,unit:true}}}});
+    await this.audit(tenantId,actorUserId,'update','project_organizer_usage',id,{projectId,charged:usage.charged,paid:usage.paid});
+    return usage;
+  }
+
+  async removeOrganizer(tenantId:string,projectId:string,id:string,actorUserId?:string){
+    const existing=await this.db.projectOrganizerUsage.findFirst({where:{id,projectId,tenantId}});
+    if(!existing)throw new NotFoundException('Organizador do projeto não encontrado');
+    await this.db.projectOrganizerUsage.delete({where:{id}});
+    await this.audit(tenantId,actorUserId,'delete','project_organizer_usage',id,{projectId,productId:existing.productId});
+    return {ok:true};
   }
 }
