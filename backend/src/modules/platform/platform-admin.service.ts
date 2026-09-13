@@ -4,6 +4,7 @@ import { hash } from 'bcryptjs';
 import { PrismaService } from '../../prisma.service';
 import { MailService } from '../../mail.service';
 import { AuthService } from '../auth/auth.service';
+import { TrialService } from '../core/trial.service';
 import { periodEnd, periodPrice } from '../../plan-policy';
 import { pagination } from '../../http/pagination';
 import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformListQueryDto, PlatformMasterCreateDto, PlatformMasterUpdateDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
@@ -14,7 +15,7 @@ export class PlatformAdminService {
     private readonly db: PrismaService,
     private readonly mail: MailService,
     private readonly auth: AuthService,
-  ) {}
+    private readonly trial: TrialService,){}
 
   private invitationHash(token:string){return createHash('sha256').update(token).digest('hex');}
   private invitationUrl(token:string){const base=(process.env.APP_WEB_URL||'http://localhost:8081').replace(/\/$/,'');return `${base}/invite/${encodeURIComponent(token)}`;}
@@ -184,7 +185,11 @@ export class PlatformAdminService {
 
   async createTenant(data:PlatformCreateTenantDto,platformAdminId:string){
     const email=String(data.ownerEmail??'').trim().toLowerCase(),company=String(data.company??'').trim(),ownerName=String(data.ownerName??'').trim();
-    const now=new Date(),trialEnd=new Date(now);trialEnd.setDate(trialEnd.getDate()+14);
+    const now=new Date();
+    const trialEnd=await this.trial.calculateInitialExpiration(now);
+    if(!trialEnd){
+      throw new BadRequestException('Criação de empresa em demonstração está desabilitada');
+    }
     const slug=`${company.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'empresa'}-${Date.now().toString(36)}`;
     const token=randomBytes(32).toString('hex'),expiresAt=new Date(Date.now()+Number(process.env.INVITATION_TTL_HOURS||48)*3600000);
     let result=null;
@@ -216,17 +221,38 @@ export class PlatformAdminService {
     return {...result.tenant,invitation:{...result.invitation,delivery,inviteUrl}};
   }
 
+  async trialSettings(){
+    return this.trial.getSettings();
+  }
+
+  async updateTrialSettings(
+    data:{enabled?:boolean;value?:number;unit?:string},
+  ){
+    return this.trial.updateSettings(data);
+  }
+
+  async tenantTrial(id:string){
+    return this.trial.getTenantTrial(id);
+  }
+
+  async extendTenantTrial(
+    id:string,
+    data:{value:number;unit:string;reason?:string},
+    actorUserId?:string,
+  ){
+    return this.trial.extendTenantTrial(id,data,actorUserId);
+  }
   async updateTenant(id:string,data:PlatformTenantDto){
     const tenant=await this.db.tenant.findUnique({where:{id}});if(!tenant)throw new NotFoundException('Empresa não encontrada');
     const plan=data.plan??tenant.plan,period=data.planPeriod??tenant.planPeriod??'monthly';
     const limit=await this.db.planLimit.findUnique({where:{plan}});if(!limit||(!limit.active&&plan!==tenant.plan))throw new BadRequestException('Plano indisponível');
     const amountCents=periodPrice(limit,period);
     const updated=await this.db.$transaction(async tx=>{
-      const result=await tx.tenant.update({where:{id},data:{...(data.status!==undefined&&{status:data.status}),...(data.plan!==undefined&&{plan:data.plan}),...(data.planPeriod!==undefined&&{planPeriod:data.planPeriod})}});
+      let result=await tx.tenant.update({where:{id},data:{...(data.status!==undefined&&{status:data.status}),...(data.plan!==undefined&&{plan:data.plan}),...(data.planPeriod!==undefined&&{planPeriod:data.planPeriod})}});
       if(data.plan!==undefined||data.planPeriod!==undefined){
         const current=await tx.subscription.findFirst({where:{tenantId:id,status:{in:['active','trial']},expiresAt:{gte:new Date()}},orderBy:{expiresAt:'desc'}});
         if(current)await tx.subscription.update({where:{id:current.id},data:{plan,period,amountCents}});
-        else{const startsAt=new Date(),expiresAt=new Date(startsAt);expiresAt.setDate(expiresAt.getDate()+14);await tx.subscription.create({data:{tenantId:id,plan,period,amountCents,status:'active',startsAt,expiresAt}});}
+        else{const startsAt=new Date(),expiresAt=periodEnd(startsAt,period);await tx.subscription.create({data:{tenantId:id,plan,period,amountCents,status:'active',startsAt,expiresAt}});result=await tx.tenant.update({where:{id},data:{subscriptionExpiresAt:expiresAt}});}
       }
       return result;
     });

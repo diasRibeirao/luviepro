@@ -61,6 +61,14 @@ const registerPlan=(plan:PlanLimit,index:number,total:number):RegisterPlan=>{
   return {id:plan.plan,name:plan.name,description:plan.description||'Plano para sua operação',prices,totals,features:featureList(plan),popular:plan.plan==='pro'||(total>1&&index===Math.floor(total/2))};
 };
 
+type PublicTrial={
+  enabled:boolean;
+  value:number;
+  unit:'HOURS'|'DAYS'|'WEEKS';
+  label:string;
+  marketingLabel:string;
+};
+
 type RegisterSession=Parameters<typeof establishSession>[0];
 const errorMessage=(error:unknown)=>error instanceof ApiError||error instanceof Error?error.message:'Erro inesperado';
 
@@ -74,6 +82,7 @@ export default function Register(){
   const[email,setEmail]=useState('');
   const[password,setPassword]=useState('');
   const[plans,setPlans]=useState<RegisterPlan[]>([]);
+  const[trial,setTrial]=useState<PublicTrial|null>(null);
   const[plan,setPlan]=useState<string>('');
   const[period,setPeriod]=useState<BillingPeriod>('monthly');
   const[busy,setBusy]=useState(false);
@@ -84,13 +93,28 @@ export default function Register(){
 
   const selectedPeriod=periods.find(([id])=>id===period)!;
   const selectedPlan=useMemo(()=>plans.find(item=>item.id===plan),[plans,plan]);
+  const trialEnabled=trial?.enabled===true;
+  const trialLabel=trial?.label||'';
+  const trialHero=trialEnabled
+    ? `Teste todos os recursos durante ${trialLabel}. Sem cartão de crédito e sem compromisso.`
+    : 'Escolha o plano ideal para profissionalizar sua operação.';
+  const trialSubtitle=trialEnabled
+    ? `Escolha o plano e aproveite ${trialLabel} de teste.`
+    : 'Escolha o plano ideal para sua operação.';
+  const trialButton=trialEnabled
+    ? `Começar teste grátis de ${trialLabel}`
+    : 'Criar minha conta';
 
   useEffect(()=>{
     let active=true;
-    api<PlanLimit[]>('/plans').then(catalog=>{
+    Promise.all([
+      api<PlanLimit[]>('/plans'),
+      api<PublicTrial>('/trial'),
+    ]).then(([catalog,trialSettings])=>{
       if(!active)return;
       const mapped=catalog.map((item,index)=>registerPlan(item,index,catalog.length));
       setPlans(mapped);
+      setTrial(trialSettings);
       setPlan(current=>mapped.some(item=>item.id===current)?current:(mapped.find(item=>item.id==='pro')?.id??mapped[0]?.id??''));
     }).catch(e=>active&&setError(errorMessage(e))).finally(()=>active&&setPlansLoading(false));
     return()=>{active=false};
@@ -118,13 +142,13 @@ export default function Register(){
     <View style={s.language}><LanguageSwitch compact/></View>
     <View style={[s.brandSide,!wide&&s.brandSideMobile]}>
       <View style={s.logo}><View style={s.mark}><Text style={s.markText}>L</Text></View><Text style={s.logoText}>LuviePro</Text></View>
-      {wide&&<><Text style={s.hero}>Comece a profissionalizar seu negócio hoje.</Text><Text style={s.heroSub}>Teste todos os recursos durante 14 dias. Sem cartão de crédito e sem compromisso.</Text><View style={s.benefits}>{['Orçamentos profissionais em segundos','Gestão completa de clientes','Projetos e etapas organizados','Sua marca em cada proposta'].map(text=><View key={text} style={s.benefit}><Ionicons name="checkmark-circle" size={18} color={theme.gold}/><Text style={s.benefitText}>{text}</Text></View>)}</View></>}
+      {wide&&<><Text style={s.hero}>Comece a profissionalizar seu negócio hoje.</Text><Text style={s.heroSub}>{trialHero}</Text><View style={s.benefits}>{['Orçamentos profissionais em segundos','Gestão completa de clientes','Projetos e etapas organizados','Sua marca em cada proposta'].map(text=><View key={text} style={s.benefit}><Ionicons name="checkmark-circle" size={18} color={theme.gold}/><Text style={s.benefitText}>{text}</Text></View>)}</View></>}
     </View>
 
     <ScrollView style={s.formSide} contentContainerStyle={[s.formContent,!wide&&{paddingTop:110}]}>
       <Pressable onPress={()=>router.back()} style={s.back}><Ionicons name="arrow-back" size={17} color={theme.green2}/><Text style={s.backText}>Voltar ao login</Text></Pressable>
       <Text style={s.title}>Crie sua conta grátis</Text>
-      <Text style={s.subtitle}>Escolha o plano e aproveite 14 dias de teste.</Text>
+      <Text style={s.subtitle}>{trialSubtitle}</Text>
 
       <View style={s.periods}>{periods.map(([value,label])=><Pressable key={value} onPress={()=>setPeriod(value)} style={[s.period,period===value&&s.periodOn]}><Text style={[s.periodText,period===value&&s.periodTextOn]}>{label}</Text></Pressable>)}</View>
 
@@ -154,7 +178,7 @@ export default function Register(){
       <View style={s.fields}><Field label="NOME DA EMPRESA" required error={fieldErrors.company} value={company} change={v=>{setCompany(v);setFieldErrors(e=>({...e,company:''}))}}/><Field label="SEU NOME" required error={fieldErrors.name} value={name} change={v=>{setName(v);setFieldErrors(e=>({...e,name:''}))}}/><Field label="TELEFONE / WHATSAPP" value={phone} change={setPhone}/><Field label="E-MAIL" required error={fieldErrors.email} value={email} change={v=>{setEmail(v);setEmailAlreadyRegistered(false);setFieldErrors(e=>({...e,email:''}))}}/><Field label="SENHA" required error={fieldErrors.password} value={password} change={v=>{setPassword(v);setFieldErrors(e=>({...e,password:''}))}} password/></View>
       {error?<Text style={s.error}>⚠ {error}</Text>:null}
       {emailAlreadyRegistered?<Pressable onPress={()=>router.replace('/login')} style={s.existingAccount}><Ionicons name="log-in-outline" size={17} color={theme.green2}/><View style={{flex:1}}><Text style={s.existingAccountTitle}>Entrar com esta conta</Text><Text style={s.existingAccountText}>Depois do login, cadastre usuários adicionais no gerenciamento de acessos.</Text></View><Ionicons name="chevron-forward" size={16} color={theme.green2}/></Pressable>:null}
-      <Pressable disabled={busy||plansLoading||!plan} onPress={submit} style={[s.submit,(busy||plansLoading||!plan)&&{opacity:.6}]}>{busy?<ActivityIndicator color={theme.g900}/>:<Text style={s.submitText}>Começar teste grátis de 14 dias</Text>}</Pressable>
+      <Pressable disabled={busy||plansLoading||!plan} onPress={submit} style={[s.submit,(busy||plansLoading||!plan)&&{opacity:.6}]}>{busy?<ActivityIndicator color={theme.g900}/>:<Text style={s.submitText}>{trialButton}</Text>}</Pressable>
       <Text style={s.terms}>Ao criar sua conta, você concorda com os termos de uso e política de privacidade.</Text>
     </ScrollView>
   </SafeAreaView>

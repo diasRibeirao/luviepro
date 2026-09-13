@@ -23,13 +23,23 @@ describe('PlatformAdminService',()=>{
   const tx:any=db;
   const mail:any={sendUserInvitation:jest.fn()};
   const auth:any={forgotPassword:jest.fn()};
+  const trial:any={
+    calculateInitialExpiration:jest.fn(async(start?:Date)=>{
+      const base=start??new Date();
+      return new Date(base.getTime()+48*60*60*1000);
+    }),
+    getSettings:jest.fn(),
+    updateSettings:jest.fn(),
+    getTenantTrial:jest.fn(),
+    extendTenantTrial:jest.fn(),
+  };
   let service:PlatformAdminService;
 
   beforeEach(()=>{
     jest.clearAllMocks();
     db.auditLog.create.mockResolvedValue({});
     db.$transaction.mockImplementation((fn:any)=>fn(tx));
-    service=new PlatformAdminService(db,mail,auth);
+    service=new PlatformAdminService(db,mail,auth,trial);
   });
 
   it('returns the platform overview using global platform aggregates',async()=>{
@@ -276,4 +286,188 @@ describe('PlatformAdminService',()=>{
       .rejects.toBeInstanceOf(ConflictException);
   });
 
+
+  it('returns the global trial settings',async()=>{
+    const settings={
+      enabled:true,
+      value:48,
+      unit:'HOURS',
+      label:'48 horas',
+      marketingLabel:'48 horas grátis',
+    };
+    trial.getSettings.mockResolvedValue(settings);
+
+    await expect(
+      service.trialSettings(),
+    ).resolves.toEqual(settings);
+
+    expect(
+      trial.getSettings,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates the global trial settings without changing tenants',async()=>{
+    const input={
+      enabled:true,
+      value:72,
+      unit:'HOURS',
+    };
+
+    const updated={
+      ...input,
+      label:'72 horas',
+      marketingLabel:'72 horas grátis',
+    };
+
+    trial.updateSettings.mockResolvedValue(updated);
+
+    await expect(
+      service.updateTrialSettings(input),
+    ).resolves.toEqual(updated);
+
+    expect(
+      trial.updateSettings,
+    ).toHaveBeenCalledWith(input);
+
+    expect(
+      db.tenant.update,
+    ).not.toHaveBeenCalled();
+
+    expect(
+      db.subscription.update,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('returns trial information for one tenant',async()=>{
+    const tenantTrial={
+      id:'tenant-1',
+      name:'Cliente Trial',
+      status:'active',
+      plan:'pro',
+      subscriptionExpiresAt:new Date(
+        '2026-09-15T12:00:00.000Z',
+      ),
+      expired:false,
+      remainingMs:172800000,
+    };
+
+    trial.getTenantTrial.mockResolvedValue(
+      tenantTrial,
+    );
+
+    await expect(
+      service.tenantTrial('tenant-1'),
+    ).resolves.toEqual(tenantTrial);
+
+    expect(
+      trial.getTenantTrial,
+    ).toHaveBeenCalledWith('tenant-1');
+  });
+
+  it('extends one tenant trial and propagates the platform admin actor',async()=>{
+    const input={
+      value:6,
+      unit:'HOURS',
+      reason:'Cortesia comercial',
+    };
+
+    const result={
+      tenantId:'tenant-1',
+      previousExpiresAt:new Date(
+        '2026-09-15T12:00:00.000Z',
+      ),
+      newExpiresAt:new Date(
+        '2026-09-15T18:00:00.000Z',
+      ),
+      added:'6 horas',
+      adjustmentId:'adjustment-1',
+    };
+
+    trial.extendTenantTrial.mockResolvedValue(
+      result,
+    );
+
+    await expect(
+      service.extendTenantTrial(
+        'tenant-1',
+        input,
+        'platform-admin-1',
+      ),
+    ).resolves.toEqual(result);
+
+    expect(
+      trial.extendTenantTrial,
+    ).toHaveBeenCalledWith(
+      'tenant-1',
+      input,
+      'platform-admin-1',
+    );
+  });
+
+  it('synchronizes tenant expiration when updateTenant creates an active subscription',async()=>{
+    db.tenant.findUnique.mockResolvedValue({
+      id:'t1',
+      plan:'starter',
+      planPeriod:'monthly',
+      subscriptionExpiresAt:new Date(Date.now()-86400000),
+    });
+
+    db.planLimit.findUnique.mockResolvedValue({
+      plan:'pro',
+      active:true,
+      sortOrder:20,
+      monthlyPriceCents:9990,
+      quarterlyPriceCents:26973,
+      semiannualPriceCents:50949,
+      annualPriceCents:95904,
+    });
+
+    db.tenant.update
+      .mockResolvedValueOnce({
+        id:'t1',
+        plan:'pro',
+        planPeriod:'monthly',
+      })
+      .mockImplementationOnce(({data}:any)=>Promise.resolve({
+        id:'t1',
+        plan:'pro',
+        planPeriod:'monthly',
+        ...data,
+      }));
+
+    db.subscription.findFirst.mockResolvedValue(null);
+    db.subscription.create.mockResolvedValue({id:'subscription-active'});
+
+    const result:any=await service.updateTenant('t1',{
+      plan:'pro',
+      planPeriod:'monthly',
+    } as any);
+
+    expect(db.subscription.create).toHaveBeenCalledWith({
+      data:expect.objectContaining({
+        tenantId:'t1',
+        plan:'pro',
+        period:'monthly',
+        amountCents:9990,
+        status:'active',
+        startsAt:expect.any(Date),
+        expiresAt:expect.any(Date),
+      }),
+    });
+
+    const subscriptionCall=db.subscription.create.mock.calls.at(-1)?.[0];
+    const expiresAt=subscriptionCall?.data?.expiresAt;
+
+    expect(expiresAt).toBeInstanceOf(Date);
+
+    expect(db.tenant.update).toHaveBeenNthCalledWith(
+      2,
+      {
+        where:{id:'t1'},
+        data:{subscriptionExpiresAt:expiresAt},
+      },
+    );
+
+    expect(result.subscriptionExpiresAt).toEqual(expiresAt);
+  });
 });

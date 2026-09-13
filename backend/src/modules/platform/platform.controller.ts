@@ -8,7 +8,7 @@ import type { RequestWithId } from '../../http/request-context.middleware';
 import type { Response } from 'express';
 import { createReadStream } from 'node:fs';
 import { PlatformCreateBackupDto } from './dto/platform-backup.dto';
-import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformListQueryDto, PlatformMasterCreateDto, PlatformMasterUpdateDto, PlatformPlanDto, PlatformTenantDto, PlatformUserDto } from './dto/platform.dto';
+import { PlatformCreatePlanDto, PlatformCreateTenantDto, PlatformExtendTrialDto, PlatformListQueryDto, PlatformMasterCreateDto, PlatformMasterUpdateDto, PlatformPlanDto, PlatformTenantDto, PlatformTrialSettingsDto, PlatformUserDto } from './dto/platform.dto';
 
 @Roles('platform_admin')
 @Controller('platform')
@@ -29,7 +29,10 @@ export class PlatformController {
   @Post('masters') createMaster(@Body() body:PlatformMasterCreateDto){return this.platform.createMaster(body)}
   @Patch('masters/:id') updateMaster(@Req() request:PlatformRequest,@Param('id') id:string,@Body() body:PlatformMasterUpdateDto){return this.platform.updateMaster(id,body,request.user.sub)}
   @Post('masters/:id/password-reset') resetMaster(@Param('id') id:string){return this.platform.masterPasswordReset(id)}
-  @Get('plans') plans(){return this.platform.plans()}
+  @Get('trial-settings') trialSettings(){return this.platform.trialSettings()}
+  @Patch('trial-settings') updateTrialSettings(@Body() body:PlatformTrialSettingsDto){return this.platform.updateTrialSettings(body)}
+  @Get('tenants/:id/trial') tenantTrial(@Param('id') id:string){return this.platform.tenantTrial(id)}
+  @Post('tenants/:id/trial/extend') extendTenantTrial(@Req() request:PlatformRequest,@Param('id') id:string,@Body() body:PlatformExtendTrialDto){return this.platform.extendTenantTrial(id,body,request.user.sub)}  @Get('plans') plans(){return this.platform.plans()}
   @Post('plans') createPlan(@Body() body:PlatformCreatePlanDto){return this.platform.createPlan(body)}
   @Post('tenants') create(@Req() request:PlatformRequest,@Body() body:PlatformCreateTenantDto){return this.platform.createTenant(body,request.user.sub)}
   @Patch('tenants/:id') update(@Param('id') id:string,@Body() body:PlatformTenantDto){return this.platform.changeTenant(id,body)}

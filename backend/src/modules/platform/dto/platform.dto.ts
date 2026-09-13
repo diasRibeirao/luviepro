@@ -238,3 +238,32 @@ export class PlatformMasterUpdateDto {
   @IsBoolean()
   active?: boolean;
 }
+export class PlatformTrialSettingsDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  value?: number;
+
+  @IsOptional()
+  @IsIn(['HOURS', 'DAYS', 'WEEKS'])
+  unit?: 'HOURS' | 'DAYS' | 'WEEKS';
+}
+
+export class PlatformExtendTrialDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  value!: number;
+
+  @IsIn(['HOURS', 'DAYS', 'WEEKS'])
+  unit!: 'HOURS' | 'DAYS' | 'WEEKS';
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}

@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma.service';
 import { MailService } from '../../mail.service';
 import { AUTH_SECURITY, accountLockedUntil, normalizeEmail, passwordResetExpiresAt } from './auth-security';
 import { AuthSessionService } from './auth-session.service';
+import { TrialService } from '../core/trial.service';
 import { auditMetadata, type AuditMetadata } from '../../observability/audit-metadata';
 import type { ForgotPasswordResponse, RegisterInput } from './types/auth.types';
 import { isBillingPeriod, isPlanCode, type BillingPeriod, type PlanCode } from '../../plan-policy';
@@ -16,8 +17,8 @@ export class AuthService {
     private readonly db: PrismaService,
     private readonly mail: MailService,
     private readonly sessions: AuthSessionService,
-    private readonly redis?: RedisService,
-  ) {}
+    private readonly trial: TrialService,
+    private readonly redis?: RedisService,){}
 
   private async audit(tenantId: string, actorUserId: string | undefined, action: string, entity: string, entityId?: string, metadata?: AuditMetadata) {
     await this.db.auditLog.create({ data: { tenantId, actorUserId, action, entity, entityId, metadata: auditMetadata(metadata) } }).catch(() => undefined);
@@ -143,7 +144,11 @@ export class AuthService {
     }
     const plan: PlanCode = limit.plan;
     const amountCents = period === 'annual' ? limit.annualPriceCents : period === 'semiannual' ? limit.semiannualPriceCents : period === 'quarterly' ? limit.quarterlyPriceCents : limit.monthlyPriceCents;
-    const now = new Date(); const trialEnd = new Date(now); trialEnd.setDate(trialEnd.getDate() + 14);
+    const now = new Date();
+    const trialEnd = await this.trial.calculateInitialExpiration(now);
+    if (!trialEnd) {
+      throw new BadRequestException('Cadastro em demonstração indisponível no momento');
+    }
     const slug = `${company.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'empresa'}-${Date.now().toString(36)}`;
     const result = await this.db.$transaction(async tx => {
       const tenant = await tx.tenant.create({ data: { name: company, slug, responsibleName: name, phone: data.phone, contactEmail: email, plan, planPeriod: period, subscriptionExpiresAt: trialEnd } });
