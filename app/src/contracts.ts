@@ -30,6 +30,7 @@ export interface PlanLimit {
 export interface AccountUser {id:string;name:string;email:string;role:string;customProfileId?:string|null;customProfile?:{id:string;name:string}|null;active:boolean;lastLoginAt?:string|null;lockedUntil?:string|null;passwordChangedAt?:string|null;}
 export interface AccountResponse {
   tenant:{id:string;name:string;plan:PlanCode;planPeriod:BillingPeriod;subscriptionExpiresAt?:string|null;status:string;responsibleName?:string|null;contactEmail?:string|null;phone?:string|null};
+  subscription?:{id:string;status:string;startsAt:string;expiresAt:string}|null;
   limit:PlanLimit|null;
   currentUser:AccountUser|null;
   usage:{clients:number;quotes:number;users:number;pendingInvitations:number;userSeatsUsed:number};

@@ -115,7 +115,7 @@ export default function Register(){
       const mapped=catalog.map((item,index)=>registerPlan(item,index,catalog.length));
       setPlans(mapped);
       setTrial(trialSettings);
-      setPlan(current=>mapped.some(item=>item.id===current)?current:(mapped.find(item=>item.id==='pro')?.id??mapped[0]?.id??''));
+      setPlan(current=>mapped.some(item=>item.id===current)?current:(mapped[0]?.id??''));
     }).catch(e=>active&&setError(errorMessage(e))).finally(()=>active&&setPlansLoading(false));
     return()=>{active=false};
   },[]);

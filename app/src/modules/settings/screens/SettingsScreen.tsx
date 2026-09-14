@@ -7,6 +7,7 @@ import { AppShell } from '../../../components/AppShell';
 import { AsyncState } from '../../../components/AsyncState';
 import { Text } from '../../../i18n';
 import { theme } from '../../../theme';
+import { useTenantBrand } from '../../../tenantBrand';
 import type { AccountData } from '../settings.types';
 import { errorMessage } from '../settings.utils';
 import { ProductCategory,ProductUnit,productsApi } from '../../products/api/products.api';
@@ -17,6 +18,7 @@ type Card={title:string;subtitle:string;icon:IoniconName;href:string;visible?:bo
 type Group={title:string;subtitle:string;cards:Card[]};
 
 export default function Settings(){
+  const brand=useTenantBrand();
   const session=getSession();
   const[data,setData]=useState<AccountData>(),[categories,setCategories]=useState<ProductCategory[]>([]),[units,setUnits]=useState<ProductUnit[]>([]),[financeCategories,setFinanceCategories]=useState<FinanceCategory[]>([]),[paymentMethods,setPaymentMethods]=useState<FinancePaymentMethod[]>([]),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState('');
   const width=useWindowDimensions().width;
@@ -53,13 +55,13 @@ export default function Settings(){
   if(loading||loadError)return <AppShell title="Configurações"><AsyncState loading={loading} error={loadError} onRetry={load}/></AppShell>;
   if(!data)return <AppShell title="Configurações"><AsyncState loading={loading} onRetry={load}/></AppShell>;
   return <AppShell title="Configurações" subtitle="Cadastros, acessos e parametrizações usados na operação do LuviePro.">
-    <View style={[s.notice,narrow&&s.noticeNarrow]}><Ionicons name="information-circle-outline" size={19} color={theme.green2}/><Text style={s.noticeText}>Informações institucionais, fiscais e identidade visual ficam em <Text style={s.noticeStrong}>Empresa</Text>. Aqui ficam somente cadastros e configurações operacionais.</Text></View>
+    <View style={[s.notice,narrow&&s.noticeNarrow,{backgroundColor:brand.primarySoft}]}><Ionicons name="information-circle-outline" size={19} color={brand.primary}/><Text style={s.noticeText}>Informações institucionais, fiscais e identidade visual ficam em <Text style={s.noticeStrong}>Empresa</Text>. Aqui ficam somente cadastros e configurações operacionais.</Text></View>
     {groups.map(group=>{
       const visible=group.cards.filter(c=>c.visible!==false);if(!visible.length)return null;
       return <View key={group.title} style={s.group}>
         <View style={[s.groupHead,narrow&&s.groupHeadNarrow]}><Text style={s.groupTitle}>{group.title}</Text><Text style={s.groupSubtitle}>{group.subtitle}</Text></View>
         <View style={[s.grid,compact&&s.gridCompact]}>{visible.map(card=><Pressable key={card.href} onPress={()=>router.push(card.href as Href)} style={({pressed})=>[s.card,compact&&s.cardCompact,narrow&&s.cardNarrow,pressed&&s.pressed]}>
-          <View style={s.icon}><Ionicons name={card.icon} size={21} color={theme.green2}/></View>
+          <View style={[s.icon,{backgroundColor:brand.primarySoft}]}><Ionicons name={card.icon} size={21} color={brand.primary}/></View>
           <View style={s.cardText}><View style={s.titleRow}><Text style={s.title}>{card.title}</Text>{typeof card.count==='number'&&<View style={s.countBadge}><Text style={s.countText}>{card.count} {card.countLabel}</Text></View>}</View><Text style={s.subtitle}>{card.subtitle}</Text></View>
           <Ionicons name="chevron-forward" size={19} color={theme.muted}/>
         </Pressable>)}</View>

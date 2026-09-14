@@ -10,6 +10,7 @@ import { FormModal } from "../../../components/FormModal";
 import { AsyncState } from "../../../components/AsyncState";
 import { feedbackAlert as Alert } from "../../../components/Feedback";
 import { theme } from "../../../theme";
+import { useTenantBrand } from "../../../tenantBrand";
 type TaskPriority = "low" | "medium" | "high";
 type Assignee = { id: string; name: string; email?: string | null };
 type ProjectTask = {
@@ -102,6 +103,7 @@ const errorMessage = (error: unknown) =>
     ? error.message
     : "Erro inesperado";
 export default function ProjectDetail() {
+  const brand = useTenantBrand();
   const compact = useWindowDimensions().width < 640;
   const { id } = useLocalSearchParams<{ id: string }>();
   const [data, setData] = useState<ProjectDetailData>();
@@ -348,19 +350,19 @@ export default function ProjectDetail() {
       ?.length ?? 0;
   return (
     <AppShell title={data.name}>
-      <View style={s.hero}>
-        <Text style={s.client}>{data.client.name}</Text>
-        <Text style={s.status}>
+      <View style={[s.hero,{backgroundColor:brand.primary}]}>
+        <Text style={[s.client,{color:brand.primaryForeground}]}>{data.client.name}</Text>
+        <Text style={[s.status,{color:brand.primaryForeground,opacity:.68}]}>
           {statusLabels[data.status] ?? data.status} · {data.progress}%
           concluído · Responsável: {data.assignee?.name || "Não definido"}
         </Text>
         {data.quote && (
-          <Text style={s.value}>
+          <Text style={[s.value,{color:brand.secondary}]}>
             {money(data.quote.finalTotalCents || data.quote.totalCents)}
           </Text>
         )}
         <View style={s.track}>
-          <View style={[s.bar, { width: `${data.progress}%` }]} />
+          <View style={[s.bar,{backgroundColor:brand.secondary}, { width: `${data.progress}%` }]} />
         </View>
       </View>
       <View style={s.metrics}>
@@ -399,9 +401,9 @@ export default function ProjectDetail() {
             <Pressable
               disabled={syncingStages}
               onPress={syncQuoteStages}
-              style={[s.syncButton, syncingStages && { opacity: 0.55 }]}
+              style={[s.syncButton,{borderColor:brand.primary,backgroundColor:brand.primarySoft}, syncingStages && { opacity: 0.55 }]}
             >
-              <Text style={s.syncButtonText}>
+              <Text style={[s.syncButtonText,{color:brand.primary}]}>
                 {syncingStages ? "Sincronizando..." : "Sincronizar etapas"}
               </Text>
             </Pressable>
@@ -409,7 +411,7 @@ export default function ProjectDetail() {
           {data.quote.items.map((item, index) => (
             <View key={item.id} style={s.servicePlanItem}>
               <View style={s.servicePlanTitleRow}>
-                <Text style={s.servicePlanNumber}>{index + 1}</Text>
+                <Text style={[s.servicePlanNumber,{backgroundColor:brand.secondarySoft,color:brand.secondary}]}>{index + 1}</Text>
                 <Text style={s.servicePlanTitle}>{item.serviceName}</Text>
                 <Text style={s.servicePlanMeta}>
                   {item.days} dia(s) · {item.people} pessoa(s)
@@ -421,7 +423,7 @@ export default function ProjectDetail() {
                     key={`${item.id}-${stage.sequence}`}
                     style={s.projectStageRow}
                   >
-                    <Text style={s.projectStageSeq}>{stage.sequence}</Text>
+                    <Text style={[s.projectStageSeq,{color:brand.secondary}]}>{stage.sequence}</Text>
                     <Text style={s.projectStageText}>{stage.description}</Text>
                     {stage.duration ? (
                       <Text style={s.projectStageDuration}>
@@ -447,7 +449,7 @@ export default function ProjectDetail() {
             cobrança do cliente e o pagamento do custo.
           </Text>
           {data.status === "in_progress" ? (
-            <View style={s.organizerForm}>
+            <View style={[s.organizerForm,{backgroundColor:brand.primarySoft}]}>
               <SelectField
                 label="Organizador / produto"
                 value={organizerProductId}
@@ -497,10 +499,11 @@ export default function ProjectDetail() {
                 onPress={addOrganizer}
                 style={[
                   s.add,
+                  { backgroundColor: brand.secondary },
                   (savingOrganizer || !organizerProductId) && { opacity: 0.5 },
                 ]}
               >
-                <Text style={s.addText}>
+                <Text style={[s.addText,{color:brand.secondaryForeground}]}>
                   {savingOrganizer
                     ? "Incluindo..."
                     : "Incluir organizador no projeto"}
@@ -557,8 +560,8 @@ export default function ProjectDetail() {
           <Text style={s.notesText}>{data.notes}</Text>
         </View>
       )}
-      <Pressable onPress={() => setEdit(true)} style={s.edit}>
-        <Text style={s.editText}>Editar planejamento</Text>
+      <Pressable onPress={() => setEdit(true)} style={[s.edit,{borderColor:brand.primary}]}>
+        <Text style={[s.editText,{color:brand.primary}]}>Editar planejamento</Text>
       </Pressable>
       <Text style={s.heading}>Status do projeto</Text>
       <View style={s.statusRow}>
@@ -638,8 +641,8 @@ export default function ProjectDetail() {
             </Pressable>
           ))}
         </View>
-        <Pressable onPress={addTask} style={s.add}>
-          <Text style={s.addText}>Adicionar tarefa</Text>
+        <Pressable onPress={addTask} style={[s.add,{backgroundColor:brand.secondary}]}>
+          <Text style={[s.addText,{color:brand.secondaryForeground}]}>Adicionar tarefa</Text>
         </Pressable>
       </View>
       {data.tasks?.length ? (
@@ -719,9 +722,9 @@ export default function ProjectDetail() {
         <Pressable
           disabled={savingNote}
           onPress={addNote}
-          style={[s.add, savingNote && { opacity: 0.55 }]}
+          style={[s.add,{backgroundColor:brand.secondary}, savingNote && { opacity: 0.55 }]}
         >
-          <Text style={s.addText}>
+          <Text style={[s.addText,{color:brand.secondaryForeground}]}>
             {savingNote ? "Registrando..." : "Registrar acompanhamento"}
           </Text>
         </Pressable>
@@ -751,8 +754,8 @@ export default function ProjectDetail() {
         subtitle="Registre período previsto e observações de execução."
         onClose={() => setEdit(false)}
         footer={
-          <Pressable onPress={saveProject} style={s.add}>
-            <Text style={s.addText}>Salvar planejamento</Text>
+          <Pressable onPress={saveProject} style={[s.add,{backgroundColor:brand.secondary}]}>
+            <Text style={[s.addText,{color:brand.secondaryForeground}]}>Salvar planejamento</Text>
           </Pressable>
         }
       >
@@ -778,7 +781,7 @@ export default function ProjectDetail() {
           onChange={setStartDate}
         />
         {data.quote ? (
-          <View style={s.autoDate}>
+          <View style={[s.autoDate,{backgroundColor:brand.primarySoft}]}>
             <Text style={s.formLabel}>Fim previsto</Text>
             <Text style={s.autoDateValue}>
               {endDate ? formatDateBR(endDate) : "Será calculado ao salvar"}

@@ -30,7 +30,7 @@ export function PlatformPlanEditModal({item,onClose,onSave}:{item?:PlatformPlan;
 }
 
 export function NewPlatformTenantModal({visible,onClose,onCreated}:{visible:boolean;onClose:()=>void;onCreated:(result:PlatformTenantCreateResult)=>void|Promise<void>}) {
- const initial={company:'',ownerName:'',ownerEmail:'',phone:'',plan:'pro',period:'monthly'};
+ const initial={company:'',ownerName:'',ownerEmail:'',phone:'',plan:'',period:'monthly'};
  const[form,setForm]=useState(initial),[busy,setBusy]=useState(false),[errors,setErrors]=useState<Record<string,string>>({});
  const set=(key:keyof typeof form,value:string)=>{setForm(current=>({...current,[key]:value}));setErrors(current=>({...current,[key]:''}))};
  const setPhone=(value:string)=>{const digits=value.replace(/\D/g,'').slice(0,11);const masked=digits.length<=10?digits.replace(/^(\d{0,2})(\d{0,4})(\d{0,4}).*/,(_,a,b,c)=>[a&&`(${a}`,a.length===2&&') ',b,c&&`-${c}`].filter(Boolean).join('')):digits.replace(/^(\d{2})(\d{5})(\d{0,4}).*/, '($1) $2-$3');set('phone',masked)};

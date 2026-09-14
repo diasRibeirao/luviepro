@@ -15,6 +15,7 @@ import { useLocalSearchParams } from "expo-router";
 import { ApiError, money, publicApi } from "../../../api";
 import { theme } from "../../../theme";
 import { standardPaymentPlan } from "../paymentPlan";
+import { createTenantBrand } from "../../../tenantBrand";
 type ProposalStage = { description: string };
 type ProposalItem = {
   serviceName: string;
@@ -34,6 +35,8 @@ type ProposalProductItem = {
 };
 type ProposalTenant = {
   logoUrl?: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
   name: string;
   document?: string | null;
   siteUrl?: string | null;
@@ -131,6 +134,7 @@ export default function PublicProposal() {
         <ActivityIndicator color={theme.green} />
       </View>
     );
+  const brand = createTenantBrand(data.tenant.primaryColor, data.tenant.secondaryColor);
   const expired =
     data.expired ??
     (data.validUntil && new Date(data.validUntil).getTime() < Date.now());
@@ -168,7 +172,7 @@ export default function PublicProposal() {
               <Image source={{ uri: data.tenant.logoUrl }} style={s.logo} />
             ) : null}
             <View>
-              <Text style={s.brand}>{data.tenant.name}</Text>
+              <Text style={[s.brand,{color:brand.primary}]}>{data.tenant.name}</Text>
               <Text style={s.muted}>
                 {[
                   data.tenant.document,
@@ -187,7 +191,7 @@ export default function PublicProposal() {
                 : ""}
             </Text>
             {!decided && !expired && remainingDays !== null && (
-              <Text style={s.validBadge}>
+              <Text style={[s.validBadge,{color:brand.primary,backgroundColor:brand.primarySoft}]}>
                 {remainingDays === 0
                   ? "Vence hoje"
                   : remainingDays === 1
@@ -198,7 +202,7 @@ export default function PublicProposal() {
           </View>
         </View>
         <View style={s.rule} />
-        <Text style={s.kicker}>{documentTitle}</Text>
+        <Text style={[s.kicker,{color:brand.secondary}]}>{documentTitle}</Text>
         <Text style={s.hello}>Olá, {data.client.name}</Text>
         {(data.client.document || data.client.city) && (
           <Text style={s.clientMeta}>
@@ -230,7 +234,7 @@ export default function PublicProposal() {
                 </Text>
               )}
             </View>
-            <Text style={[s.itemValue, compact && s.itemValueCompact]}>{money(x.totalCents)}</Text>
+            <Text style={[s.itemValue,{color:brand.primary}, compact && s.itemValueCompact]}>{money(x.totalCents)}</Text>
           </View>
         ))}
         {!!data.productItems?.length && (
@@ -244,16 +248,16 @@ export default function PublicProposal() {
                     {x.sku} · {x.quantity} {x.unit} × {money(x.unitPriceCents)}
                   </Text>
                 </View>
-                <Text style={[s.itemValue, compact && s.itemValueCompact]}>{money(x.totalCents)}</Text>
+                <Text style={[s.itemValue,{color:brand.primary}, compact && s.itemValueCompact]}>{money(x.totalCents)}</Text>
               </View>
             ))}
           </>
         )}
-        <View style={[s.totalRow, compact && s.totalRowCompact]}>
-          <Text style={s.totalLabel}>Investimento total</Text>
-          <Text style={s.total}>{money(proposalTotal)}</Text>
+        <View style={[s.totalRow,{backgroundColor:brand.primary}, compact && s.totalRowCompact]}>
+          <Text style={[s.totalLabel,{color:brand.primaryForeground}]}>Investimento total</Text>
+          <Text style={[s.total,{color:brand.secondary}]}>{money(proposalTotal)}</Text>
         </View>
-        <View style={s.commercial}>
+        <View style={[s.commercial,{backgroundColor:brand.primarySoft}]}>
           <Text style={s.notesTitle}>Plano de pagamento</Text>
           {productOnly ? (
             <>
@@ -362,10 +366,10 @@ export default function PublicProposal() {
               <Pressable
                 disabled={busy}
                 onPress={() => decide("approved")}
-                style={[s.approveBtn, compact && s.actionButtonCompact]}
+                style={[s.approveBtn,{backgroundColor:brand.primary}, compact && s.actionButtonCompact]}
               >
-                <Ionicons name="checkmark" size={17} color={theme.white} />
-                <Text style={s.approveText}>
+                <Ionicons name="checkmark" size={17} color={brand.primaryForeground} />
+                <Text style={[s.approveText,{color:brand.primaryForeground}]}>
                   {busy ? "Registrando..." : "Aprovar proposta"}
                 </Text>
               </Pressable>
@@ -375,10 +379,10 @@ export default function PublicProposal() {
         {data.status === "approved" && data.paymentLinkUrl ? (
           <Pressable
             onPress={() => void Linking.openURL(data.paymentLinkUrl!)}
-            style={s.payBtn}
+            style={[s.payBtn,{backgroundColor:brand.primary}]}
           >
-            <Ionicons name="card-outline" size={18} color={theme.white} />
-            <Text style={s.payText}>Pagar agora</Text>
+            <Ionicons name="card-outline" size={18} color={brand.primaryForeground} />
+            <Text style={[s.payText,{color:brand.primaryForeground}]}>Pagar agora</Text>
           </Pressable>
         ) : null}
       </View>

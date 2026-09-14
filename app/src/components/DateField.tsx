@@ -3,6 +3,7 @@ import { Modal,Pressable,StyleSheet,View } from 'react-native';
 import { Text, TextInput } from '../i18n';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { theme } from '../theme';
+import { useTenantBrand } from '../tenantBrand';
 
 type Props={
   value?:string;
@@ -21,6 +22,7 @@ const week=['SEG','TER','QUA','QUI','SEX','SÁB','DOM'];
 const months=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 export function DateField({value='',onChange,label,placeholder='DD/MM/AAAA',minDate,maxDate,disabled=false,error,helper,required=false}:Props){
+  const brand=useTenantBrand();
   const[display,setDisplay]=useState(formatDateBR(value));
   const[open,setOpen]=useState(false);
   const[viewDate,setViewDate]=useState(()=>dateFromIso(value)||new Date());
@@ -49,25 +51,25 @@ export function DateField({value='',onChange,label,placeholder='DD/MM/AAAA',minD
     <View style={[s.field,error&&s.fieldError,disabled&&s.disabled]}>
       <TextInput value={display} onChangeText={changeText} onBlur={blur} editable={!disabled} placeholder={placeholder} placeholderTextColor={theme.muted} keyboardType="number-pad" maxLength={10} style={s.input}/>
       {display&&!disabled?<Pressable accessibilityLabel="Limpar data" onPress={()=>{setDisplay('');onChange('')}} style={s.iconBtn}><Ionicons name="close-circle" size={17} color={theme.muted}/></Pressable>:null}
-      <Pressable accessibilityLabel="Abrir calendário" disabled={disabled} onPress={()=>setOpen(true)} style={s.iconBtn}><Ionicons name="calendar-outline" size={18} color={disabled?theme.muted:theme.green2}/></Pressable>
+      <Pressable accessibilityLabel="Abrir calendário" disabled={disabled} onPress={()=>setOpen(true)} style={s.iconBtn}><Ionicons name="calendar-outline" size={18} color={disabled?theme.muted:brand.primary}/></Pressable>
     </View>
     {error?<Text style={s.error}>{error}</Text>:helper?<Text style={s.helper}>{helper}</Text>:null}
     <Modal visible={open} transparent animationType="fade" onRequestClose={()=>setOpen(false)}>
       <Pressable style={s.backdrop} onPress={()=>setOpen(false)}>
         <Pressable style={s.calendar} onPress={()=>{}}>
           <View style={s.calHead}>
-            <Pressable onPress={()=>setViewDate(d=>new Date(d.getFullYear(),d.getMonth()-1,1))} style={s.nav}><Ionicons name="chevron-back" size={19} color={theme.green2}/></Pressable>
+            <Pressable onPress={()=>setViewDate(d=>new Date(d.getFullYear(),d.getMonth()-1,1))} style={s.nav}><Ionicons name="chevron-back" size={19} color={brand.primary}/></Pressable>
             <View style={s.monthWrap}><Text style={s.month}>{months[viewDate.getMonth()]}</Text><Text style={s.year}>{viewDate.getFullYear()}</Text></View>
-            <Pressable onPress={()=>setViewDate(d=>new Date(d.getFullYear(),d.getMonth()+1,1))} style={s.nav}><Ionicons name="chevron-forward" size={19} color={theme.green2}/></Pressable>
+            <Pressable onPress={()=>setViewDate(d=>new Date(d.getFullYear(),d.getMonth()+1,1))} style={s.nav}><Ionicons name="chevron-forward" size={19} color={brand.primary}/></Pressable>
           </View>
           <View style={s.week}>{week.map(x=><Text key={x} style={s.weekText}>{x}</Text>)}</View>
           <View style={s.days}>{cells.map((day,index)=>{
             if(!day)return <View key={`e-${index}`} style={s.day}/>;
             const iso=toIso(viewDate.getFullYear(),viewDate.getMonth()+1,day);
             const isSelected=iso===selected;const today=iso===todayIso();const blocked=!withinRange(iso,minDate,maxDate);
-            return <Pressable key={iso} disabled={blocked} onPress={()=>choose(day)} style={[s.day,isSelected&&s.daySelected,today&&!isSelected&&s.dayToday]}><Text style={[s.dayText,isSelected&&s.dayTextSelected,blocked&&s.dayTextDisabled]}>{day}</Text></Pressable>})}</View>
+            return <Pressable key={iso} disabled={blocked} onPress={()=>choose(day)} style={[s.day,isSelected&&{backgroundColor:brand.primary},today&&!isSelected&&{borderWidth:1,borderColor:brand.secondary}]}><Text style={[s.dayText,isSelected&&{color:brand.primaryForeground,fontWeight:'900'},blocked&&s.dayTextDisabled]}>{day}</Text></Pressable>})}</View>
           <View style={s.calFooter}>
-            <Pressable onPress={()=>{const iso=todayIso();if(withinRange(iso,minDate,maxDate)){onChange(iso);setDisplay(formatDateBR(iso));setOpen(false)}}} style={s.today}><Text style={s.todayText}>Hoje</Text></Pressable>
+            <Pressable onPress={()=>{const iso=todayIso();if(withinRange(iso,minDate,maxDate)){onChange(iso);setDisplay(formatDateBR(iso));setOpen(false)}}} style={s.today}><Text style={[s.todayText,{color:brand.primary}]}>Hoje</Text></Pressable>
             <Pressable onPress={()=>setOpen(false)} style={s.cancel}><Text style={s.cancelText}>Cancelar</Text></Pressable>
           </View>
         </Pressable>

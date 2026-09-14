@@ -20,6 +20,14 @@ describe('AccountService', () => {
         findFirst: jest.fn().mockResolvedValue(null),
       },
       userInvitation: { count: jest.fn().mockResolvedValue(1) },
+      subscription: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'sub-trial',
+          status: 'trial',
+          startsAt: new Date('2026-09-01T00:00:00Z'),
+          expiresAt: new Date('2026-09-30T00:00:00Z'),
+        }),
+      },
     };
     const subscriptions: any = {
       activateScheduledIfDue: jest.fn().mockResolvedValue({ id: 't1', plan: 'pro' }),
@@ -27,6 +35,16 @@ describe('AccountService', () => {
 
     const result = await new AccountService(db, subscriptions).account('t1');
 
+    expect(result.subscription).toEqual(expect.objectContaining({
+      id: 'sub-trial',
+      status: 'trial',
+    }));
+    expect(db.subscription.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        tenantId: 't1',
+        status: { in: ['active', 'trial'] },
+      }),
+    }));
     expect(result.usage.users).toBe(1);
     expect(result.usage.pendingInvitations).toBe(1);
     expect(result.usage.userSeatsUsed).toBe(2);
@@ -76,6 +94,14 @@ describe('AccountService', () => {
       },
       user: { count: jest.fn().mockResolvedValue(1) },
       userInvitation: { count: jest.fn().mockResolvedValue(1) },
+      subscription: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'sub-trial',
+          status: 'trial',
+          startsAt: new Date('2026-09-01T00:00:00Z'),
+          expiresAt: new Date('2026-09-30T00:00:00Z'),
+        }),
+      },
     };
     const db: any = {
       ...tx,

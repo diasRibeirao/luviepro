@@ -7,6 +7,7 @@ import {AsyncState} from '../../../components/AsyncState';
 import {Text,useI18n} from '../../../i18n';
 import {api} from '../../../api';
 import {theme} from '../../../theme';
+import {useTenantBrand} from '../../../tenantBrand';
 import {notificationHref} from '../notificationNavigation';
 
 type NotificationType='quote'|'calendar'|'task'|'task_due'|'project_due'|string;
@@ -17,6 +18,7 @@ type ToggleProps={label:string;description:string;value:boolean;onValueChange:(v
 
 export default function Notifications(){
  const{locale}=useI18n();
+ const brand=useTenantBrand();
  const width=useWindowDimensions().width;
  const compact=width<760,narrow=width<520;
  const[rows,setRows]=useState<NotificationRecord[]>([]),[prefs,setPrefs]=useState<NotificationPreferences>(),[loading,setLoading]=useState(true),[error,setError]=useState(''),[filter,setFilter]=useState<Filter>('all'),[showPrefs,setShowPrefs]=useState(false);
@@ -34,12 +36,12 @@ export default function Notifications(){
    <View style={s.page}>
     <View style={[s.actions,compact&&s.actionsCompact]}>
      <Pressable accessibilityRole="button" onPress={()=>setShowPrefs(true)} style={[s.actionSecondary,narrow&&s.actionNarrow]}>
-      <Ionicons name="options-outline" size={17} color={theme.green2}/>
+      <Ionicons name="options-outline" size={17} color={brand.primary}/>
       <Text style={s.actionSecondaryText}>Preferências</Text>
      </Pressable>
-     {unreadCount>0?<Pressable accessibilityRole="button" onPress={markAll} style={[s.actionPrimary,narrow&&s.actionNarrow]}>
-      <Ionicons name="checkmark-done-outline" size={18} color="white"/>
-      <Text style={s.actionPrimaryText}>Marcar todas como lidas</Text>
+     {unreadCount>0?<Pressable accessibilityRole="button" onPress={markAll} style={[s.actionPrimary,{backgroundColor:brand.primary},narrow&&s.actionNarrow]}>
+      <Ionicons name="checkmark-done-outline" size={18} color={brand.primaryForeground}/>
+      <Text style={[s.actionPrimaryText,{color:brand.primaryForeground}]}>Marcar todas como lidas</Text>
      </Pressable>:null}
     </View>
 
@@ -53,12 +55,12 @@ export default function Notifications(){
 
     <View style={s.list}>
      {visible.length===0?<View style={s.empty}>
-      <Ionicons name="notifications-outline" size={30} color={theme.gold}/>
+      <Ionicons name="notifications-outline" size={30} color={brand.secondary}/>
       <Text style={s.emptyTitle}>Tudo em dia</Text>
       <Text style={s.muted}>Não há notificações neste filtro.</Text>
-     </View>:visible.map(n=><Pressable accessibilityRole="button" key={n.id} onPress={()=>read(n)} style={({pressed})=>[s.item,narrow&&s.itemNarrow,!n.readAt&&s.unread,pressed&&s.pressed]}>
-      <View style={[s.icon,n.type==='quote'&&s.iconGold]}>
-       <Ionicons name={n.type==='calendar'?'calendar-outline':n.type==='task'||n.type==='task_due'?'checkbox-outline':n.type==='project_due'?'briefcase-outline':'notifications-outline'} size={19} color={theme.green}/>
+     </View>:visible.map(n=><Pressable accessibilityRole="button" key={n.id} onPress={()=>read(n)} style={({pressed})=>[s.item,narrow&&s.itemNarrow,!n.readAt&&s.unread,!n.readAt&&{borderColor:brand.primary,backgroundColor:brand.primarySoft},pressed&&s.pressed]}>
+      <View style={[s.icon,{backgroundColor:brand.primarySoft},n.type==='quote'&&{backgroundColor:brand.secondarySoft}]}>
+       <Ionicons name={n.type==='calendar'?'calendar-outline':n.type==='task'||n.type==='task_due'?'checkbox-outline':n.type==='project_due'?'briefcase-outline':'notifications-outline'} size={19} color={brand.primary}/>
       </View>
       <View style={s.itemBody}>
        <View style={s.titleRow}><Text style={s.title}>{n.title}</Text>{!n.readAt&&<View style={s.dot}/>}</View>
@@ -76,13 +78,14 @@ export default function Notifications(){
 }
 
 function PreferencesModal({visible,prefs,narrow,onClose,onToggle}:{visible:boolean;prefs?:NotificationPreferences;narrow:boolean;onClose:()=>void;onToggle:(key:string,value:boolean)=>Promise<void>}){
+ const brand=useTenantBrand();
  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
   <View style={[s.modalRoot,narrow&&s.modalRootNarrow]}>
    <Pressable accessibilityRole="button" accessibilityLabel="Fechar preferências" style={s.backdrop} onPress={onClose}/>
    <View style={[s.modalCard,narrow&&s.modalCardNarrow]}>
     <View style={[s.modalHead,narrow&&s.modalHeadNarrow]}>
      <View style={s.modalHeading}>
-      <View style={s.modalIcon}><Ionicons name="options-outline" size={20} color={theme.green2}/></View>
+      <View style={[s.modalIcon,{backgroundColor:brand.primarySoft}]}><Ionicons name="options-outline" size={20} color={brand.primary}/></View>
       <View style={s.modalHeadingText}>
        <Text style={s.modalTitle}>Preferências de notificações</Text>
        <Text style={s.modalSubtitle}>Escolha quais avisos deseja receber no LuviePro.</Text>
@@ -106,7 +109,7 @@ function PreferencesModal({visible,prefs,narrow,onClose,onToggle}:{visible:boole
 
     <View style={[s.modalFooter,narrow&&s.modalFooterNarrow]}>
      <Text style={s.modalHint}>As alterações são salvas automaticamente.</Text>
-     <Pressable accessibilityRole="button" onPress={onClose} style={[s.doneButton,narrow&&s.doneButtonNarrow]}>
+     <Pressable accessibilityRole="button" onPress={onClose} style={[s.doneButton,{backgroundColor:brand.primary},narrow&&s.doneButtonNarrow]}>
       <Text style={s.doneButtonText}>Concluir</Text>
      </Pressable>
     </View>
@@ -115,12 +118,55 @@ function PreferencesModal({visible,prefs,narrow,onClose,onToggle}:{visible:boole
  </Modal>
 }
 
-function FilterPill({label,active,onPress}:{label:string;active:boolean;onPress:()=>void}){return <Pressable accessibilityRole="button" onPress={onPress} style={[s.filter,active&&s.filterActive]}><Text style={[s.filterText,active&&s.filterTextActive]}>{label}</Text></Pressable>}
+function FilterPill({label,active,onPress}:{label:string;active:boolean;onPress:()=>void}){
+ const brand=useTenantBrand();
 
-function Toggle({label,description,value,onValueChange,compact=false}:ToggleProps&{compact?:boolean}){return <View style={[s.preferenceRow,compact&&s.preferenceRowCompact]}>
- <View style={s.preferenceCopy}><Text style={s.toggleLabel}>{label}</Text><Text style={s.toggleDescription}>{description}</Text></View>
- <Switch accessibilityLabel={label} value={value} onValueChange={onValueChange} trackColor={{true:theme.green3,false:theme.border}} thumbColor={value?theme.white:theme.white}/>
-</View>}
+ return (
+  <Pressable
+   onPress={onPress}
+   style={[
+    s.filter,
+    active&&{
+     borderColor:brand.primary,
+     backgroundColor:brand.primarySoft
+    }
+   ]}
+  >
+   <Text
+    style={[
+     s.filterText,
+     active&&{color:brand.primary}
+    ]}
+   >
+    {label}
+   </Text>
+  </Pressable>
+ );
+}
+
+function Toggle({label,description,value,onValueChange,compact=false}:ToggleProps&{compact?:boolean}){
+ const brand=useTenantBrand();
+
+ return (
+  <View style={[s.preferenceRow,compact&&s.preferenceRowCompact]}>
+   <View style={s.preferenceCopy}>
+    <Text style={s.toggleLabel}>{label}</Text>
+    <Text style={s.toggleDescription}>{description}</Text>
+   </View>
+
+   <Switch
+    accessibilityLabel={label}
+    value={value}
+    onValueChange={onValueChange}
+    trackColor={{
+     true:brand.primary,
+     false:theme.border
+    }}
+    thumbColor={theme.white}
+   />
+  </View>
+ );
+}
 
 const s=StyleSheet.create({
  page:{width:'100%',gap:14},

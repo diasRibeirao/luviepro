@@ -3,25 +3,27 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Modal,Pressable,StyleSheet,useWindowDimensions,View } from 'react-native';
 import { Text } from '../i18n';
 import { theme } from '../theme';
+import { useTenantBrand } from '../tenantBrand';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export type SortOption={value:string;label:string};
 
 export function SortMenu({value,options,onChange}:{value:string;options:SortOption[];onChange:(value:string)=>void}){
+  const brand=useTenantBrand();
   const[open,setOpen]=useState(false);
   const mobile=useWindowDimensions().width<620;
   const insets=useSafeAreaInsets();
   const current=options.find(option=>option.value===value)?.label??'Ordenar';
   return <>
     <Pressable accessibilityLabel="Ordenar resultados" onPress={()=>setOpen(true)} style={({pressed})=>[s.sortButton,pressed&&s.pressed]}>
-      <Ionicons name="swap-vertical-outline" size={15} color={theme.green2}/><Text numberOfLines={1} style={s.sortText}>{current}</Text><Ionicons name="chevron-down" size={13} color={theme.muted}/>
+      <Ionicons name="swap-vertical-outline" size={15} color={brand.primary}/><Text numberOfLines={1} style={s.sortText}>{current}</Text><Ionicons name="chevron-down" size={13} color={theme.muted}/>
     </Pressable>
     <Modal visible={open} transparent animationType="fade" presentationStyle="overFullScreen" onRequestClose={()=>setOpen(false)}>
       <Pressable style={[s.backdrop,mobile&&s.backdropMobile]} onPress={()=>setOpen(false)}>
         <Pressable style={[s.menu,mobile&&s.sheet,{paddingBottom:Math.max(12,insets.bottom+8)}]} onPress={()=>{}}>
           <Text style={s.menuTitle}>Ordenar por</Text>
-          {options.map(option=><Pressable key={option.value} onPress={()=>{onChange(option.value);setOpen(false)}} style={({pressed})=>[s.option,option.value===value&&s.optionOn,pressed&&s.pressed]}>
-            <Text style={[s.optionText,option.value===value&&s.optionTextOn]}>{option.label}</Text>{option.value===value?<Ionicons name="checkmark" size={16} color={theme.green2}/>:null}
+          {options.map(option=><Pressable key={option.value} onPress={()=>{onChange(option.value);setOpen(false)}} style={({pressed})=>[s.option,option.value===value&&s.optionOn,option.value===value&&{backgroundColor:brand.primarySoft},pressed&&s.pressed]}>
+            <Text style={[s.optionText,option.value===value&&s.optionTextOn,option.value===value&&{color:brand.primary}]}>{option.label}</Text>{option.value===value?<Ionicons name="checkmark" size={16} color={brand.primary}/>:null}
           </Pressable>)}
         </Pressable>
       </Pressable>
@@ -30,6 +32,7 @@ export function SortMenu({value,options,onChange}:{value:string;options:SortOpti
 }
 
 export function Pagination({page,total,pageSize=10,onChange}:{page:number;total:number;pageSize?:number;onChange:(page:number)=>void}){
+  const brand=useTenantBrand();
   const compact=useWindowDimensions().width<560;
   const pages=Math.max(1,Math.ceil(total/pageSize));
   if(total<=pageSize)return null;
@@ -39,9 +42,9 @@ export function Pagination({page,total,pageSize=10,onChange}:{page:number;total:
   return <View style={[s.pagination,compact&&s.paginationCompact]}>
     <Text style={[s.range,compact&&s.rangeCompact]}>{start}–{end} de {total}</Text>
     <View style={[s.pageActions,compact&&s.pageActionsCompact]}>
-      <Pressable disabled={safePage===1} onPress={()=>onChange(safePage-1)} style={({pressed})=>[s.pageButton,safePage===1&&s.disabled,pressed&&s.pressed]}><Ionicons name="chevron-back" size={14} color={theme.green2}/></Pressable>
-      {numbers.map((value,index)=>value==='…'?<Text key={`dots-${index}`} style={s.dots}>…</Text>:<Pressable key={value} onPress={()=>onChange(Number(value))} style={({pressed})=>[s.pageButton,Number(value)===safePage&&s.pageOn,pressed&&s.pressed]}><Text style={[s.pageText,Number(value)===safePage&&s.pageTextOn]}>{value}</Text></Pressable>)}
-      <Pressable disabled={safePage===pages} onPress={()=>onChange(safePage+1)} style={({pressed})=>[s.pageButton,safePage===pages&&s.disabled,pressed&&s.pressed]}><Ionicons name="chevron-forward" size={14} color={theme.green2}/></Pressable>
+      <Pressable disabled={safePage===1} onPress={()=>onChange(safePage-1)} style={({pressed})=>[s.pageButton,safePage===1&&s.disabled,pressed&&s.pressed]}><Ionicons name="chevron-back" size={14} color={brand.primary}/></Pressable>
+      {numbers.map((value,index)=>value==='…'?<Text key={`dots-${index}`} style={s.dots}>…</Text>:<Pressable key={value} onPress={()=>onChange(Number(value))} style={({pressed})=>[s.pageButton,Number(value)===safePage&&s.pageOn,Number(value)===safePage&&{backgroundColor:brand.primary,borderColor:brand.primary},pressed&&s.pressed]}><Text style={[s.pageText,{color:brand.primary},Number(value)===safePage&&s.pageTextOn,Number(value)===safePage&&{color:brand.primaryForeground}]}>{value}</Text></Pressable>)}
+      <Pressable disabled={safePage===pages} onPress={()=>onChange(safePage+1)} style={({pressed})=>[s.pageButton,safePage===pages&&s.disabled,pressed&&s.pressed]}><Ionicons name="chevron-forward" size={14} color={brand.primary}/></Pressable>
     </View>
   </View>
 }
@@ -49,17 +52,18 @@ export function Pagination({page,total,pageSize=10,onChange}:{page:number;total:
 type IoniconName=ComponentProps<typeof Ionicons>['name'];
 export type ActionItem={label:string;icon?:IoniconName;danger?:boolean;disabled?:boolean;onPress:()=>void};
 export function ActionMenu({items}:{items:ActionItem[]}){
+  const brand=useTenantBrand();
   const[open,setOpen]=useState(false);
   const mobile=useWindowDimensions().width<620;
   const insets=useSafeAreaInsets();
   return <>
-    <Pressable accessibilityLabel="Abrir ações" onPress={()=>setOpen(true)} style={({pressed})=>[s.more,pressed&&s.pressed]}><Ionicons name="ellipsis-horizontal" size={18} color={theme.green2}/></Pressable>
+    <Pressable accessibilityLabel="Abrir ações" onPress={()=>setOpen(true)} style={({pressed})=>[s.more,pressed&&s.pressed]}><Ionicons name="ellipsis-horizontal" size={18} color={brand.primary}/></Pressable>
     <Modal visible={open} transparent animationType="fade" presentationStyle="overFullScreen" onRequestClose={()=>setOpen(false)}>
       <Pressable style={[s.backdrop,mobile&&s.backdropMobile]} onPress={()=>setOpen(false)}>
         <Pressable style={[s.actionSheet,mobile&&s.sheet,{paddingBottom:Math.max(12,insets.bottom+8)}]} onPress={()=>{}}>
           <Text style={s.menuTitle}>Ações</Text>
           {items.map((item,index)=><Pressable key={`${item.label}-${index}`} disabled={item.disabled} onPress={()=>{setOpen(false);item.onPress()}} style={({pressed})=>[s.actionItem,item.disabled&&s.disabled,pressed&&s.pressed]}>
-            <Ionicons name={item.icon??'chevron-forward-outline'} size={17} color={item.danger?theme.danger:theme.green2}/><Text style={[s.actionLabel,item.danger&&s.actionDanger]}>{item.label}</Text>
+            <Ionicons name={item.icon??'chevron-forward-outline'} size={17} color={item.danger?theme.danger:brand.primary}/><Text style={[s.actionLabel,item.danger&&s.actionDanger]}>{item.label}</Text>
           </Pressable>)}
           <Pressable onPress={()=>setOpen(false)} style={s.close}><Text style={s.closeText}>Cancelar</Text></Pressable>
         </Pressable>

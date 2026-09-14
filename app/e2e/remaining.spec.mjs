@@ -218,14 +218,72 @@ test('pagamento recusado oferece nova tentativa',async({page})=>{
   await expect(page.getByText(/Limite ou saldo insuficiente/)).toBeVisible();
 });
 
-test('pagamento pendente permite atualizar status',async({page})=>{
+test('pagamento pendente permite atualizar status e libera a sessão após aprovação',async({page})=>{
   const history=await mockBillingApi(page,{payments:[pendingPayment()]});
-  await mockSettingsApi(page);
-  await loginAsUser(page,{...defaultLoginResponse,tenant:{plan:'business'}});
-  await openAuthenticatedRoute(page,'/plans');
+  await mockSettingsApi(page,{
+    account:{
+      ...businessAccount,
+      tenant:{
+        ...businessAccount.tenant,
+        onboardingCompletedAt:'2026-09-01T12:00:00.000Z',
+      },
+    },
+  });
+
+  let refreshCalls=0;
+  await page.route(/\/api\/auth\/refresh\/?$/,route=>{
+    refreshCalls+=1;
+    return route.fulfill({
+      status:200,
+      contentType:'application/json',
+      body:JSON.stringify({
+        ...defaultLoginResponse,
+        tenant:{
+          ...defaultLoginResponse.tenant,
+          plan:'business',
+          status:'active',
+          subscriptionExpiresAt:'2099-12-31T23:59:59.000Z',
+        },
+      }),
+    });
+  });
+
+  const restrictedResponse={
+    ...defaultLoginResponse,
+    tenant:{
+      ...defaultLoginResponse.tenant,
+      plan:'business',
+      status:'payment_review',
+      subscriptionExpiresAt:'2099-12-31T23:59:59.000Z',
+    },
+  };
+
+  await page.route(/\/api\/auth\/login\/?$/,route=>{
+    if(route.request().method()!=='POST')return route.continue();
+    return route.fulfill({
+      status:200,
+      contentType:'application/json',
+      body:JSON.stringify(restrictedResponse),
+    });
+  });
+
+  await page.goto('/',{waitUntil:'domcontentloaded'});
+  await expect(page.getByText('Bem-vinda de volta')).toBeVisible({timeout:8_000});
+  await page.getByPlaceholder('seu@email.com').fill(restrictedResponse.user.email);
+  await page.getByPlaceholder('Sua senha').fill('senha-e2e');
+  await page.getByText('Entrar',{exact:true}).click();
+
+  await expect(page).toHaveURL(/\/plans$/);
+
   await page.getByText('Atualizar status',{exact:true}).click();
+
   await expect(page.getByText('Status atualizado',{exact:true})).toBeVisible();
+
   expect(history[0].status).toBe('approved');
+  expect(refreshCalls).toBe(1);
+
+  await expect(page).not.toHaveURL(/\/plans$/);
+  await expect(page).toHaveURL(/\/home$/);
 });
 
 test('erro no checkout é informado ao usuário',async({page})=>{

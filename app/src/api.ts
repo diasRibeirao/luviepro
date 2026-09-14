@@ -49,18 +49,32 @@ async function request(url:string,init:RequestInit={}){
 }
 let token='';
 let refreshToken='';
-export type Session={id?:string;name:string;email:string;role?:string;plan:string;tenantStatus?:string;subscriptionExpiresAt?:string|null;customProfileId?:string|null;customProfileName?:string|null;permissions?:string[]};
+export type Session={id?:string;name:string;email:string;role?:string;plan:string;tenantStatus?:string;subscriptionExpiresAt?:string|null;primaryColor?:string|null;secondaryColor?:string|null;logoUrl?:string|null;customProfileId?:string|null;customProfileName?:string|null;permissions?:string[]};
 let session:Session|undefined;
+
+type SessionListener=()=>void;
+const sessionListeners=new Set<SessionListener>();
+
+export function subscribeSession(listener:SessionListener){
+  sessionListeners.add(listener);
+  return ()=>{sessionListeners.delete(listener);};
+}
+
+function emitSessionChanged(){
+  for(const listener of [...sessionListeners]){
+    listener();
+  }
+}
 let refreshPromise:Promise<boolean>|undefined;
 export class ApiError extends Error{constructor(message:string,public status:number,public requestId?:string,public code?:string){super(message);this.name='ApiError';}}
 export function setToken(value:string){token=value;void persistAuth();}
-export function setSession(value:Session){session=value;void persistAuth();}
+export function setSession(value:Session){session=value;void persistAuth();emitSessionChanged();}
 export function getSession(){return session;}
 export function setSessionPlan(plan:string){if(session){session={...session,plan};void persistAuth();}}
 export function hasToken(){return !!token;}
 async function persistAuth(){if(session&&(Platform.OS==='web'||(token&&refreshToken))){const payload=Platform.OS==='web'?{session}:{token,refreshToken,session};await writeAuth(JSON.stringify(payload));}else await clearAuth();}
-export type AuthSessionResponse={token:string;refreshToken?:string;platform?:boolean;user:{id?:string;name:string;email:string;role?:string;customProfileId?:string|null;customProfileName?:string|null;permissions?:string[]};tenant?:{plan:string;status?:string;subscriptionExpiresAt?:string|null}};
-export function establishSession(value:AuthSessionResponse){token=value.token;if(Platform.OS!=='web')refreshToken=value.refreshToken??'';session={id:value.user.id,name:value.user.name,email:value.user.email,role:value.user.role,customProfileId:value.user.customProfileId,customProfileName:value.user.customProfileName,permissions:value.user.permissions??[],plan:value.tenant?.plan??(value.platform?'platform':'starter'),tenantStatus:value.tenant?.status,subscriptionExpiresAt:value.tenant?.subscriptionExpiresAt??null};void persistAuth();}
+export type AuthSessionResponse={token:string;refreshToken?:string;platform?:boolean;user:{id?:string;name:string;email:string;role?:string;customProfileId?:string|null;customProfileName?:string|null;permissions?:string[]};tenant?:{plan:string;status?:string;subscriptionExpiresAt?:string|null;primaryColor?:string|null;secondaryColor?:string|null;logoUrl?:string|null}};
+export function establishSession(value:AuthSessionResponse){token=value.token;if(Platform.OS!=='web')refreshToken=value.refreshToken??'';session={id:value.user.id,name:value.user.name,email:value.user.email,role:value.user.role,customProfileId:value.user.customProfileId,customProfileName:value.user.customProfileName,permissions:value.user.permissions??[],plan:value.tenant?.plan??(value.platform?'platform':'starter'),tenantStatus:value.tenant?.status,subscriptionExpiresAt:value.tenant?.subscriptionExpiresAt??null,primaryColor:value.tenant?.primaryColor??null,secondaryColor:value.tenant?.secondaryColor??null,logoUrl:value.tenant?.logoUrl??null};void persistAuth();emitSessionChanged();}
 let nativeHydratePromise:Promise<boolean>|undefined;
 async function hydrateNativeAuth(){
   if(Platform.OS==='web')return false;
@@ -70,9 +84,10 @@ async function hydrateNativeAuth(){
   return nativeHydratePromise;
 }
 export async function restoreSession(){try{if(Platform.OS==='web'){const raw=await readAuth();token='';refreshToken='';if(!raw){session=undefined;return false;}const parsed=JSON.parse(raw);if(!parsed?.session){clearSession();return false;}session=parsed.session;return renew();}return hydrateNativeAuth();}catch{clearSession();return false;}}
-export function clearSession(){token='';refreshToken='';session=undefined;void clearAuth();}
+export function clearSession(){token='';refreshToken='';session=undefined;void clearAuth();emitSessionChanged();}
 async function parseError(res:Response){const body=await res.json().catch(()=>({message:'Erro de conexão'}));const message=Array.isArray(body?.message)?body.message.join('; '):(body?.message??`Erro HTTP ${res.status}`);return new ApiError(message,res.status,body?.requestId??res.headers.get('x-request-id')??undefined,body?.code);}
 async function renew(){if(Platform.OS!=='web'&&!refreshToken)return false;if(refreshPromise)return refreshPromise;refreshPromise=(async()=>{try{const web=Platform.OS==='web';const res=await request(`${base}/auth/refresh`,{method:'POST',headers:{'Content-Type':'application/json',...(web?{'X-Auth-Client':'web'}:{})},body:JSON.stringify(web?{}:{refreshToken})});if(!res.ok){clearSession();return false;}establishSession(await res.json());return true;}catch{clearSession();return false;}finally{refreshPromise=undefined;}})();return refreshPromise;}
+export async function refreshSession(){return renew();}
 export async function logout(){try{if(token)await request(`${base}/auth/logout`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'}});}finally{clearSession();}}
 export async function api<T=unknown>(path:string,init:RequestInit={},retry=true):Promise<T>{
   let res:Response;

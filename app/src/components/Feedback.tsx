@@ -5,6 +5,7 @@ import { Modal,Platform,Pressable,StyleSheet,type ViewStyle,useWindowDimensions,
 import { Text } from '../i18n';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../theme';
+import { useTenantBrand } from '../tenantBrand';
 
 type Tone='success'|'error'|'info';
 type IoniconName=ComponentProps<typeof Ionicons>['name'];
@@ -16,6 +17,7 @@ let activeNotify:FeedbackValue['notify']|undefined;
 export const feedbackAlert={alert:(title:string,message?:string)=>activeNotify?.({tone:title.toLowerCase().includes('não')?'error':'success',title,message})};
 
 export function FeedbackProvider({children}:{children:ReactNode}){
+  const brand=useTenantBrand();
   const insets=useSafeAreaInsets();
   const desktop=useWindowDimensions().width>=900;
   const[toast,setToast]=useState<(ToastInput&{id:number})>();
@@ -28,9 +30,9 @@ export function FeedbackProvider({children}:{children:ReactNode}){
   const tone=toast?.tone??'info';
   const icon:IoniconName=tone==='success'?'checkmark-circle':tone==='error'?'alert-circle':'information-circle';
 
-  const toastContent=toast&&<View pointerEvents="box-none" style={[s.toastLayer,desktop&&s.toastLayerDesktop,Platform.OS!=='web'&&{top:insets.top+16}]}><Pressable onPress={()=>setToast(undefined)} style={[s.toast,tone==='success'&&s.toastSuccess,tone==='error'&&s.toastError]}><View style={[s.toastIcon,tone==='success'&&s.iconSuccess,tone==='error'&&s.iconError]}><Ionicons name={icon} size={20} color={tone==='success'?'#287348':tone==='error'?theme.danger:theme.green2}/></View><View style={s.toastText}><Text style={s.toastTitle}>{toast.title}</Text>{toast.message&&<Text style={s.toastMessage}>{toast.message}</Text>}</View><Ionicons name="close" size={17} color={theme.muted}/></Pressable></View>;
+  const toastContent=toast&&<View pointerEvents="box-none" style={[s.toastLayer,desktop&&s.toastLayerDesktop,Platform.OS!=='web'&&{top:insets.top+16}]}><Pressable onPress={()=>setToast(undefined)} style={[s.toast,{borderLeftColor:brand.primary},tone==='success'&&s.toastSuccess,tone==='error'&&s.toastError]}><View style={[s.toastIcon,{backgroundColor:brand.primarySoft},tone==='success'&&s.iconSuccess,tone==='error'&&s.iconError]}><Ionicons name={icon} size={20} color={tone==='success'?'#287348':tone==='error'?theme.danger:brand.primary}/></View><View style={s.toastText}><Text style={s.toastTitle}>{toast.title}</Text>{toast.message&&<Text style={s.toastMessage}>{toast.message}</Text>}</View><Ionicons name="close" size={17} color={theme.muted}/></Pressable></View>;
 
-  const dialogContent=dialog&&<View style={s.overlay}><Pressable style={StyleSheet.absoluteFill} onPress={()=>answer(false)}/><View style={s.dialog}><View style={[s.dialogIcon,dialog.danger&&s.dialogIconDanger]}><Ionicons name={dialog.danger?'warning-outline':'help-circle-outline'} size={25} color={dialog.danger?theme.danger:theme.green2}/></View><Text style={s.dialogTitle}>{dialog.title}</Text><Text style={s.dialogMessage}>{dialog.message}</Text><View style={s.actions}><Pressable onPress={()=>answer(false)} style={s.cancel}><Text style={s.cancelText}>{dialog.cancelLabel??'Cancelar'}</Text></Pressable><Pressable onPress={()=>answer(true)} style={[s.confirm,dialog.danger&&s.confirmDanger]}><Text style={[s.confirmText,dialog.danger&&s.confirmTextDanger]}>{dialog.confirmLabel??'Confirmar'}</Text></Pressable></View></View></View>;
+  const dialogContent=dialog&&<View style={s.overlay}><Pressable style={StyleSheet.absoluteFill} onPress={()=>answer(false)}/><View style={s.dialog}><View style={[s.dialogIcon,{backgroundColor:brand.primarySoft},dialog.danger&&s.dialogIconDanger]}><Ionicons name={dialog.danger?'warning-outline':'help-circle-outline'} size={25} color={dialog.danger?theme.danger:brand.primary}/></View><Text style={s.dialogTitle}>{dialog.title}</Text><Text style={s.dialogMessage}>{dialog.message}</Text><View style={s.actions}><Pressable onPress={()=>answer(false)} style={s.cancel}><Text style={s.cancelText}>{dialog.cancelLabel??'Cancelar'}</Text></Pressable><Pressable onPress={()=>answer(true)} style={[s.confirm,{backgroundColor:brand.secondary},dialog.danger&&s.confirmDanger]}><Text style={[s.confirmText,{color:brand.secondaryForeground},dialog.danger&&s.confirmTextDanger]}>{dialog.confirmLabel??'Confirmar'}</Text></Pressable></View></View></View>;
 
   const webToast=Platform.OS==='web'&&toast&&typeof document!=='undefined'
     ? createPortal(<View pointerEvents="box-none" style={s.webToastHost}>{toastContent}</View>,document.body)

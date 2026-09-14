@@ -9,6 +9,7 @@ import { theme } from '../../../theme';
 import {quotesApi} from '../api/quotes.api';
 import type {AccountData,ProposalData} from '../types/quote.types';
 import {standardPaymentPlan} from '../paymentPlan';
+import {createTenantBrand} from '../../../tenantBrand';
 const errorMessage=(error:unknown)=>{if(error instanceof ApiError)return error.message;if(error instanceof Error)return error.message;return 'Não foi possível carregar a proposta'};
 
 const printCss = `
@@ -80,6 +81,7 @@ export default function QuoteProposalScreen(){
   if(!data||!account)return <View style={s.statePage}>{webPrintStyle}<AsyncState loading/></View>;
 
   const tenant=account.tenant??account;
+  const brand=createTenantBrand(tenant.primaryColor,tenant.secondaryColor);
   const proposalTotal=data.finalTotalCents||data.totalCents;
   const payment=standardPaymentPlan(proposalTotal);
   const hasServices=data.items.length>0;
@@ -92,25 +94,25 @@ export default function QuoteProposalScreen(){
 
     <View nativeID="proposal-actions" style={[s.actions,tablet&&s.actionsTablet,compact&&s.actionsCompact]}>
       <Pressable onPress={()=>router.back()} style={s.backButton}>
-        <Text style={s.backText}>← Voltar ao orçamento</Text>
+        <Text style={[s.backText,{color:brand.primary}]}>← Voltar ao orçamento</Text>
       </Pressable>
 
-      {Platform.OS==='web'&&<Pressable onPress={()=>globalThis.window?.print()} style={s.print}>
-        <Text style={s.printText}>Imprimir / Salvar PDF</Text>
+      {Platform.OS==='web'&&<Pressable onPress={()=>globalThis.window?.print()} style={[s.print,{backgroundColor:brand.secondary}]}>
+        <Text style={[s.printText,{color:brand.secondaryForeground}]}>Imprimir / Salvar PDF</Text>
       </Pressable>}
     </View>
 
     <ScrollView nativeID="proposal-scroll" contentContainerStyle={[s.scrollContent,tablet&&s.scrollContentTablet,compact&&s.scrollContentCompact]}>
       <View nativeID="proposal-page" style={[s.paper,tablet&&s.paperTablet,compact&&s.paperCompact]}>
         <View style={[s.header,compact&&s.headerCompact]}>
-          <View style={s.companyBlock}><View style={[s.brandRow,compact&&s.brandRowCompact]}>{tenant.logoUrl?<Image source={{uri:tenant.logoUrl}} style={s.logo}/>:null}<View style={{flex:1}}><Text style={s.brand}>{tenant.name}</Text><Text style={s.sub}>{[tenant.document,tenant.contactEmail,tenant.phone].filter(Boolean).join(' · ')}</Text><Text style={s.sub}>{[[tenant.addressLine,tenant.addressNumber].filter(Boolean).join(', '),tenant.city&&tenant.state?`${tenant.city}/${tenant.state}`:tenant.city].filter(Boolean).join(' · ')}</Text></View></View></View>
+          <View style={s.companyBlock}><View style={[s.brandRow,compact&&s.brandRowCompact]}>{tenant.logoUrl?<Image source={{uri:tenant.logoUrl}} style={s.logo}/>:null}<View style={{flex:1}}><Text style={[s.brand,{color:brand.primary}]}>{tenant.name}</Text><Text style={s.sub}>{[tenant.document,tenant.contactEmail,tenant.phone].filter(Boolean).join(' · ')}</Text><Text style={s.sub}>{[[tenant.addressLine,tenant.addressNumber].filter(Boolean).join(', '),tenant.city&&tenant.state?`${tenant.city}/${tenant.state}`:tenant.city].filter(Boolean).join(' · ')}</Text></View></View></View>
           <View style={[s.quoteBlock,compact&&s.quoteBlockCompact]}>
             <Text style={[s.number,compact&&s.textLeft]}>{data.number}</Text>
             <Text style={[s.date,compact&&s.textLeft]}>{new Date(data.createdAt).toLocaleDateString('pt-BR')}</Text>
           </View>
         </View>
 
-        <Text style={s.kicker}>{documentTitle}</Text>
+        <Text style={[s.kicker,{color:brand.secondary}]}>{documentTitle}</Text>
         <Text style={s.title}>Olá, {data.client.name}</Text>
         {(data.client.document||data.client.city||data.client.addressLine)&&<Text style={s.clientMeta}>{[data.client.document,[data.client.addressLine,data.client.addressNumber,data.client.neighborhood].filter(Boolean).join(', '),data.client.city&&data.client.state?`${data.client.city}/${data.client.state}`:data.client.city].filter(Boolean).join(' · ')}</Text>}
         <Text style={s.intro}>{tenant.proposalText||'Preparamos esta proposta com os serviços, condições e investimento para a realização do seu projeto.'}</Text>
@@ -121,27 +123,27 @@ export default function QuoteProposalScreen(){
             <Text style={s.item}>{item.serviceName}</Text>
             <Text style={s.meta}>{item.days} dia(s) · {item.people} pessoa(s)</Text>
           </View>
-          <Text style={[s.value,compact&&s.valueCompact]}>{money(item.totalCents)}</Text>
+          <Text style={[s.value,{color:brand.primary},compact&&s.valueCompact]}>{money(item.totalCents)}</Text>
         </View>)}
 
         {!!data.productItems?.length&&<>
           <Text style={s.section}>Produtos</Text>
-          {data.productItems.map((item,index)=><View key={item.id??`${item.productId??item.sku}-${index}`} style={[s.row,compact&&s.rowCompact]}><View style={s.itemContent}><Text style={s.item}>{item.productName}</Text><Text style={s.meta}>{item.sku} · {item.quantity} {item.unit} × {money(item.unitPriceCents)}</Text></View><Text style={[s.value,compact&&s.valueCompact]}>{money(item.totalCents)}</Text></View>)}
+          {data.productItems.map((item,index)=><View key={item.id??`${item.productId??item.sku}-${index}`} style={[s.row,compact&&s.rowCompact]}><View style={s.itemContent}><Text style={s.item}>{item.productName}</Text><Text style={s.meta}>{item.sku} · {item.quantity} {item.unit} × {money(item.unitPriceCents)}</Text></View><Text style={[s.value,{color:brand.primary},compact&&s.valueCompact]}>{money(item.totalCents)}</Text></View>)}
         </>}
 
-        <View style={[s.totalBox,compact&&s.totalBoxCompact]}>
+        <View style={[s.totalBox,{backgroundColor:brand.primary},compact&&s.totalBoxCompact]}>
           <View>
-            <Text style={s.totalLabel}>Investimento total</Text>
-            <Text style={s.validity}>Validade: {data.validityDays} dias</Text>
+            <Text style={[s.totalLabel,{color:brand.primaryForeground}]}>Investimento total</Text>
+            <Text style={[s.validity,{color:brand.primaryForeground}]}>Validade: {data.validityDays} dias</Text>
           {tenant.proposalPaymentTerms?<Text style={s.meta}>Pagamento: {tenant.proposalPaymentTerms}</Text>:null}
           {tenant.pixKey?<Text style={s.meta}>PIX: {tenant.pixKey}</Text>:null}
           </View>
-          <Text style={[s.total,compact&&s.totalCompact]}>{money(proposalTotal)}</Text>
+          <Text style={[s.total,{color:brand.secondary},compact&&s.totalCompact]}>{money(proposalTotal)}</Text>
         </View>
 
 
-        <View style={s.paymentPlan}>
-          <Text style={s.paymentTitle}>Plano de pagamento</Text>
+        <View style={[s.paymentPlan,{backgroundColor:brand.secondarySoft}]}>
+          <Text style={[s.paymentTitle,{color:brand.secondary}]}>Plano de pagamento</Text>
           {productOnly?<><Text style={s.paymentLine}>À vista ou parcelado sem entrada.</Text><Text style={s.paymentLine}>A condição final de parcelamento é definida na confirmação da venda.</Text></>:<><Text style={s.paymentLine}>Entrada via PIX (30%): <Text style={s.paymentStrong}>{money(payment.depositCents)}</Text></Text><Text style={s.paymentLine}>Saldo no cartão (70%): {payment.installmentCents===payment.lastInstallmentCents?`${payment.installments} parcelas de ${money(payment.installmentCents)}`:`${payment.installments-1} parcelas de ${money(payment.installmentCents)} + última de ${money(payment.lastInstallmentCents)}`}</Text></>}
           {tenant.proposalPaymentTerms?<Text style={s.paymentNote}>{tenant.proposalPaymentTerms}</Text>:null}
           {tenant.pixKey?<Text style={s.paymentNote}>Chave PIX: {tenant.pixKey}</Text>:null}

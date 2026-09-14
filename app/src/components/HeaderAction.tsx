@@ -1,23 +1,79 @@
-import { ComponentProps } from 'react';
+import {ComponentProps} from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable,StyleSheet } from 'react-native';
-import { Text,useI18n } from '../i18n';
-import { theme } from '../theme';
+import {Pressable,StyleSheet} from 'react-native';
+import {Text,useI18n} from '../i18n';
+import {useTenantBrand} from '../tenantBrand';
 
 type IoniconName=ComponentProps<typeof Ionicons>['name'];
 
-export function HeaderAction({label,icon='add-outline',onPress,disabled=false}:{label:string;icon?:IoniconName;onPress:()=>void;disabled?:boolean}){
+export function HeaderAction({
+  label,
+  icon='add-outline',
+  onPress,
+  disabled=false,
+}:{
+  label:string;
+  icon?:IoniconName;
+  onPress:()=>void;
+  disabled?:boolean;
+}){
   const {tr}=useI18n();
-  return <Pressable accessibilityRole="button" accessibilityLabel={tr(label)} accessibilityState={{disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[s.button,pressed&&!disabled&&s.pressed,disabled&&s.disabled]}>
-    <Ionicons name={icon} size={17} color={theme.white}/>
-    <Text style={s.label}>{label}</Text>
-  </Pressable>
+  const brand=useTenantBrand();
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={tr(label)}
+      accessibilityState={{disabled}}
+      disabled={disabled}
+      onPress={onPress}
+      style={({pressed})=>[
+        s.button,
+        {
+          backgroundColor:brand.primary,
+          borderColor:brand.primary,
+        },
+        pressed&&!disabled&&[
+          s.pressed,
+          {
+            borderColor:brand.secondary,
+          },
+        ],
+        disabled&&s.disabled,
+      ]}
+    >
+      <Ionicons
+        name={icon}
+        size={17}
+        color={brand.primaryForeground}
+      />
+      <Text style={[s.label,{color:brand.primaryForeground}]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
 const s=StyleSheet.create({
-  button:{minHeight:42,borderRadius:10,paddingHorizontal:15,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,backgroundColor:theme.green,borderWidth:1,borderColor:theme.green,minWidth:112,alignSelf:'stretch'},
-  label:{fontSize:13,fontWeight:'800',color:theme.white},
-  focused:{borderColor:theme.gold,shadowColor:theme.gold,shadowOpacity:.16,shadowRadius:5},
-  pressed:{backgroundColor:theme.g800,transform:[{translateY:1}]},
-  disabled:{opacity:.5}
+  button:{
+    minHeight:42,
+    borderRadius:10,
+    paddingHorizontal:15,
+    flexDirection:'row',
+    alignItems:'center',
+    justifyContent:'center',
+    gap:7,
+    borderWidth:1,
+    minWidth:112,
+    alignSelf:'stretch',
+  },
+  pressed:{
+    opacity:.86,
+    transform:[{translateY:1}],
+  },
+  disabled:{opacity:.5},
+  label:{
+    fontSize:13,
+    fontWeight:'800',
+  },
 });

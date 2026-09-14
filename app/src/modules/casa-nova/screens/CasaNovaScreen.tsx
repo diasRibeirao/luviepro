@@ -6,6 +6,7 @@ import {AppShell} from '../../../components/AppShell';
 import {SelectField} from '../../../components/SelectField';
 import {AsyncState} from '../../../components/AsyncState';
 import {theme} from '../../../theme';
+import {useTenantBrand} from '../../../tenantBrand';
 import {buildXlsx,presentXlsx} from '../../../utils/xlsxExport';
 import {casaNovaApi,CasaNovaCategory,CasaNovaItem} from '../api/casaNova.api';
 
@@ -24,6 +25,7 @@ const errorMessage=(error:unknown)=>error instanceof Error?error.message:'Não f
 
 export function CasaNovaScreen(){
  const {width}=useWindowDimensions();
+ const brand=useTenantBrand();
  const compact=width<980;
  const phone=width<640;
  const narrow=width<520;
@@ -167,11 +169,11 @@ export function CasaNovaScreen(){
 
  return <AppShell title="Casa Nova" subtitle="Lista inteligente para montar uma casa pronta para receber qualquer quantidade de pessoas.">
   {loading?<AsyncState loading/>:<View style={s.page}>
-   <View style={[s.hero,compact&&s.heroCompact,narrow&&s.heroNarrow]}>
+   <View style={[s.hero,{backgroundColor:brand.primary},compact&&s.heroCompact,narrow&&s.heroNarrow]}>
     <View style={s.heroText}><Text style={s.kicker}>LISTA CASA NOVA</Text><Text style={s.heroTitle}>Sua casa pronta para todo encontro especial.</Text><Text style={s.heroDesc}>A lista padrão é criada por conta. Ajuste pessoas, quantidades e itens sem misturar dados entre clientes ou empresas.</Text></View>
     <View style={[s.guestCard,narrow&&s.guestCardNarrow]}>
      <View style={s.guestHeader}>
-      <View style={s.guestHeaderIcon}><Ionicons name="people-outline" size={18} color={theme.gold}/></View>
+      <View style={s.guestHeaderIcon}><Ionicons name="people-outline" size={18} color={brand.secondary}/></View>
       <View style={s.guestHeaderText}>
        <Text style={s.guestLabel}>Quantas pessoas estarão à mesa?</Text>
        <Text style={s.guestSubtitle}>Informe a quantidade para ajustar automaticamente a lista.</Text>
@@ -184,11 +186,11 @@ export function CasaNovaScreen(){
        onPress={()=>void changeGuests(guests-1)}
        style={({pressed})=>[s.guestCircleButton,s.guestCircleButtonSecondary,(guests<=2||busy)&&s.roundDisabled,pressed&&guests>2&&!busy&&s.roundPressed]}
       >
-       <Ionicons name="remove" size={22} color={guests<=2?theme.muted:theme.green}/>
+       <Ionicons name="remove" size={22} color={guests<=2?theme.muted:brand.primary}/>
       </Pressable>
 
       <View style={s.guestNumberArea}>
-       <View style={s.guestInputBox}>
+       <View style={[s.guestInputBox,{borderColor:brand.primary}]}>
         <TextInput
          value={guestInput}
          onChangeText={value=>setGuestInput(value.replace(/[^0-9]/g,'').slice(0,6))}
@@ -210,7 +212,7 @@ export function CasaNovaScreen(){
       <Pressable
        disabled={guests>=999999||busy}
        onPress={()=>void changeGuests(guests+1)}
-       style={({pressed})=>[s.guestCircleButton,s.guestCircleButtonPrimary,(guests>=999999||busy)&&s.roundDisabled,pressed&&guests<999999&&!busy&&s.roundPressed]}
+       style={({pressed})=>[s.guestCircleButton,s.guestCircleButtonPrimary,{backgroundColor:brand.primary},(guests>=999999||busy)&&s.roundDisabled,pressed&&guests<999999&&!busy&&s.roundPressed]}
       >
        <Ionicons name="add" size={22} color={theme.white}/>
       </Pressable>
@@ -226,47 +228,47 @@ export function CasaNovaScreen(){
 
    <View style={[s.summary,compact&&s.summaryCompact,narrow&&s.summaryNarrow]}><Summary icon="list-outline" label="Itens na lista" value={String(items.length)} tone="dark"/><Summary icon="checkmark-circle-outline" label="Já comprados" value={String(done)}/><Summary icon="sparkles-outline" label="Lista concluída" value={`${progress}%`} tone="gold"/></View>
 
-   {message?<View style={s.message}><Ionicons name="information-circle-outline" size={17} color={theme.green2}/><Text style={s.messageText}>{message}</Text><Pressable onPress={()=>setMessage('')}><Ionicons name="close" size={17} color={theme.muted}/></Pressable></View>:null}
+   {message?<View style={[s.message,{backgroundColor:brand.primarySoft}]}><Ionicons name="information-circle-outline" size={17} color={brand.primary}/><Text style={s.messageText}>{message}</Text><Pressable onPress={()=>setMessage('')}><Ionicons name="close" size={17} color={theme.muted}/></Pressable></View>:null}
 
    <View style={[s.body,compact&&s.bodyCompact]}>
     <View style={s.listCol}>
      <View style={[s.listHeader,narrow&&s.listHeaderNarrow]}>
       <View><Text style={s.eyebrow}>LISTA INTELIGENTE</Text><Text style={s.sectionTitle}>O que falta para a casa ficar completa</Text></View>
-      <View style={[s.headerActions,narrow&&s.headerActionsNarrow]}><Pressable onPress={()=>{if(name.trim()){void save();return}resetForm();setMessage(compact?'Preencha os dados no formulário “Adicionar item” logo abaixo da lista e confirme no botão amarelo.':'Preencha os dados no formulário “Adicionar item” à direita e confirme no botão amarelo.')}} style={s.addItemShortcut}><Ionicons name="add-circle-outline" size={16} color={theme.white}/><Text style={s.addItemShortcutText}>Adicionar item</Text></Pressable><Pressable onPress={()=>void exportList()} style={s.exportBtn}><Ionicons name="document-outline" size={16} color={theme.green2}/><Text style={s.exportText}>Exportar Excel</Text></Pressable><Pressable onPress={()=>void essentials()} style={s.essentialBtn}><Ionicons name="sparkles-outline" size={16} color={theme.white}/><Text style={s.essentialText}>{busy?'Aguarde...':'Restaurar padrão'}</Text></Pressable></View>
+      <View style={[s.headerActions,narrow&&s.headerActionsNarrow]}><Pressable onPress={()=>{if(name.trim()){void save();return}resetForm();setMessage(compact?'Preencha os dados no formulário “Adicionar item” logo abaixo da lista e confirme no botão amarelo.':'Preencha os dados no formulário “Adicionar item” à direita e confirme no botão amarelo.')}} style={[s.addItemShortcut,{backgroundColor:brand.primary}]}><Ionicons name="add-circle-outline" size={16} color={theme.white}/><Text style={s.addItemShortcutText}>Adicionar item</Text></Pressable><Pressable onPress={()=>void exportList()} style={[s.exportBtn,{borderColor:brand.primary}]}><Ionicons name="document-outline" size={16} color={brand.primary}/><Text style={[s.exportText,{color:brand.primary}]}>Exportar Excel</Text></Pressable><Pressable onPress={()=>void essentials()} style={[s.essentialBtn,{backgroundColor:brand.primary}]}><Ionicons name="sparkles-outline" size={16} color={theme.white}/><Text style={s.essentialText}>{busy?'Aguarde...':'Restaurar padrão'}</Text></Pressable></View>
      </View>
 
-     <View style={[s.filters,narrow&&s.filtersNarrow]}>{categories.map(c=><Pressable key={c} onPress={()=>setFilter(c)} style={[s.filter,filter===c&&s.filterOn]}><Text style={[s.filterText,filter===c&&s.filterTextOn]}>{c}</Text></Pressable>)}</View>
+     <View style={[s.filters,narrow&&s.filtersNarrow]}>{categories.map(c=><Pressable key={c} onPress={()=>setFilter(c)} style={[s.filter,filter===c&&s.filterOn,filter===c&&{backgroundColor:brand.primary,borderColor:brand.primary}]}><Text style={[s.filterText,{color:brand.primary},filter===c&&s.filterTextOn,filter===c&&{color:brand.primaryForeground}]}>{c}</Text></Pressable>)}</View>
 
      {visible.length>0?<View style={[s.bulkBar,narrow&&s.bulkBarNarrow]}>
-      <Pressable onPress={toggleSelectAll} style={s.selectAll}><View style={[s.selectBox,allVisibleSelected&&s.selectBoxOn]}>{allVisibleSelected?<Ionicons name="checkmark" size={14} color={theme.white}/>:null}</View><Text style={s.selectAllText}>{allVisibleSelected?'Desmarcar tudo':'Selecionar tudo'}</Text></Pressable>
+      <Pressable onPress={toggleSelectAll} style={s.selectAll}><View style={[s.selectBox,allVisibleSelected&&s.selectBoxOn,allVisibleSelected&&{backgroundColor:brand.primary,borderColor:brand.primary}]}>{allVisibleSelected?<Ionicons name="checkmark" size={14} color={theme.white}/>:null}</View><Text style={[s.selectAllText,{color:brand.primary}]}>{allVisibleSelected?'Desmarcar tudo':'Selecionar tudo'}</Text></Pressable>
       <Text style={s.selectedCount}>{selectedIds.length} selecionado(s)</Text>
-      {selectedIds.length>0?<View style={[s.bulkActions,narrow&&s.bulkActionsNarrow]}><View style={[s.bulkSelect,narrow&&s.bulkSelectNarrow]}><SelectField label="Categoria em massa" value={bulkCategory} options={categoryOptions} onChange={v=>setBulkCategory(v as CasaNovaCategory)}/></View><Pressable disabled={busy} onPress={()=>void bulkUpdate({category:bulkCategory})} style={s.bulkButton}><Text style={s.bulkButtonText}>Aplicar categoria</Text></Pressable><View style={[s.bulkSelect,narrow&&s.bulkSelectNarrow]}><SelectField label="Unidade em massa" value={bulkUnit} options={unitOptions} onChange={setBulkUnit}/></View><Pressable disabled={busy} onPress={()=>void bulkUpdate({unit:bulkUnit})} style={s.bulkButton}><Text style={s.bulkButtonText}>Aplicar unidade</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkUpdate({checked:true})} style={s.bulkButton}><Text style={s.bulkButtonText}>Marcar comprados</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkUpdate({checked:false})} style={s.bulkButton}><Text style={s.bulkButtonText}>Desmarcar comprados</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkQuantityMode(true)} style={s.bulkButton}><Text style={s.bulkButtonText}>Qtd. automática</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkQuantityMode(false)} style={s.bulkButton}><Text style={s.bulkButtonText}>Qtd. fixa</Text></Pressable><Pressable disabled={busy} onPress={()=>setBulkDeleteConfirm(true)} style={s.bulkDanger}><Ionicons name="trash-outline" size={15} color={theme.white}/><Text style={s.bulkDangerText}>Excluir selecionados</Text></Pressable></View>:null}
-      {bulkDeleteConfirm?<View style={s.bulkConfirm}><Text style={s.bulkConfirmText}>Excluir {selectedIds.length} item(ns) selecionado(s)?</Text><Pressable onPress={()=>void bulkRemove()} style={s.deleteYes}><Text style={s.deleteYesText}>Confirmar exclusão</Text></Pressable><Pressable onPress={()=>setBulkDeleteConfirm(false)} style={s.deleteNo}><Text style={s.deleteNoText}>Cancelar</Text></Pressable></View>:null}
+      {selectedIds.length>0?<View style={[s.bulkActions,narrow&&s.bulkActionsNarrow]}><View style={[s.bulkSelect,narrow&&s.bulkSelectNarrow]}><SelectField label="Categoria em massa" value={bulkCategory} options={categoryOptions} onChange={v=>setBulkCategory(v as CasaNovaCategory)}/></View><Pressable disabled={busy} onPress={()=>void bulkUpdate({category:bulkCategory})} style={[s.bulkButton,{backgroundColor:brand.primarySoft,borderColor:brand.primary}]}><Text style={[s.bulkButtonText,{color:brand.primary}]}>Aplicar categoria</Text></Pressable><View style={[s.bulkSelect,narrow&&s.bulkSelectNarrow]}><SelectField label="Unidade em massa" value={bulkUnit} options={unitOptions} onChange={setBulkUnit}/></View><Pressable disabled={busy} onPress={()=>void bulkUpdate({unit:bulkUnit})} style={[s.bulkButton,{backgroundColor:brand.primarySoft,borderColor:brand.primary}]}><Text style={[s.bulkButtonText,{color:brand.primary}]}>Aplicar unidade</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkUpdate({checked:true})} style={[s.bulkButton,{backgroundColor:brand.primarySoft,borderColor:brand.primary}]}><Text style={[s.bulkButtonText,{color:brand.primary}]}>Marcar comprados</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkUpdate({checked:false})} style={[s.bulkButton,{backgroundColor:brand.primarySoft,borderColor:brand.primary}]}><Text style={[s.bulkButtonText,{color:brand.primary}]}>Desmarcar comprados</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkQuantityMode(true)} style={[s.bulkButton,{backgroundColor:brand.primarySoft,borderColor:brand.primary}]}><Text style={[s.bulkButtonText,{color:brand.primary}]}>Qtd. automática</Text></Pressable><Pressable disabled={busy} onPress={()=>void bulkQuantityMode(false)} style={[s.bulkButton,{backgroundColor:brand.primarySoft,borderColor:brand.primary}]}><Text style={[s.bulkButtonText,{color:brand.primary}]}>Qtd. fixa</Text></Pressable><Pressable disabled={busy} onPress={()=>setBulkDeleteConfirm(true)} style={s.bulkDanger}><Ionicons name="trash-outline" size={15} color={theme.white}/><Text style={s.bulkDangerText}>Excluir selecionados</Text></Pressable></View>:null}
+      {bulkDeleteConfirm?<View style={s.bulkConfirm}><Text style={s.bulkConfirmText}>Excluir {selectedIds.length} item(ns) selecionado(s)?</Text><Pressable onPress={()=>void bulkRemove()} style={s.deleteYes}><Text style={s.deleteYesText}>Confirmar exclusão</Text></Pressable><Pressable onPress={()=>setBulkDeleteConfirm(false)} style={[s.deleteNo,{backgroundColor:brand.primarySoft}]}><Text style={[s.deleteNoText,{color:brand.primary}]}>Cancelar</Text></Pressable></View>:null}
      </View>:null}
 
-     {visible.length===0?<View style={s.empty}><Ionicons name="basket-outline" size={30} color={theme.gold}/><Text style={s.emptyTitle}>Nenhum item nesta categoria</Text><Text style={s.emptyText}>Restaure a lista padrão ou personalize sua própria lista.</Text></View>:<View style={s.cards}>{visible.map(item=><View key={item.id} style={[s.item,phone&&s.itemPhone,item.checked&&s.itemDone,selectedIds.includes(item.id)&&s.itemSelected]}>
-      <Pressable accessibilityLabel={`Selecionar ${item.itemName}`} onPress={()=>toggleSelected(item.id)} style={[s.selectBox,selectedIds.includes(item.id)&&s.selectBoxOn]}>{selectedIds.includes(item.id)?<Ionicons name="checkmark" size={14} color={theme.white}/>:null}</Pressable>
+     {visible.length===0?<View style={s.empty}><Ionicons name="basket-outline" size={30} color={theme.gold}/><Text style={s.emptyTitle}>Nenhum item nesta categoria</Text><Text style={s.emptyText}>Restaure a lista padrão ou personalize sua própria lista.</Text></View>:<View style={s.cards}>{visible.map(item=><View key={item.id} style={[s.item,phone&&s.itemPhone,item.checked&&s.itemDone,selectedIds.includes(item.id)&&s.itemSelected,selectedIds.includes(item.id)&&{borderColor:brand.primary,backgroundColor:brand.primarySoft}]}>
+      <Pressable accessibilityLabel={`Selecionar ${item.itemName}`} onPress={()=>toggleSelected(item.id)} style={[s.selectBox,selectedIds.includes(item.id)&&s.selectBoxOn,selectedIds.includes(item.id)&&{backgroundColor:brand.primary,borderColor:brand.primary}]}>{selectedIds.includes(item.id)?<Ionicons name="checkmark" size={14} color={theme.white}/>:null}</Pressable>
       <View style={s.itemBody}>
        <View style={[s.itemTop,phone&&s.itemTopPhone]}>
         <View style={[s.itemInfo,phone&&s.itemInfoPhone]}>
          <Text style={[s.itemName,item.checked&&s.itemNameDone]}>{item.itemName}</Text>
          <Text style={s.itemMeta}>{item.category}{item.notes?` · ${item.notes}`:''}</Text>
-         <Pressable onPress={()=>void toggle(item)} style={s.boughtRow}><View style={[s.checkbox,item.checked&&s.checkboxOn]}>{item.checked?<Ionicons name="checkmark" size={13} color={theme.white}/>:null}</View><Text style={s.boughtText}>{item.checked?'Comprado':'Marcar como comprado'}</Text></Pressable>
+         <Pressable onPress={()=>void toggle(item)} style={s.boughtRow}><View style={[s.checkbox,item.checked&&s.checkboxOn,item.checked&&{backgroundColor:brand.primary,borderColor:brand.primary}]}>{item.checked?<Ionicons name="checkmark" size={13} color={theme.white}/>:null}</View><Text style={s.boughtText}>{item.checked?'Comprado':'Marcar como comprado'}</Text></Pressable>
         </View>
         <View style={[s.itemControls,phone&&s.itemControlsPhone]}>
-         <View style={[s.qtyControl,phone&&s.qtyControlPhone]}><Pressable disabled={quantity(item,guests)<=1||busy} onPress={()=>void changeItemQuantity(item,-1)} style={[s.qtyStep,(quantity(item,guests)<=1||busy)&&s.qtyStepDisabled]}><Ionicons name="chevron-down" size={16} color={theme.green2}/></Pressable><View style={[s.qtyBox,phone&&s.qtyBoxPhone]}><Text numberOfLines={1} style={s.qty}>{quantity(item,guests)} {item.unit}</Text><Text numberOfLines={1} style={s.qtyCaption}>{item.quantityOverride!=null?'ajuste manual':item.isScalable?`automático · ${guests} pessoas`:'item fixo'}</Text></View><Pressable disabled={busy} onPress={()=>void changeItemQuantity(item,1)} style={s.qtyStep}><Ionicons name="chevron-up" size={16} color={theme.green2}/></Pressable></View>
+         <View style={[s.qtyControl,phone&&s.qtyControlPhone]}><Pressable disabled={quantity(item,guests)<=1||busy} onPress={()=>void changeItemQuantity(item,-1)} style={[s.qtyStep,(quantity(item,guests)<=1||busy)&&s.qtyStepDisabled]}><Ionicons name="chevron-down" size={16} color={brand.primary}/></Pressable><View style={[s.qtyBox,phone&&s.qtyBoxPhone]}><Text numberOfLines={1} style={s.qty}>{quantity(item,guests)} {item.unit}</Text><Text numberOfLines={1} style={s.qtyCaption}>{item.quantityOverride!=null?'ajuste manual':item.isScalable?`automático · ${guests} pessoas`:'item fixo'}</Text></View><Pressable disabled={busy} onPress={()=>void changeItemQuantity(item,1)} style={s.qtyStep}><Ionicons name="chevron-up" size={16} color={brand.primary}/></Pressable></View>
          <View style={s.itemActionButtons}>
-          <Pressable onPress={()=>edit(item)} style={s.detailEdit}><Ionicons name="settings-outline" size={19} color={theme.green2}/></Pressable>
+          <Pressable onPress={()=>edit(item)} style={s.detailEdit}><Ionicons name="settings-outline" size={19} color={brand.primary}/></Pressable>
           <Pressable onPress={()=>setDeleteConfirmId(item.id)} style={s.trash}><Ionicons name="trash-outline" size={20} color={theme.danger}/></Pressable>
          </View>
         </View>
        </View>
-       {deleteConfirmId===item.id?<View style={s.deleteConfirm}><Text style={s.deleteConfirmText}>Excluir este item?</Text><Pressable onPress={()=>void remove(item)} style={s.deleteYes}><Text style={s.deleteYesText}>Excluir</Text></Pressable><Pressable onPress={()=>setDeleteConfirmId(null)} style={s.deleteNo}><Text style={s.deleteNoText}>Cancelar</Text></Pressable></View>:null}
+       {deleteConfirmId===item.id?<View style={s.deleteConfirm}><Text style={s.deleteConfirmText}>Excluir este item?</Text><Pressable onPress={()=>void remove(item)} style={s.deleteYes}><Text style={s.deleteYesText}>Excluir</Text></Pressable><Pressable onPress={()=>setDeleteConfirmId(null)} style={[s.deleteNo,{backgroundColor:brand.primarySoft}]}><Text style={[s.deleteNoText,{color:brand.primary}]}>Cancelar</Text></Pressable></View>:null}
       </View>
      </View>)}</View>}
     </View>
 
-    <View style={[s.addPanel,compact&&s.addPanelCompact,narrow&&s.addPanelNarrow]}><View style={s.addHead}><View><Text style={s.addEyebrow}>{editingId?'EDITAR DETALHES':'PERSONALIZE'}</Text><Text style={s.addTitle}>{editingId?'Atualize os dados do item':'Adicionar item'}</Text></View>{editingId?<Pressable onPress={resetForm} style={s.cancelEdit}><Ionicons name="close" size={18} color={theme.white}/></Pressable>:null}</View><Field label="Item" value={name} onChange={setName} placeholder="Ex.: taças de vinho"/><SelectField label="Categoria" value={category} options={categoryOptions} onChange={v=>setCategory(v as CasaNovaCategory)}/><View style={[s.two,narrow&&s.twoNarrow]}><View style={s.formColumn}><Field label="Qtd. base para 2 pessoas" value={qty} onChange={v=>setQty(v.replace(/\D/g,'').slice(0,4))} keyboard="numeric"/></View><View style={s.formColumn}><SelectField label="Unidade de medida" value={unit} options={unitOptions} onChange={setUnit}/></View></View><Field label="Observações" value={notes} onChange={setNotes} placeholder="Opcional"/><Pressable onPress={()=>setScalable(v=>!v)} style={s.scaleRow}><View style={[s.checkbox,scalable&&s.checkboxOn]}>{scalable?<Ionicons name="checkmark" size={15} color={theme.white}/>:null}</View><Text style={s.scaleText}>Ajustar automaticamente conforme o número de pessoas</Text></Pressable><Pressable disabled={busy} onPress={()=>void save()} style={[s.addButton,busy&&s.addButtonDisabled]}><Ionicons name={editingId?'save-outline':'add'} size={18} color={theme.g900}/><Text style={s.addButtonText}>{busy?'Salvando...':editingId?'Salvar detalhes':'Adicionar item'}</Text></Pressable>{editingId?<Pressable onPress={resetForm} style={s.cancelButton}><Text style={s.cancelButtonText}>Cancelar edição</Text></Pressable>:null}</View>
+    <View style={[s.addPanel,{backgroundColor:brand.primary},compact&&s.addPanelCompact,narrow&&s.addPanelNarrow]}><View style={s.addHead}><View><Text style={s.addEyebrow}>{editingId?'EDITAR DETALHES':'PERSONALIZE'}</Text><Text style={s.addTitle}>{editingId?'Atualize os dados do item':'Adicionar item'}</Text></View>{editingId?<Pressable onPress={resetForm} style={s.cancelEdit}><Ionicons name="close" size={18} color={theme.white}/></Pressable>:null}</View><Field label="Item" value={name} onChange={setName} placeholder="Ex.: taças de vinho"/><SelectField label="Categoria" value={category} options={categoryOptions} onChange={v=>setCategory(v as CasaNovaCategory)}/><View style={[s.two,narrow&&s.twoNarrow]}><View style={s.formColumn}><Field label="Qtd. base para 2 pessoas" value={qty} onChange={v=>setQty(v.replace(/\D/g,'').slice(0,4))} keyboard="numeric"/></View><View style={s.formColumn}><SelectField label="Unidade de medida" value={unit} options={unitOptions} onChange={setUnit}/></View></View><Field label="Observações" value={notes} onChange={setNotes} placeholder="Opcional"/><Pressable onPress={()=>setScalable(v=>!v)} style={s.scaleRow}><View style={[s.checkbox,scalable&&s.checkboxOn,scalable&&{backgroundColor:brand.secondary,borderColor:brand.secondary}]}>{scalable?<Ionicons name="checkmark" size={15} color={theme.white}/>:null}</View><Text style={s.scaleText}>Ajustar automaticamente conforme o número de pessoas</Text></Pressable><Pressable disabled={busy} onPress={()=>void save()} style={[s.addButton,{backgroundColor:brand.secondary},busy&&s.addButtonDisabled]}><Ionicons name={editingId?'save-outline':'add'} size={18} color={brand.secondaryForeground}/><Text style={[s.addButtonText,{color:brand.secondaryForeground}]}>{busy?'Salvando...':editingId?'Salvar detalhes':'Adicionar item'}</Text></Pressable>{editingId?<Pressable onPress={resetForm} style={s.cancelButton}><Text style={s.cancelButtonText}>Cancelar edição</Text></Pressable>:null}</View>
    </View>
   </View>}
  </AppShell>
