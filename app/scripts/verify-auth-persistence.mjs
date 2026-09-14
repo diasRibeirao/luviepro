@@ -21,9 +21,9 @@ const checks=[
   ['refresh request identifies web auth client',api.includes("'X-Auth-Client':'web'")],
   ['failed refresh clears local session',api.includes("if(!res.ok){clearSession();return false;}")],
   ['layout awaits restoreSession before setting ready',layout.includes('await restoreSession();if(active)setReady(true)')],
-  ['auth guard only runs after ready',layout.includes('if(!ready)return;const redirect=authGuardRedirect')],
+  ['auth guard only runs after ready',/if\(!ready\)return;[\s\S]{0,250}authGuardRedirect\(/.test(layout)],
   ['authenticated direct routes do not redirect to login',flow.includes("if(!authenticated&&!isPublicAuthRoute(path))return '/';")],
-  ['tenant session is isolated from platform routes',flow.includes("if(path==='/platform'||path.startsWith('/platform/'))return '/home';")],
+  ['tenant session is isolated from platform routes',/if\(path==='\/platform'\|\|path\.startsWith\('\/platform\/'\)\)return billingRestricted\?'\/plans':'\/home';/.test(flow)],
 ];
 
 let failed=0;

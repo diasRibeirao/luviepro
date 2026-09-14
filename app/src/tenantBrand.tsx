@@ -184,8 +184,74 @@ export function TenantBrandProvider({
 
     const unsubscribe=subscribeTenantBrand(refresh);
 
+    let resumeTimer:ReturnType<typeof setTimeout>|undefined;
+
+    const refreshOnResume=()=>{
+      if(
+        typeof document!=='undefined'&&
+        document.visibilityState==='hidden'
+      ){
+        return;
+      }
+
+      if(resumeTimer){
+        clearTimeout(resumeTimer);
+      }
+
+      resumeTimer=setTimeout(()=>{
+        if(mounted){
+          refresh();
+        }
+      },150);
+    };
+
+    if(
+      typeof window!=='undefined'&&
+      typeof document!=='undefined'
+    ){
+      document.addEventListener(
+        'visibilitychange',
+        refreshOnResume,
+      );
+
+      window.addEventListener(
+        'pageshow',
+        refreshOnResume,
+      );
+
+      window.addEventListener(
+        'focus',
+        refreshOnResume,
+      );
+    }
+
     return()=>{
       mounted=false;
+
+      if(resumeTimer){
+        clearTimeout(resumeTimer);
+      }
+
+      if(
+        typeof window!=='undefined'&&
+        typeof document!=='undefined'
+      ){
+        document.removeEventListener(
+          'visibilitychange',
+          refreshOnResume,
+        );
+
+        window.removeEventListener(
+          'pageshow',
+          refreshOnResume,
+        );
+
+        window.removeEventListener(
+          'focus',
+          refreshOnResume,
+        );
+      }
+
       unsubscribe();
     };
   },[accountKey,platform]);
