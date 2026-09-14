@@ -169,7 +169,7 @@ const s=StyleSheet.create({
     flexWrap:'wrap',
     alignItems:'center',
   },
-  filtersCompact:{width:'100%'},
+  filtersCompact:{width:'100%',alignItems:'stretch'},
   actions:{
     flexDirection:'row',
     gap:6,
@@ -177,14 +177,14 @@ const s=StyleSheet.create({
     flexWrap:'wrap',
   },
   actionsCompact:{width:'100%',justifyContent:'flex-start'},
-  actionsNarrow:{alignItems:'stretch'},
+  actionsNarrow:{alignItems:'stretch',width:'100%'},
   count:{
     fontSize:11,
     fontWeight:'800',
     color:theme.muted,
     marginLeft:'auto',
   },
-  countCompact:{marginLeft:0,alignSelf:'flex-start'},
+  countCompact:{marginLeft:0,alignSelf:'flex-start',marginTop:2},
   chip:{
     height:40,
     paddingHorizontal:12,
