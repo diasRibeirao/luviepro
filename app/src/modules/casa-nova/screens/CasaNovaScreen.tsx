@@ -6,7 +6,7 @@ import {AppShell} from '../../../components/AppShell';
 import {SelectField} from '../../../components/SelectField';
 import {AsyncState} from '../../../components/AsyncState';
 import {theme} from '../../../theme';
-import {useTenantBrand} from '../../../tenantBrand';
+import {useTenantBrand,withAlpha} from '../../../tenantBrand';
 import {buildXlsx,presentXlsx} from '../../../utils/xlsxExport';
 import {casaNovaApi,CasaNovaCategory,CasaNovaItem} from '../api/casaNova.api';
 import {clientsApi} from '../../clients/api/clients.api';
@@ -185,10 +185,10 @@ export function CasaNovaScreen(){
  return <AppShell title="Gestão de Organizadores" subtitle="Listas inteligentes vinculadas aos seus clientes.">
   {loading?<AsyncState loading/>:<View style={s.page}>
    <View style={[s.hero,{backgroundColor:brand.primary},compact&&s.heroCompact,narrow&&s.heroNarrow]}>
-    <View style={s.heroText}><Text style={s.kicker}>LISTA CASA NOVA</Text><Text style={s.heroTitle}>Sua casa pronta para todo encontro especial.</Text><Text style={s.heroDesc}>A lista padrão é criada por conta. Ajuste pessoas, quantidades e itens sem misturar dados entre clientes ou empresas.</Text></View>
+    <View style={s.heroText}><Text style={[s.kicker,{color:brand.secondary}]}>LISTA CASA NOVA</Text><Text style={[s.heroTitle,{color:brand.primaryForeground}]}>Sua casa pronta para todo encontro especial.</Text><Text style={[s.heroDesc,{color:withAlpha(brand.primaryForeground,.72)}]}>A lista padrão é criada por conta. Ajuste pessoas, quantidades e itens sem misturar dados entre clientes ou empresas.</Text></View>
     <View style={[s.guestCard,narrow&&s.guestCardNarrow]}>
      <View style={s.guestHeader}>
-      <View style={s.guestHeaderIcon}><Ionicons name="people-outline" size={18} color={brand.secondary}/></View>
+      <View style={[s.guestHeaderIcon,{backgroundColor:brand.secondarySoft}]}><Ionicons name="people-outline" size={18} color={brand.secondary}/></View>
       <View style={s.guestHeaderText}>
        <Text style={s.guestLabel}>Quantas pessoas estarão à mesa?</Text>
        <Text style={s.guestSubtitle}>Informe a quantidade para ajustar automaticamente a lista.</Text>
@@ -219,7 +219,7 @@ export function CasaNovaScreen(){
          placeholder="2"
          style={s.guestInput}
         />
-        <Ionicons name="create-outline" size={15} color={theme.green}/>
+        <Ionicons name="create-outline" size={15} color={brand.primary}/>
        </View>
        <Text style={s.guestEditHint}>Toque no número para editar</Text>
       </View>
@@ -249,7 +249,7 @@ export function CasaNovaScreen(){
    <View style={[s.body,compact&&s.bodyCompact]}>
     <View style={s.listCol}>
      <View style={[s.listHeader,narrow&&s.listHeaderNarrow]}>
-      <View><Text style={s.eyebrow}>LISTA INTELIGENTE</Text><Text style={s.sectionTitle}>O que falta para a casa ficar completa</Text></View>
+      <View><Text style={[s.eyebrow,{color:brand.secondary}]}>LISTA INTELIGENTE</Text><Text style={s.sectionTitle}>O que falta para a casa ficar completa</Text></View>
       <View style={[s.headerActions,narrow&&s.headerActionsNarrow]}><Pressable onPress={()=>{if(name.trim()){void save();return}resetForm();setMessage(compact?'Preencha os dados no formulário “Adicionar item” logo abaixo da lista e confirme no botão amarelo.':'Preencha os dados no formulário “Adicionar item” à direita e confirme no botão amarelo.')}} style={[s.addItemShortcut,{backgroundColor:brand.primary}]}><Ionicons name="add-circle-outline" size={16} color={theme.white}/><Text style={s.addItemShortcutText}>Adicionar item</Text></Pressable><Pressable onPress={()=>void exportList()} style={[s.exportBtn,{borderColor:brand.primary}]}><Ionicons name="document-outline" size={16} color={brand.primary}/><Text style={[s.exportText,{color:brand.primary}]}>Exportar Excel</Text></Pressable><Pressable onPress={exportPdf} style={[s.exportBtn,{borderColor:brand.primary}]}><Ionicons name="document-text-outline" size={16} color={brand.primary}/><Text style={[s.exportText,{color:brand.primary}]}>Gerar PDF</Text></Pressable><Pressable onPress={()=>void essentials()} style={[s.essentialBtn,{backgroundColor:brand.primary}]}><Ionicons name="sparkles-outline" size={16} color={theme.white}/><Text style={s.essentialText}>{busy?'Aguarde...':'Restaurar padrão'}</Text></Pressable></View>
      </View>
 
@@ -262,7 +262,7 @@ export function CasaNovaScreen(){
       {bulkDeleteConfirm?<View style={s.bulkConfirm}><Text style={s.bulkConfirmText}>Excluir {selectedIds.length} item(ns) selecionado(s)?</Text><Pressable onPress={()=>void bulkRemove()} style={s.deleteYes}><Text style={s.deleteYesText}>Confirmar exclusão</Text></Pressable><Pressable onPress={()=>setBulkDeleteConfirm(false)} style={[s.deleteNo,{backgroundColor:brand.primarySoft}]}><Text style={[s.deleteNoText,{color:brand.primary}]}>Cancelar</Text></Pressable></View>:null}
      </View>:null}
 
-     {visible.length===0?<View style={s.empty}><Ionicons name="basket-outline" size={30} color={theme.gold}/><Text style={s.emptyTitle}>Nenhum item nesta categoria</Text><Text style={s.emptyText}>Restaure a lista padrão ou personalize sua própria lista.</Text></View>:<View style={s.cards}>{visible.map(item=><View key={item.id} style={[s.item,phone&&s.itemPhone,item.checked&&s.itemDone,selectedIds.includes(item.id)&&s.itemSelected,selectedIds.includes(item.id)&&{borderColor:brand.primary,backgroundColor:brand.primarySoft}]}>
+     {visible.length===0?<View style={s.empty}><Ionicons name="basket-outline" size={30} color={brand.secondary}/><Text style={s.emptyTitle}>Nenhum item nesta categoria</Text><Text style={s.emptyText}>Restaure a lista padrão ou personalize sua própria lista.</Text></View>:<View style={s.cards}>{visible.map(item=><View key={item.id} style={[s.item,phone&&s.itemPhone,item.checked&&s.itemDone,selectedIds.includes(item.id)&&s.itemSelected,selectedIds.includes(item.id)&&{borderColor:brand.primary,backgroundColor:brand.primarySoft}]}>
       <Pressable accessibilityLabel={`Selecionar ${item.itemName}`} onPress={()=>toggleSelected(item.id)} style={[s.selectBox,selectedIds.includes(item.id)&&s.selectBoxOn,selectedIds.includes(item.id)&&{backgroundColor:brand.primary,borderColor:brand.primary}]}>{selectedIds.includes(item.id)?<Ionicons name="checkmark" size={14} color={theme.white}/>:null}</Pressable>
       <View style={s.itemBody}>
        <View style={[s.itemTop,phone&&s.itemTopPhone]}>
@@ -284,13 +284,13 @@ export function CasaNovaScreen(){
      </View>)}</View>}
     </View>
 
-    <View style={[s.addPanel,{backgroundColor:brand.primary},compact&&s.addPanelCompact,narrow&&s.addPanelNarrow]}><View style={s.addHead}><View><Text style={s.addEyebrow}>{editingId?'EDITAR DETALHES':'PERSONALIZE'}</Text><Text style={s.addTitle}>{editingId?'Atualize os dados do item':'Adicionar item'}</Text></View>{editingId?<Pressable onPress={resetForm} style={s.cancelEdit}><Ionicons name="close" size={18} color={theme.white}/></Pressable>:null}</View><Field label="Item" value={name} onChange={setName} placeholder="Ex.: taças de vinho"/><SelectField label="Categoria" value={category} options={categoryOptions} onChange={v=>setCategory(v as CasaNovaCategory)}/><View style={[s.two,narrow&&s.twoNarrow]}><View style={s.formColumn}><Field label="Qtd. base para 2 pessoas" value={qty} onChange={v=>setQty(v.replace(/\D/g,'').slice(0,4))} keyboard="numeric"/></View><View style={s.formColumn}><SelectField label="Unidade de medida" value={unit} options={unitOptions} onChange={setUnit}/></View></View><Field label="Observações" value={notes} onChange={setNotes} placeholder="Opcional"/><Pressable onPress={()=>setScalable(v=>!v)} style={s.scaleRow}><View style={[s.checkbox,scalable&&s.checkboxOn,scalable&&{backgroundColor:brand.secondary,borderColor:brand.secondary}]}>{scalable?<Ionicons name="checkmark" size={15} color={theme.white}/>:null}</View><Text style={s.scaleText}>Ajustar automaticamente conforme o número de pessoas</Text></Pressable><Pressable disabled={busy} onPress={()=>void save()} style={[s.addButton,{backgroundColor:brand.secondary},busy&&s.addButtonDisabled]}><Ionicons name={editingId?'save-outline':'add'} size={18} color={brand.secondaryForeground}/><Text style={[s.addButtonText,{color:brand.secondaryForeground}]}>{busy?'Salvando...':editingId?'Salvar detalhes':'Adicionar item'}</Text></Pressable>{editingId?<Pressable onPress={resetForm} style={s.cancelButton}><Text style={s.cancelButtonText}>Cancelar edição</Text></Pressable>:null}</View>
+    <View style={[s.addPanel,{backgroundColor:brand.primary},compact&&s.addPanelCompact,narrow&&s.addPanelNarrow]}><View style={s.addHead}><View><Text style={[s.addEyebrow,{color:brand.secondary}]}>{editingId?'EDITAR DETALHES':'PERSONALIZE'}</Text><Text style={s.addTitle}>{editingId?'Atualize os dados do item':'Adicionar item'}</Text></View>{editingId?<Pressable onPress={resetForm} style={s.cancelEdit}><Ionicons name="close" size={18} color={theme.white}/></Pressable>:null}</View><Field label="Item" value={name} onChange={setName} placeholder="Ex.: taças de vinho"/><SelectField label="Categoria" value={category} options={categoryOptions} onChange={v=>setCategory(v as CasaNovaCategory)}/><View style={[s.two,narrow&&s.twoNarrow]}><View style={s.formColumn}><Field label="Qtd. base para 2 pessoas" value={qty} onChange={v=>setQty(v.replace(/\D/g,'').slice(0,4))} keyboard="numeric"/></View><View style={s.formColumn}><SelectField label="Unidade de medida" value={unit} options={unitOptions} onChange={setUnit}/></View></View><Field label="Observações" value={notes} onChange={setNotes} placeholder="Opcional"/><Pressable onPress={()=>setScalable(v=>!v)} style={s.scaleRow}><View style={[s.checkbox,scalable&&s.checkboxOn,scalable&&{backgroundColor:brand.secondary,borderColor:brand.secondary}]}>{scalable?<Ionicons name="checkmark" size={15} color={theme.white}/>:null}</View><Text style={s.scaleText}>Ajustar automaticamente conforme o número de pessoas</Text></Pressable><Pressable disabled={busy} onPress={()=>void save()} style={[s.addButton,{backgroundColor:brand.secondary},busy&&s.addButtonDisabled]}><Ionicons name={editingId?'save-outline':'add'} size={18} color={brand.secondaryForeground}/><Text style={[s.addButtonText,{color:brand.secondaryForeground}]}>{busy?'Salvando...':editingId?'Salvar detalhes':'Adicionar item'}</Text></Pressable>{editingId?<Pressable onPress={resetForm} style={s.cancelButton}><Text style={s.cancelButtonText}>Cancelar edição</Text></Pressable>:null}</View>
    </View>
   </View>}
  </AppShell>
 }
 
-function Summary({icon,label,value,tone}:{icon:any;label:string;value:string;tone?:'dark'|'gold'}){return <View style={[s.sumCard,tone==='dark'&&s.sumDark,tone==='gold'&&s.sumGold]}><View><Text style={[s.sumLabel,tone==='dark'&&s.sumDarkText]}>{label}</Text><Text style={[s.sumValue,tone==='dark'&&s.sumDarkText]}>{value}</Text></View><Ionicons name={icon} size={26} color={tone==='dark'?theme.goldLight:tone==='gold'?theme.gold:theme.green2}/></View>}
+function Summary({icon,label,value,tone}:{icon:any;label:string;value:string;tone?:'dark'|'gold'}){const brand=useTenantBrand();const dark=tone==='dark';const accent=tone==='gold';return <View style={[s.sumCard,dark&&{backgroundColor:brand.primary,borderColor:brand.primary},accent&&{backgroundColor:brand.secondarySoft,borderColor:brand.secondary}]}><View><Text style={[s.sumLabel,dark&&{color:withAlpha(brand.primaryForeground,.72)}]}>{label}</Text><Text style={[s.sumValue,dark&&{color:brand.primaryForeground}]}>{value}</Text></View><Ionicons name={icon} size={26} color={dark||accent?brand.secondary:brand.primary}/></View>}
 function Field({label,value,onChange,placeholder,keyboard}:{label:string;value:string;onChange:(v:string)=>void;placeholder?:string;keyboard?:'numeric'}){return <View style={s.field}><Text style={s.fieldLabel}>{label}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType={keyboard} style={s.input}/></View>}
 
 const s=StyleSheet.create({
