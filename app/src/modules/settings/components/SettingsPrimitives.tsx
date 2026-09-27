@@ -82,6 +82,7 @@ export function Usage({
 }){
   const brand=useTenantBrand();
   const unlimited=max<0;
+  const over=!unlimited&&value>max?value-max:0;
   const pct=unlimited
     ?20
     :Math.min(100,max===0?100:value/max*100);
@@ -106,6 +107,9 @@ export function Usage({
           ]}
         />
       </View>
+      {over>0?<Text style={{marginTop:6,fontSize:11,lineHeight:16,color:theme.danger,fontWeight:'700'}}>
+        {over} acima do limite. Os cadastros existentes foram preservados; novos cadastros ficam bloqueados até reduzir a carteira ativa ou alterar o plano.
+      </Text>:null}
     </View>
   );
 }

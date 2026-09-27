@@ -102,6 +102,8 @@ model CasaNovaList {
   id                  String         @id @default(cuid())
   tenantId            String
   tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId             String?
+  client               Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   guests              Int            @default(2)
   defaultsInitialized Boolean        @default(false)
   createdAt           DateTime       @default(now())
@@ -109,6 +111,7 @@ model CasaNovaList {
   items               CasaNovaItem[]
 
   @@unique([tenantId])
+  @@index([clientId])
 }
 
 model CasaNovaItem {
@@ -384,6 +387,7 @@ model Client {
   createdAt             DateTime  @default(now())
   quotes                Quote[]
   projects              Project[]
+  casaNovaLists         CasaNovaList[]
 
   @@index([tenantId, name])
   @@index([tenantId, document])

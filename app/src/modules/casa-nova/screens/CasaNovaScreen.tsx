@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useState} from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import {Pressable,StyleSheet,useWindowDimensions,View} from 'react-native';
+import {Platform,Pressable,StyleSheet,useWindowDimensions,View} from 'react-native';
 import {Text,TextInput} from '../../../i18n';
 import {AppShell} from '../../../components/AppShell';
 import {SelectField} from '../../../components/SelectField';
@@ -9,9 +9,10 @@ import {theme} from '../../../theme';
 import {useTenantBrand} from '../../../tenantBrand';
 import {buildXlsx,presentXlsx} from '../../../utils/xlsxExport';
 import {casaNovaApi,CasaNovaCategory,CasaNovaItem} from '../api/casaNova.api';
+import {clientsApi} from '../../clients/api/clients.api';
+import type {ClientRecord} from '../../clients/types/client.types';
 
-const categories=['Todos','Cozinha e mesa','Eletrodomésticos','Mercado','Hortifruti','Cama e banho'] as const;
-const categoryOptions=categories.slice(1).map(x=>({label:x,value:x}));
+const standardCategories=['Cozinha e mesa','Eletrodomésticos','Mercado','Hortifruti','Cama e banho'];
 const unitOptions=[
  {label:'Unidade (un.)',value:'un.'},{label:'Peça',value:'peça'},{label:'Peças',value:'peças'},
  {label:'Jogo',value:'jogo'},{label:'Jogos',value:'jogos'},{label:'Quilograma (kg)',value:'kg'},
@@ -22,6 +23,7 @@ const unitOptions=[
 const automaticQuantity=(item:CasaNovaItem,guests:number)=>item.isScalable?Math.max(1,Math.ceil(item.baseQuantity*(guests/2))):item.baseQuantity;
 const quantity=(item:CasaNovaItem,guests:number)=>item.quantityOverride??automaticQuantity(item,guests);
 const errorMessage=(error:unknown)=>error instanceof Error?error.message:'Não foi possível concluir a operação.';
+const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]||char));
 
 export function CasaNovaScreen(){
  const {width}=useWindowDimensions();
@@ -34,7 +36,12 @@ export function CasaNovaScreen(){
  const[items,setItems]=useState<CasaNovaItem[]>([]);
  const[loading,setLoading]=useState(true);
  const[busy,setBusy]=useState(false);
- const[filter,setFilter]=useState<(typeof categories)[number]>('Todos');
+ const[filter,setFilter]=useState('Todos');
+ const[serverCategories,setServerCategories]=useState<string[]>(standardCategories);
+ const[clients,setClients]=useState<ClientRecord[]>([]);
+ const[clientId,setClientId]=useState('');
+ const[newCategory,setNewCategory]=useState('');
+ const[addingCategory,setAddingCategory]=useState(false);
  const[selectedIds,setSelectedIds]=useState<string[]>([]);
  const[bulkCategory,setBulkCategory]=useState<CasaNovaCategory>('Cozinha e mesa');
  const[bulkUnit,setBulkUnit]=useState('un.');
@@ -49,9 +56,12 @@ export function CasaNovaScreen(){
  const[deleteConfirmId,setDeleteConfirmId]=useState<string|null>(null);
  const[message,setMessage]=useState('');
 
- const load=async()=>{setLoading(true);try{const data=await casaNovaApi.get();setGuests(data.guests);setGuestInput(String(data.guests));setItems(data.items);setSelectedIds(ids=>ids.filter(id=>data.items.some(item=>item.id===id)))}catch(error){setMessage(errorMessage(error))}finally{setLoading(false)}};
+ const load=async()=>{setLoading(true);try{const[data,clientRows]=await Promise.all([casaNovaApi.get(),clientsApi.list()]);setGuests(data.guests);setGuestInput(String(data.guests));setItems(data.items);setServerCategories(data.categories?.length?data.categories:standardCategories);setClients(clientRows.filter(client=>client.active!==false));setClientId(data.clientId||'');setSelectedIds(ids=>ids.filter(id=>data.items.some(item=>item.id===id)))}catch(error){setMessage(errorMessage(error))}finally{setLoading(false)}};
  useEffect(()=>{void load()},[]);
 
+ const categories=useMemo(()=>['Todos',...new Set([...standardCategories,...serverCategories,...items.map(item=>item.category)])],[items,serverCategories]);
+ const categoryOptions=useMemo(()=>categories.slice(1).map(x=>({label:x,value:x})),[categories]);
+ const clientOptions=useMemo(()=>[{label:'Nenhum cliente vinculado',value:''},...clients.map(client=>({label:client.name,value:client.id}))],[clients]);
  const visible=useMemo(()=>filter==='Todos'?items:items.filter(x=>x.category===filter),[items,filter]);
  const done=items.filter(x=>x.checked).length;
  const progress=items.length?Math.round(done/items.length*100):0;
@@ -79,7 +89,7 @@ export function CasaNovaScreen(){
  const toggleSelected=(id:string)=>setSelectedIds(ids=>ids.includes(id)?ids.filter(x=>x!==id):[...ids,id]);
  const toggleSelectAll=()=>setSelectedIds(ids=>allVisibleSelected?ids.filter(id=>!visible.some(item=>item.id===id)):[...new Set([...ids,...visible.map(item=>item.id)])]);
 
- const resetForm=()=>{setEditingId(null);setName('');setCategory('Cozinha e mesa');setQty('1');setUnit('un.');setNotes('');setScalable(true)};
+ const resetForm=()=>{setEditingId(null);setName('');setCategory(filter==='Todos'?'Cozinha e mesa':filter);setQty('1');setUnit('un.');setNotes('');setScalable(true)};
  const edit=(item:CasaNovaItem)=>{setEditingId(item.id);setName(item.itemName);setCategory(item.category);setQty(String(item.baseQuantity));setUnit(item.unit);setNotes(item.notes||'');setScalable(item.isScalable);setMessage('Editando detalhes do item. A quantidade também pode ser ajustada diretamente pelas setas da lista.')};
 
  const remove=async(item:CasaNovaItem)=>{
@@ -167,7 +177,12 @@ export function CasaNovaScreen(){
   }catch(error){setMessage(error instanceof Error?error.message:'Não foi possível exportar a lista.')}
  };
 
- return <AppShell title="Casa Nova" subtitle="Lista inteligente para montar uma casa pronta para receber qualquer quantidade de pessoas.">
+ const selectFilter=(next:string)=>{setFilter(next);if(next!=='Todos'&&!editingId)setCategory(next)};
+ const addCategory=()=>{const clean=newCategory.trim();if(clean.length<2){setMessage('Informe o nome da categoria.');return}setServerCategories(current=>[...new Set([...current,clean])]);setCategory(clean);setFilter(clean);setNewCategory('');setAddingCategory(false);setMessage(`Categoria “${clean}” selecionada. Adicione o primeiro item para salvá-la.`)};
+ const linkClient=async(next:string)=>{const previous=clientId;setClientId(next);try{await casaNovaApi.updateList({clientId:next||null});setMessage(next?'Lista vinculada ao cliente.':'Vínculo com cliente removido.')}catch(error){setClientId(previous);setMessage(errorMessage(error))}};
+ const exportPdf=()=>{if(Platform.OS!=='web'){setMessage('A geração de PDF está disponível na versão web.');return}const client=clients.find(row=>row.id===clientId);const rows=[...items].sort((a,b)=>a.category.localeCompare(b.category,'pt-BR')||a.itemName.localeCompare(b.itemName,'pt-BR')).map(item=>`<tr><td>${escapeHtml(item.itemName)}</td><td>${escapeHtml(item.category)}</td><td>${quantity(item,guests)} ${escapeHtml(item.unit)}</td><td>${item.checked?'Sim':'Não'}</td></tr>`).join('');const popup=globalThis.window?.open('','_blank');if(!popup){setMessage('Permita pop-ups para gerar o PDF.');return}popup.document.write(`<html><head><title>Gestão de Organizadores</title><style>body{font-family:Arial;padding:32px;color:#24352d}h1{margin-bottom:4px}p{color:#66736c}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{border-bottom:1px solid #ddd;padding:9px;text-align:left}th{background:#eef2ef}@media print{button{display:none}}</style></head><body><h1>Lista de organização</h1><p>Cliente: ${escapeHtml(client?.name||'Não vinculado')} · ${guests} pessoas</p><table><thead><tr><th>Item</th><th>Categoria</th><th>Quantidade</th><th>Comprado</th></tr></thead><tbody>${rows}</tbody></table><button onclick="window.print()">Imprimir / Salvar PDF</button></body></html>`);popup.document.close();popup.focus();popup.print()};
+
+ return <AppShell title="Gestão de Organizadores" subtitle="Listas inteligentes vinculadas aos seus clientes.">
   {loading?<AsyncState loading/>:<View style={s.page}>
    <View style={[s.hero,{backgroundColor:brand.primary},compact&&s.heroCompact,narrow&&s.heroNarrow]}>
     <View style={s.heroText}><Text style={s.kicker}>LISTA CASA NOVA</Text><Text style={s.heroTitle}>Sua casa pronta para todo encontro especial.</Text><Text style={s.heroDesc}>A lista padrão é criada por conta. Ajuste pessoas, quantidades e itens sem misturar dados entre clientes ou empresas.</Text></View>
@@ -226,6 +241,7 @@ export function CasaNovaScreen(){
     </View>
    </View>
 
+   <View style={{backgroundColor:theme.white,borderWidth:1,borderColor:theme.border,borderRadius:14,padding:14,flexDirection:'row',alignItems:'flex-end',gap:14,flexWrap:'wrap'}}><View style={{minWidth:260,flex:1}}><SelectField label="Vincular lista ao cliente" value={clientId} options={clientOptions} onChange={value=>void linkClient(value)}/></View><Text style={{fontSize:11,color:theme.muted,paddingBottom:10}}>O cliente selecionado será identificado no PDF.</Text></View>
    <View style={[s.summary,compact&&s.summaryCompact,narrow&&s.summaryNarrow]}><Summary icon="list-outline" label="Itens na lista" value={String(items.length)} tone="dark"/><Summary icon="checkmark-circle-outline" label="Já comprados" value={String(done)}/><Summary icon="sparkles-outline" label="Lista concluída" value={`${progress}%`} tone="gold"/></View>
 
    {message?<View style={[s.message,{backgroundColor:brand.primarySoft}]}><Ionicons name="information-circle-outline" size={17} color={brand.primary}/><Text style={s.messageText}>{message}</Text><Pressable onPress={()=>setMessage('')}><Ionicons name="close" size={17} color={theme.muted}/></Pressable></View>:null}
@@ -234,10 +250,10 @@ export function CasaNovaScreen(){
     <View style={s.listCol}>
      <View style={[s.listHeader,narrow&&s.listHeaderNarrow]}>
       <View><Text style={s.eyebrow}>LISTA INTELIGENTE</Text><Text style={s.sectionTitle}>O que falta para a casa ficar completa</Text></View>
-      <View style={[s.headerActions,narrow&&s.headerActionsNarrow]}><Pressable onPress={()=>{if(name.trim()){void save();return}resetForm();setMessage(compact?'Preencha os dados no formulário “Adicionar item” logo abaixo da lista e confirme no botão amarelo.':'Preencha os dados no formulário “Adicionar item” à direita e confirme no botão amarelo.')}} style={[s.addItemShortcut,{backgroundColor:brand.primary}]}><Ionicons name="add-circle-outline" size={16} color={theme.white}/><Text style={s.addItemShortcutText}>Adicionar item</Text></Pressable><Pressable onPress={()=>void exportList()} style={[s.exportBtn,{borderColor:brand.primary}]}><Ionicons name="document-outline" size={16} color={brand.primary}/><Text style={[s.exportText,{color:brand.primary}]}>Exportar Excel</Text></Pressable><Pressable onPress={()=>void essentials()} style={[s.essentialBtn,{backgroundColor:brand.primary}]}><Ionicons name="sparkles-outline" size={16} color={theme.white}/><Text style={s.essentialText}>{busy?'Aguarde...':'Restaurar padrão'}</Text></Pressable></View>
+      <View style={[s.headerActions,narrow&&s.headerActionsNarrow]}><Pressable onPress={()=>{if(name.trim()){void save();return}resetForm();setMessage(compact?'Preencha os dados no formulário “Adicionar item” logo abaixo da lista e confirme no botão amarelo.':'Preencha os dados no formulário “Adicionar item” à direita e confirme no botão amarelo.')}} style={[s.addItemShortcut,{backgroundColor:brand.primary}]}><Ionicons name="add-circle-outline" size={16} color={theme.white}/><Text style={s.addItemShortcutText}>Adicionar item</Text></Pressable><Pressable onPress={()=>void exportList()} style={[s.exportBtn,{borderColor:brand.primary}]}><Ionicons name="document-outline" size={16} color={brand.primary}/><Text style={[s.exportText,{color:brand.primary}]}>Exportar Excel</Text></Pressable><Pressable onPress={exportPdf} style={[s.exportBtn,{borderColor:brand.primary}]}><Ionicons name="document-text-outline" size={16} color={brand.primary}/><Text style={[s.exportText,{color:brand.primary}]}>Gerar PDF</Text></Pressable><Pressable onPress={()=>void essentials()} style={[s.essentialBtn,{backgroundColor:brand.primary}]}><Ionicons name="sparkles-outline" size={16} color={theme.white}/><Text style={s.essentialText}>{busy?'Aguarde...':'Restaurar padrão'}</Text></Pressable></View>
      </View>
 
-     <View style={[s.filters,narrow&&s.filtersNarrow]}>{categories.map(c=><Pressable key={c} onPress={()=>setFilter(c)} style={[s.filter,filter===c&&s.filterOn,filter===c&&{backgroundColor:brand.primary,borderColor:brand.primary}]}><Text style={[s.filterText,{color:brand.primary},filter===c&&s.filterTextOn,filter===c&&{color:brand.primaryForeground}]}>{c}</Text></Pressable>)}</View>
+     <View style={[s.filters,narrow&&s.filtersNarrow]}>{categories.map(c=><Pressable key={c} onPress={()=>selectFilter(c)} style={[s.filter,filter===c&&s.filterOn,filter===c&&{backgroundColor:brand.primary,borderColor:brand.primary}]}><Text style={[s.filterText,{color:brand.primary},filter===c&&s.filterTextOn,filter===c&&{color:brand.primaryForeground}]}>{c}</Text></Pressable>)}{addingCategory?<View style={{flexDirection:'row',gap:7,minWidth:280}}><TextInput value={newCategory} onChangeText={setNewCategory} placeholder="Ex.: Organização - Lavanderia" style={[s.input,{flex:1,borderColor:theme.borderStrong}]}/><Pressable onPress={addCategory} style={{borderRadius:9,paddingHorizontal:13,alignItems:'center',justifyContent:'center',backgroundColor:brand.secondary}}><Text style={{fontSize:11,fontWeight:'900',color:theme.g900}}>Salvar</Text></Pressable></View>:<Pressable onPress={()=>setAddingCategory(true)} style={[s.filter,{borderColor:brand.primary}]}><Text style={[s.filterText,{color:brand.primary}]}>+ Adicionar categoria</Text></Pressable>}</View>
 
      {visible.length>0?<View style={[s.bulkBar,narrow&&s.bulkBarNarrow]}>
       <Pressable onPress={toggleSelectAll} style={s.selectAll}><View style={[s.selectBox,allVisibleSelected&&s.selectBoxOn,allVisibleSelected&&{backgroundColor:brand.primary,borderColor:brand.primary}]}>{allVisibleSelected?<Ionicons name="checkmark" size={14} color={theme.white}/>:null}</View><Text style={[s.selectAllText,{color:brand.primary}]}>{allVisibleSelected?'Desmarcar tudo':'Selecionar tudo'}</Text></Pressable>

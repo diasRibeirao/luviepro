@@ -84,14 +84,24 @@ type StandardItem=(typeof essentials)[number];
   async get(tenantId:string){
     const list=await this.ensureList(tenantId);
     const items=await this.db.casaNovaItem.findMany({where:{tenantId,listId:list.id},orderBy:[{checked:'asc'},{category:'asc'},{itemName:'asc'}]});
-    return {...list,items};
+    return {...list,items,categories:[...new Set(items.map(item=>item.category))].sort((a,b)=>a.localeCompare(b,'pt-BR'))};
   }
 
-  async updateList(tenantId:string,b:UpdateCasaNovaListDto){await this.ensureList(tenantId);return this.db.casaNovaList.update({where:{tenantId},data:{guests:b.guests}})}
+  async updateList(tenantId:string,b:UpdateCasaNovaListDto){
+    await this.ensureList(tenantId);
+    if(b.clientId){
+      const client=await this.db.client.findFirst({where:{id:b.clientId,tenantId,active:true},select:{id:true}});
+      if(!client)throw new NotFoundException('Cliente não encontrado');
+    }
+    return this.db.casaNovaList.update({where:{tenantId},data:{
+      ...(b.guests!==undefined?{guests:b.guests}:{}),
+      ...(b.clientId!==undefined?{clientId:b.clientId||null}:{}),
+    }})
+  }
 
   async addItem(tenantId:string,b:CreateCasaNovaItemDto){
     const list=await this.ensureList(tenantId);
-    return this.db.casaNovaItem.create({data:{tenantId,listId:list.id,itemName:b.itemName.trim(),category:b.category,baseQuantity:b.baseQuantity,quantityOverride:b.quantityOverride??null,unit:b.unit.trim(),isScalable:b.isScalable!==false,notes:b.notes?.trim()||null}})
+    return this.db.casaNovaItem.create({data:{tenantId,listId:list.id,itemName:b.itemName.trim(),category:b.category.trim(),baseQuantity:b.baseQuantity,quantityOverride:b.quantityOverride??null,unit:b.unit.trim(),isScalable:b.isScalable!==false,notes:b.notes?.trim()||null}})
   }
 
   async updateItem(tenantId:string,id:string,b:UpdateCasaNovaItemDto){
@@ -101,7 +111,7 @@ type StandardItem=(typeof essentials)[number];
     return this.db.casaNovaItem.update({where:{id},data:{
       ...(b.checked!==undefined?{checked:b.checked}:{}),
       ...(b.itemName!==undefined?{itemName:b.itemName.trim()}:{}),
-      ...(b.category!==undefined?{category:b.category}:{}),
+      ...(b.category!==undefined?{category:b.category.trim()}:{}),
       ...(b.baseQuantity!==undefined?{baseQuantity:b.baseQuantity}:{}),
       ...(b.quantityOverride!==undefined?{quantityOverride:b.quantityOverride}:{}),
       ...(b.unit!==undefined?{unit:b.unit.trim()}:{}),
@@ -113,7 +123,7 @@ type StandardItem=(typeof essentials)[number];
   async bulkUpdateItems(tenantId:string,b:BulkUpdateCasaNovaItemsDto){
     const ids=[...new Set(b.ids)];
     const data={
-      ...(b.category!==undefined?{category:b.category}:{}),
+      ...(b.category!==undefined?{category:b.category.trim()}:{}),
       ...(b.unit!==undefined?{unit:b.unit.trim()}:{}),
       ...(b.isScalable!==undefined?{isScalable:b.isScalable}:{}),
       ...(b.checked!==undefined?{checked:b.checked}:{}),
